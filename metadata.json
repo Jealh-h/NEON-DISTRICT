@@ -1,0 +1,6 @@
+{
+  "name": "NEON DISTRICT",
+  "description": "A cyberpunk pixel-art 2D top-down open-world sandbox set in the neon-lit streets of Neon District.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

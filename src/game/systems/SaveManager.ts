@@ -1,0 +1,125 @@
+import { VehicleUpgradeLevels } from '../ui/GameEvents';
+import type { SavedWeaponState } from './WeaponManager';
+
+export interface SavedVehicleState {
+  x: number;
+  y: number;
+  angleDeg: number;
+  health: number;
+  upgrades: VehicleUpgradeLevels;
+}
+
+export interface SaveData {
+  version: 1;
+  savedAt: number;
+  district: string;
+  player: {
+    x: number;
+    y: number;
+    health: number;
+    cash: number;
+  };
+  completedMissionIds: string[];
+  totalMissionEarnings: number;
+  vehicles: Record<string, SavedVehicleState>;
+  weapons?: SavedWeaponState;
+  collectedChipIds?: string[];
+  settings: {
+    muted: boolean;
+  };
+}
+
+export interface SaveSummary {
+  hasSave: boolean;
+  savedAt: number | null;
+  cash: number | null;
+  completedCount: number;
+}
+
+const SAVE_KEY = 'neon_district_save_v1';
+
+export class SaveManager {
+  public loadSave(): SaveData | null {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
+    try {
+      const raw = window.localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<SaveData>;
+      if (
+        parsed.version !== 1 ||
+        typeof parsed.savedAt !== 'number' ||
+        !parsed.player ||
+        typeof parsed.player.x !== 'number' ||
+        typeof parsed.player.y !== 'number' ||
+        typeof parsed.player.health !== 'number' ||
+        typeof parsed.player.cash !== 'number'
+      ) {
+        return null;
+      }
+
+      return {
+        version: 1,
+        savedAt: parsed.savedAt,
+        district: typeof parsed.district === 'string' ? parsed.district : '霓虹广场',
+        player: {
+          x: parsed.player.x,
+          y: parsed.player.y,
+          health: parsed.player.health,
+          cash: parsed.player.cash,
+        },
+        completedMissionIds: Array.isArray(parsed.completedMissionIds)
+          ? parsed.completedMissionIds.filter((id): id is string => typeof id === 'string')
+          : [],
+        totalMissionEarnings:
+          typeof parsed.totalMissionEarnings === 'number' ? parsed.totalMissionEarnings : 0,
+        vehicles: parsed.vehicles && typeof parsed.vehicles === 'object' ? parsed.vehicles : {},
+        weapons: parsed.weapons,
+        collectedChipIds: Array.isArray(parsed.collectedChipIds)
+          ? parsed.collectedChipIds.filter((id): id is string => typeof id === 'string')
+          : [],
+        settings: {
+          muted: Boolean(parsed.settings?.muted),
+        },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  public writeSave(data: SaveData): boolean {
+    if (typeof window === 'undefined' || !window.localStorage) return false;
+    try {
+      window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  public clearSave(): void {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      window.localStorage.removeItem(SAVE_KEY);
+    } catch {
+      // Ignore storage access errors
+    }
+  }
+
+  public getSummary(): SaveSummary {
+    const save = this.loadSave();
+    if (!save) {
+      return {
+        hasSave: false,
+        savedAt: null,
+        cash: null,
+        completedCount: 0,
+      };
+    }
+    return {
+      hasSave: true,
+      savedAt: save.savedAt,
+      cash: save.player.cash,
+      completedCount: save.completedMissionIds.length,
+    };
+  }
+}
