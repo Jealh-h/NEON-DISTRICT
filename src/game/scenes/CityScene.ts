@@ -4,15 +4,18 @@ import {
   ECONOMY_CONFIG,
   GamePlayMode,
   PLAYER_CONFIG,
+  RADIO_STATIONS,
   VEHICLE_UPGRADE_CONFIG,
   WANTED_CONFIG,
   WEAPON_SPECS,
+  WEAPON_UPGRADE_CONFIG,
   WORLD_CONFIG,
 } from '../config/BalanceConfig';
 import { Player } from '../entities/Player';
 import { AudioManager } from '../systems/AudioManager';
 import { HordeManager } from '../systems/HordeManager';
 import { InputManager } from '../systems/InputManager';
+import { InteractivePropManager } from '../systems/InteractivePropManager';
 import { MissionManager } from '../systems/MissionManager';
 import { NPCManager } from '../systems/NPCManager';
 import { PickupManager } from '../systems/PickupManager';
@@ -46,6 +49,9 @@ const SERVICE_LANDMARK_IDS = new Set([
   'kitsune-noodles',
   'harbor-market',
   'chrome-workshop',
+  'skyline-apts',
+  'arcade-lounge',
+  'synth-club',
 ]);
 
 export class CityScene extends Phaser.Scene {
@@ -62,6 +68,7 @@ export class CityScene extends Phaser.Scene {
   private missionManager!: MissionManager;
   private weaponManager!: WeaponManager;
   private pickupManager!: PickupManager;
+  private interactivePropManager!: InteractivePropManager;
   private hordeManager!: HordeManager;
   private raceManager!: RaceManager;
   private saveManager!: SaveManager;
@@ -76,6 +83,11 @@ export class CityScene extends Phaser.Scene {
   private lastTelemetryEmit = 0;
   private autoSaveTimer = 0;
   private activeLandmark: LandmarkInfo | null = null;
+  private lastNearbyPropId: string | null = null;
+  private currentGarageId = 'plaza-garage';
+  private ownsSafehouse = false;
+  private lastStoreRobberyAt = -999999;
+  private clubOverdriveTimer = 0;
   private playerHealth: number = PLAYER_CONFIG.INITIAL_HEALTH;
   private playerMaxHealth: number = PLAYER_CONFIG.MAX_HEALTH;
   private playerCash: number = PLAYER_CONFIG.INITIAL_CASH;
@@ -121,6 +133,12 @@ export class CityScene extends Phaser.Scene {
     this.weaponManager = new WeaponManager(this, this.collisionManager, this.audioManager);
     this.pickupManager = new PickupManager(this, this.audioManager);
     this.pickupManager.initializeWorldPickups();
+    this.interactivePropManager = new InteractivePropManager(
+      this,
+      this.audioManager,
+      this.pickupManager,
+      this.districtData
+    );
     this.hordeManager = new HordeManager(
       this,
       this.collisionManager,
@@ -169,6 +187,8 @@ export class CityScene extends Phaser.Scene {
     gameEvents.emit(GAME_EVENT.SCENE_READY, { district: this.districtData });
     gameEvents.emit(GAME_EVENT.PLAY_MODE_CHANGED, this.playMode);
     this.emitPlayerStats();
+    this.emitRadioStation();
+    gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, this.ownsSafehouse);
     this.weaponManager.emitTelemetry();
     this.missionManager.emitSync(true);
     this.hordeManager.emitTelemetry(true);
@@ -272,13 +292,18 @@ export class CityScene extends Phaser.Scene {
     const onSetMuted = (muted: boolean) => {
       this.audioManager.setMuted(muted);
     };
+    const onCycleRadio = () => {
+      if (this.mode === 'PLAYING' && this.vehicleManager.getActiveVehicle()) {
+        this.cycleCarRadio();
+      }
+    };
     const onJoystick = (vec: { x: number; y: number }) => {
       this.inputManager.setVirtualJoystick(vec.x, vec.y);
     };
     const onAimFire = (payload: AimFirePayload) => {
       this.inputManager.setVirtualAimFire(payload);
     };
-    const onSwitchWeapon = (slot?: 'next' | 0 | 1 | 2) => {
+    const onSwitchWeapon = (slot?: 'next' | number) => {
       if (this.mode === 'PLAYING' && !this.modalPaused && !this.player.isInVehicle()) {
         this.weaponManager.switchWeapon(slot ?? 'next', this.player);
       }
@@ -319,10 +344,12 @@ export class CityScene extends Phaser.Scene {
         this.hordeManager.freezeAll();
         this.weaponManager.clearProjectiles();
         this.audioManager.stopSirenSound();
+        this.audioManager.setRadioPlaying(false);
         this.inputManager.resetAllHeldInputs();
         this.physics.world.pause();
       } else {
         this.physics.world.resume();
+        this.audioManager.setRadioPlaying(Boolean(this.vehicleManager.getActiveVehicle()));
       }
     };
 
@@ -337,6 +364,7 @@ export class CityScene extends Phaser.Scene {
     gameEvents.on(GAME_EVENT.RETURN_TITLE, onReturnTitle);
     gameEvents.on(GAME_EVENT.RESET_POSITION, onResetPos);
     gameEvents.on(GAME_EVENT.SET_MUTED, onSetMuted);
+    gameEvents.on(GAME_EVENT.CYCLE_RADIO, onCycleRadio);
     gameEvents.on(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
     gameEvents.on(GAME_EVENT.AIM_FIRE, onAimFire);
     gameEvents.on(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
@@ -361,6 +389,7 @@ export class CityScene extends Phaser.Scene {
       gameEvents.off(GAME_EVENT.RETURN_TITLE, onReturnTitle);
       gameEvents.off(GAME_EVENT.RESET_POSITION, onResetPos);
       gameEvents.off(GAME_EVENT.SET_MUTED, onSetMuted);
+      gameEvents.off(GAME_EVENT.CYCLE_RADIO, onCycleRadio);
       gameEvents.off(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
       gameEvents.off(GAME_EVENT.AIM_FIRE, onAimFire);
       gameEvents.off(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
@@ -379,8 +408,11 @@ export class CityScene extends Phaser.Scene {
     this.playMode = nextPlayMode;
     this.hitstopTimer = 0;
     this.modalPaused = false;
+    this.clubOverdriveTimer = 0;
     this.activeLandmark = null;
+    this.lastNearbyPropId = null;
     gameEvents.emit(GAME_EVENT.LANDMARK_NEARBY, null);
+    gameEvents.emit(GAME_EVENT.PROP_NEARBY, null);
     gameEvents.emit(GAME_EVENT.NPC_NEARBY, null);
     gameEvents.emit(GAME_EVENT.VEHICLE_NEARBY, null);
     gameEvents.emit(GAME_EVENT.PLAY_MODE_CHANGED, nextPlayMode);
@@ -448,6 +480,7 @@ export class CityScene extends Phaser.Scene {
       this.hordeManager.freezeAll();
       this.weaponManager.clearProjectiles();
       this.audioManager.stopSirenSound();
+      this.audioManager.setRadioPlaying(false);
       this.inputManager.resetAllHeldInputs();
       cam.stopFollow();
       this.physics.world.pause();
@@ -458,6 +491,7 @@ export class CityScene extends Phaser.Scene {
       const targetSprite = activeVehicle ? activeVehicle.sprite : this.player.sprite;
       cam.startFollow(targetSprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
       cam.setZoom(this.getTargetZoom(Boolean(activeVehicle)));
+      this.audioManager.setRadioPlaying(Boolean(activeVehicle));
       this.emitTelemetry(true);
     } else if (nextMode === 'PAUSED') {
       this.player.freeze();
@@ -468,6 +502,7 @@ export class CityScene extends Phaser.Scene {
       this.hordeManager.freezeAll();
       this.weaponManager.clearProjectiles();
       this.audioManager.stopSirenSound();
+      this.audioManager.setRadioPlaying(false);
       this.inputManager.resetAllHeldInputs();
       this.physics.world.pause();
     }
@@ -540,9 +575,12 @@ export class CityScene extends Phaser.Scene {
           this.activeLandmark = null;
           gameEvents.emit(GAME_EVENT.LANDMARK_NEARBY, null);
         }
+        this.lastNearbyPropId = null;
+        gameEvents.emit(GAME_EVENT.PROP_NEARBY, null);
         gameEvents.emit(GAME_EVENT.NPC_NEARBY, null);
         gameEvents.emit(GAME_EVENT.VEHICLE_NEARBY, null);
         this.emitVehicleTelemetry(result.vehicle);
+        this.audioManager.setRadioPlaying(true);
 
         if (this.playMode === 'sandbox' && result.vehicle.spec.type === 'cruiser') {
           this.wantedManager.reportCrime('steal_police_car', result.vehicle.getPosition(), true);
@@ -550,6 +588,7 @@ export class CityScene extends Phaser.Scene {
       } else if (result.action === 'exited') {
         cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
         cam.zoomTo(this.getTargetZoom(false), 260, 'Sine.easeOut');
+        this.audioManager.setRadioPlaying(false);
         this.emitVehicleTelemetry(null);
       } else if (result.action === 'blocked' && result.reason) {
         this.audioManager.playBump(time);
@@ -557,17 +596,23 @@ export class CityScene extends Phaser.Scene {
       }
     }
 
+    if (this.clubOverdriveTimer > 0) {
+      this.clubOverdriveTimer = Math.max(0, this.clubOverdriveTimer - dt);
+    }
+
     const currentVehicle = this.vehicleManager.getActiveVehicle();
     const rawDrivingControls = this.inputManager.getDrivingControls();
     const drivingControls =
       this.playMode === 'race' && this.raceManager.isCountingDown()
-        ? { throttle: 0, brake: 0, steer: 0, handbrake: true, nitro: false }
+        ? { driveX: 0, driveY: 0, handbrake: true, nitro: false }
         : rawDrivingControls;
 
     this.vehicleManager.update(dt, drivingControls, this.districtData, (bonus) => {
       this.playerCash += bonus;
       this.emitPlayerStats();
     });
+
+    this.interactivePropManager.update(dt, time);
 
     // Update living city traffic, police patrol/pursuit & pedestrian NPCs
     const vehiclePositions = this.vehicleManager.getVehiclePositions();
@@ -638,6 +683,33 @@ export class CityScene extends Phaser.Scene {
       isMoving = currentVehicle.getSpeedPxPerSec() > 4;
       this.emitVehicleTelemetry(currentVehicle);
 
+      if (this.inputManager.consumeRadioJustPressed()) {
+        this.cycleCarRadio();
+      }
+
+      if (!currentVehicle.isAirborne()) {
+        this.interactivePropManager.checkVehicleRam(
+          currentVehicle.sprite.x,
+          currentVehicle.sprite.y,
+          currentVehicle.getSpeedPxPerSec(),
+          {
+            npcManager: this.npcManager,
+            policeManager: this.policeManager,
+            hordeManager: this.hordeManager,
+            onCrime: (crimeType, cPos, hasWitness) => {
+              if (this.playMode === 'sandbox') {
+                this.wantedManager.reportCrime(crimeType, cPos, hasWitness);
+              }
+            },
+            onDamagePlayer: (dmg) => this.applyPlayerDamage(dmg),
+            onCashBonus: (bonus) => {
+              this.playerCash += bonus;
+              this.emitPlayerStats();
+            },
+          }
+        );
+      }
+
       // Drive-in garage bay detection across both garages
       this.checkNearbyLandmarks(currentVehicle.getPosition(), 112, ['plaza-garage', 'chrome-workshop']);
       if (
@@ -678,7 +750,7 @@ export class CityScene extends Phaser.Scene {
               this.wantedManager.reportCrime(crimeType, cPos, hasWitness);
             }
           },
-          this.hordeManager.isOverdriveActive()
+          this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
         );
       }
 
@@ -690,9 +762,15 @@ export class CityScene extends Phaser.Scene {
 
       this.checkNearbyLandmarks(pos, PLAYER_CONFIG.INTERACT_RADIUS);
 
+      const nearbyProp = this.interactivePropManager.getNearbyInteractable(pos.x, pos.y);
+      if ((nearbyProp?.id ?? null) !== this.lastNearbyPropId) {
+        this.lastNearbyPropId = nearbyProp?.id ?? null;
+        gameEvents.emit(GAME_EVENT.PROP_NEARBY, nearbyProp);
+      }
+
       const isAtServiceTerminal =
         this.activeLandmark !== null && SERVICE_LANDMARK_IDS.has(this.activeLandmark.id);
-      if (isAtServiceTerminal) {
+      if (isAtServiceTerminal || nearbyProp) {
         this.npcManager.checkNearbyNpcChange(-9999, -9999);
         gameEvents.emit(GAME_EVENT.NPC_NEARBY, null);
       } else {
@@ -705,6 +783,34 @@ export class CityScene extends Phaser.Scene {
       if (this.inputManager.consumeInteractJustPressed()) {
         if (isAtServiceTerminal && this.activeLandmark) {
           this.openLandmarkService(this.activeLandmark);
+        } else if (nearbyProp) {
+          this.interactivePropManager.interactNearest(pos.x, pos.y, {
+            nowMs: time,
+            isHealthFull: () => this.playerHealth >= this.playerMaxHealth,
+            tryDeduct: (cost) => {
+              if (this.playerCash < cost) {
+                this.audioManager.playBump(time);
+                gameEvents.emit(GAME_EVENT.STATUS_TOAST, `现金不足，需要 $${cost}！`);
+                return false;
+              }
+              this.playerCash -= cost;
+              this.emitPlayerStats();
+              return true;
+            },
+            onHeal: (amount) => {
+              this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + amount);
+              this.emitPlayerStats();
+            },
+            onCash: (amount) => {
+              this.playerCash += amount;
+              this.emitPlayerStats();
+            },
+            onAtmAlarm: (atmPos) => {
+              if (this.playMode === 'sandbox') {
+                this.wantedManager.reportCrime('hit_pedestrian', atmPos, true);
+              }
+            },
+          });
         } else {
           const npcDialogue = this.npcManager.interactNearest(pos.x, pos.y);
           if (npcDialogue) {
@@ -742,7 +848,9 @@ export class CityScene extends Phaser.Scene {
           this.physics.world.pause();
         }
       },
-      this.hordeManager
+      this.hordeManager,
+      this.interactivePropManager,
+      (dmg) => this.applyPlayerDamage(dmg)
     );
 
     if (isMoving || time - this.lastTelemetryEmit > 150) {
@@ -778,7 +886,7 @@ export class CityScene extends Phaser.Scene {
     gameEvents.emit(GAME_EVENT.SERVICE_MODAL_OPEN, {
       kind: 'armory',
       title: '战术随身军械终端',
-      subtitle: '随时购买强力重火力武器、高能弹药或紧急纳米医疗补给！',
+      subtitle: '购买 7 款高能枪械、强化武器火力/射速/弹容，或使用战地纳米急救！',
       targetVehicle: null,
     });
   }
@@ -794,9 +902,16 @@ export class CityScene extends Phaser.Scene {
       'cyber-clinic': 'clinic',
       'byte-mart': 'store',
       'kitsune-noodles': 'diner',
+      'skyline-apts': 'safehouse',
+      'arcade-lounge': 'arcade',
+      'synth-club': 'club',
     };
     const kind = kindMap[landmark.id];
     if (!kind) return;
+
+    if (kind === 'garage') {
+      this.currentGarageId = landmark.id;
+    }
 
     const pos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
     const garageTarget =
@@ -807,6 +922,16 @@ export class CityScene extends Phaser.Scene {
       title: landmark.name,
       subtitle: landmark.description,
       targetVehicle: garageTarget ? garageTarget.getSummary() : null,
+    });
+  }
+
+  private emitGarageModalRefresh(veh: NonNullable<ReturnType<VehicleManager['getVehicleById']>>): void {
+    const lm = this.districtData.landmarks.find((l) => l.id === this.currentGarageId);
+    gameEvents.emit(GAME_EVENT.SERVICE_MODAL_OPEN, {
+      kind: 'garage',
+      title: lm?.name ?? '广场改装车库',
+      subtitle: lm?.description ?? '提供车身修复、引擎与悬挂改装、个性涂装及隐匿喷漆消星服务。',
+      targetVehicle: veh.getSummary(),
     });
   }
 
@@ -869,6 +994,145 @@ export class CityScene extends Phaser.Scene {
       return;
     }
 
+    if (payload.serviceType === 'rob_store') {
+      if (this.playMode !== 'sandbox') {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '当前模式无法抢劫便利店收银台。');
+        return;
+      }
+      const now = this.time.now;
+      const elapsed = now - this.lastStoreRobberyAt;
+      if (elapsed < 90000) {
+        const waitSec = Math.ceil((90000 - elapsed) / 1000);
+        this.audioManager.playBump(now);
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `便利店防盗柜锁定中，请 ${waitSec} 秒后再尝试！`);
+        return;
+      }
+      this.lastStoreRobberyAt = now;
+      const loot = 220 + Math.floor(Math.random() * 121);
+      this.playerCash += loot;
+      this.audioManager.playPurchase();
+      this.emitPlayerStats();
+      this.wantedManager.reportCrime('assault_police', this.player.getPosition(), true);
+      this.performSave(true);
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, `洗劫收银台得手 +$${loot}！警铃响起，快驾车撤离！`);
+      return;
+    }
+
+    if (payload.serviceType === 'buy_safehouse') {
+      if (this.ownsSafehouse) return;
+      if (!deduct(ECONOMY_CONFIG.SAFEHOUSE_PRICE)) return;
+      this.ownsSafehouse = true;
+      this.audioManager.playMissionComplete();
+      gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, true);
+      this.emitPlayerStats();
+      this.performSave(true);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        '恭喜购入【天际公寓】私人安全屋！可随时免费恢复生命、消除通缉与存档。'
+      );
+      return;
+    }
+
+    if (payload.serviceType === 'safehouse_rest') {
+      if (!this.ownsSafehouse) return;
+      this.playerHealth = this.playerMaxHealth;
+      this.wantedManager.clearWanted(false);
+      this.audioManager.playEscapedChime();
+      this.emitPlayerStats();
+      this.performSave(false);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        '已在安全屋休整：生命值恢复满格、通缉已消除且进度已存档！'
+      );
+      return;
+    }
+
+    if (payload.serviceType === 'arcade_spin') {
+      const bet = Math.max(25, payload.bet);
+      if (!deduct(bet)) return;
+      const symbols = ['777', 'NEON', 'GOLD', 'CHIP', 'ZERO'] as const;
+      const roll = Math.random();
+      let mult = 0;
+      let reels: [string, string, string] = ['NEON', 'CHIP', 'ZERO'];
+
+      if (roll < 0.05) {
+        mult = 4;
+        reels = ['777', '777', '777'];
+      } else if (roll < 0.16) {
+        mult = 2.5;
+        reels = ['GOLD', 'GOLD', 'GOLD'];
+      } else if (roll < 0.36) {
+        mult = 1.6;
+        reels = ['NEON', 'NEON', 'NEON'];
+      } else if (roll < 0.52) {
+        mult = 0.8;
+        reels = ['CHIP', 'CHIP', 'GOLD'];
+      } else {
+        const a = symbols[Math.floor(Math.random() * 4)];
+        const b = symbols[(symbols.indexOf(a) + 1) % 4];
+        const c = symbols[(symbols.indexOf(a) + 2) % 5];
+        reels = [a, b, c];
+      }
+
+      const payout = Math.round(bet * mult);
+      this.playerCash += payout;
+      this.emitPlayerStats();
+      this.performSave(true);
+
+      let message = '未中奖，再接再厉！';
+      if (mult >= 4) {
+        this.audioManager.playMissionComplete();
+        message = `超级头奖 4×！暴赚 $${payout}！`;
+      } else if (mult >= 1.5) {
+        this.audioManager.playPurchase();
+        message = `霓虹连线 ${mult}×！赢得 $${payout}！`;
+      } else if (mult > 0) {
+        this.audioManager.playInteract();
+        message = `保底回血返还 $${payout}。`;
+      } else {
+        this.audioManager.playBump(this.time.now);
+      }
+
+      gameEvents.emit(GAME_EVENT.ARCADE_RESULT, {
+        bet,
+        multiplier: mult,
+        payout,
+        reels,
+        message,
+      });
+      return;
+    }
+
+    if (payload.serviceType === 'club_cocktail') {
+      if (!deduct(ECONOMY_CONFIG.CLUB_COCKTAIL_COST)) return;
+      this.playerHealth = Math.min(
+        this.playerMaxHealth,
+        this.playerHealth + ECONOMY_CONFIG.CLUB_COCKTAIL_HEAL
+      );
+      this.clubOverdriveTimer = Math.max(this.clubOverdriveTimer, ECONOMY_CONFIG.CLUB_OVERDRIVE_SEC);
+      this.audioManager.playMissionComplete();
+      this.emitPlayerStats();
+      this.performSave(true);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        `饮用合成霓虹特调！生命 +${ECONOMY_CONFIG.CLUB_COCKTAIL_HEAL}，火力过载持续 ${ECONOMY_CONFIG.CLUB_OVERDRIVE_SEC} 秒！`
+      );
+      return;
+    }
+
+    if (payload.serviceType === 'club_bribe') {
+      if (this.wantedManager.getWantedLevel() === 0) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '当前未被通缉，无需买通地下线人。');
+        return;
+      }
+      if (!deduct(ECONOMY_CONFIG.CLUB_BRIBE_COST)) return;
+      this.wantedManager.reduceWanted(1);
+      this.emitPlayerStats();
+      this.performSave(true);
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, '已买通脉冲夜店地下线人，通缉等级降低 1 级！');
+      return;
+    }
+
     if (payload.serviceType === 'respray') {
       if (this.wantedManager.getWantedLevel() === 0) {
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, '当前未被通缉，无需隐匿喷漆。');
@@ -880,6 +1144,24 @@ export class CityScene extends Phaser.Scene {
       this.emitPlayerStats();
       this.performSave(true);
       gameEvents.emit(GAME_EVENT.STATUS_TOAST, '隐匿喷漆完成，特区警队已丢失车辆追踪特征！');
+      return;
+    }
+
+    if (payload.serviceType === 'paint') {
+      const veh = this.vehicleManager.getVehicleById(payload.vehicleId);
+      if (!veh) return;
+      if (veh.getPaintColor() === payload.colorNum) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${veh.spec.name} 当前已是【${payload.colorName}】。`);
+        return;
+      }
+      const cost = payload.colorNum === null ? 0 : ECONOMY_CONFIG.PAINT_JOB_COST;
+      if (cost > 0 && !deduct(cost)) return;
+      veh.setPaintColor(payload.colorNum);
+      this.audioManager.playPurchase();
+      this.emitPlayerStats();
+      this.performSave(true);
+      this.emitGarageModalRefresh(veh);
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${veh.spec.name} 已更换【${payload.colorName}】喷漆！`);
       return;
     }
 
@@ -898,12 +1180,7 @@ export class CityScene extends Phaser.Scene {
       if (this.vehicleManager.getActiveVehicle()?.id === veh.id) {
         this.emitVehicleTelemetry(veh);
       }
-      gameEvents.emit(GAME_EVENT.SERVICE_MODAL_OPEN, {
-        kind: 'garage',
-        title: '广场改装车库',
-        subtitle: '提供车身修复、引擎与悬挂改装及隐匿喷漆消星服务（可驾车驶入）。',
-        targetVehicle: veh.getSummary(),
-      });
+      this.emitGarageModalRefresh(veh);
       gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${veh.spec.name} 已修复至最佳状态！`);
       return;
     }
@@ -926,12 +1203,7 @@ export class CityScene extends Phaser.Scene {
       if (this.vehicleManager.getActiveVehicle()?.id === veh.id) {
         this.emitVehicleTelemetry(veh);
       }
-      gameEvents.emit(GAME_EVENT.SERVICE_MODAL_OPEN, {
-        kind: 'garage',
-        title: '广场改装车库',
-        subtitle: '提供车身修复、引擎与悬挂改装及隐匿喷漆消星服务（可驾车驶入）。',
-        targetVehicle: veh.getSummary(),
-      });
+      this.emitGarageModalRefresh(veh);
       gameEvents.emit(
         GAME_EVENT.STATUS_TOAST,
         `${veh.spec.name} 完成【${trackCfg.label} Lv.${currentLvl + 1}】改装！`
@@ -955,6 +1227,18 @@ export class CityScene extends Phaser.Scene {
       return;
     }
 
+    if (payload.serviceType === 'equip_weapon') {
+      const spec = WEAPON_SPECS[payload.weaponId];
+      if (!spec) return;
+      if (!this.weaponManager.isOwned(payload.weaponId)) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `尚未解锁【${spec.shortName}】。`);
+        return;
+      }
+      this.weaponManager.equipWeapon(payload.weaponId, this.player, true);
+      this.performSave(true);
+      return;
+    }
+
     if (payload.serviceType === 'buy_ammo') {
       const spec = WEAPON_SPECS[payload.weaponId];
       if (!spec || spec.infiniteAmmo) return;
@@ -962,7 +1246,8 @@ export class CityScene extends Phaser.Scene {
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, `请先解锁武器【${spec.shortName}】。`);
         return;
       }
-      if (this.weaponManager.getAmmo(payload.weaponId) >= spec.maxAmmo) {
+      const maxAmmo = this.weaponManager.getEffectiveMaxAmmo(payload.weaponId);
+      if (this.weaponManager.getAmmo(payload.weaponId) >= maxAmmo) {
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${spec.shortName} 备弹已满！`);
         return;
       }
@@ -975,7 +1260,51 @@ export class CityScene extends Phaser.Scene {
         GAME_EVENT.STATUS_TOAST,
         `已为【${spec.shortName}】补充 +${spec.ammoPackSize} 发高能弹药！`
       );
+      return;
     }
+
+    if (payload.serviceType === 'upgrade_weapon') {
+      const spec = WEAPON_SPECS[payload.weaponId];
+      const trackCfg = WEAPON_UPGRADE_CONFIG[payload.track];
+      if (!spec || !trackCfg) return;
+      if (!this.weaponManager.isOwned(payload.weaponId)) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `请先购买解锁【${spec.shortName}】再进行升级。`);
+        return;
+      }
+      const currentLvl = this.weaponManager.getUpgrades(payload.weaponId)[payload.track];
+      if (currentLvl >= trackCfg.maxLevel) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${spec.shortName} 的【${trackCfg.label}】已达满级！`);
+        return;
+      }
+      const cost = this.weaponManager.getUpgradeCost(payload.weaponId, payload.track);
+      if (!deduct(cost)) return;
+      const result = this.weaponManager.upgradeWeapon(payload.weaponId, payload.track);
+      if (!result.upgraded) return;
+      this.audioManager.playPurchase();
+      this.emitPlayerStats();
+      this.performSave(true);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        `【${spec.shortName}】完成 ${trackCfg.label} Lv.${result.newLevel} 强化！`
+      );
+    }
+  }
+
+  private cycleCarRadio(): void {
+    const idx = this.audioManager.cycleRadioStation();
+    const st = RADIO_STATIONS[idx] ?? RADIO_STATIONS[0];
+    this.emitRadioStation();
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `车载电台切换：${st.name}`);
+  }
+
+  private emitRadioStation(): void {
+    const idx = this.audioManager.getRadioStationIndex();
+    const st = RADIO_STATIONS[idx] ?? RADIO_STATIONS[0];
+    gameEvents.emit(GAME_EVENT.RADIO_CHANGED, {
+      index: st.index,
+      name: st.name,
+      genre: st.genre,
+    });
   }
 
   private emitVehicleTelemetry(vehicle: ReturnType<VehicleManager['getActiveVehicle']>): void {
@@ -1108,6 +1437,7 @@ export class CityScene extends Phaser.Scene {
         health: this.playerHealth,
         cash: this.playerCash,
       },
+      ownsSafehouse: this.ownsSafehouse,
       completedMissionIds: progress.completedIds,
       totalMissionEarnings: progress.totalEarnings,
       vehicles: this.vehicleManager.serializeAll(),
@@ -1142,6 +1472,8 @@ export class CityScene extends Phaser.Scene {
       : { x: WORLD_CONFIG.PLAYER_SPAWN.x, y: WORLD_CONFIG.PLAYER_SPAWN.y };
     this.player.resetPosition(spawnPos.x, spawnPos.y);
 
+    this.ownsSafehouse = Boolean(save.ownsSafehouse);
+    gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, this.ownsSafehouse);
     this.playerHealth = Phaser.Math.Clamp(Math.round(save.player.health), 20, this.playerMaxHealth);
     this.playerCash = Math.max(0, Math.round(save.player.cash));
     this.missionManager.restoreProgress(save.completedMissionIds, save.totalMissionEarnings);
@@ -1160,6 +1492,8 @@ export class CityScene extends Phaser.Scene {
     this.weaponManager.resetToDefault(this.player);
     this.pickupManager.resetAllChips();
     this.player.resetPosition(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
+    this.ownsSafehouse = false;
+    gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, false);
     this.playerHealth = PLAYER_CONFIG.INITIAL_HEALTH;
     this.playerCash = PLAYER_CONFIG.INITIAL_CASH;
     this.missionManager.resetProgress();
@@ -1184,9 +1518,11 @@ export class CityScene extends Phaser.Scene {
   }
 
   private cleanup(): void {
+    this.audioManager.setRadioPlaying(false);
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
     this.inputManager.destroy();
+    this.interactivePropManager.destroy();
     this.weaponManager.destroy();
     this.pickupManager.destroy();
     this.hordeManager.destroy();

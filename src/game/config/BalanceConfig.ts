@@ -77,12 +77,22 @@ export const PLAYER_CONFIG = {
   VEHICLE_ENTER_RADIUS: 64,
 } as const;
 
-export type WeaponId = 'pistol' | 'smg' | 'shotgun';
+export type WeaponId =
+  | 'pistol'
+  | 'smg'
+  | 'shotgun'
+  | 'rifle'
+  | 'railgun'
+  | 'flamethrower'
+  | 'launcher';
+
+export type WeaponUpgradeTrack = 'damage' | 'firerate' | 'capacity';
 
 export interface WeaponSpec {
   id: WeaponId;
   name: string;
   shortName: string;
+  tag: string;
   description: string;
   damage: number;
   fireIntervalMs: number;
@@ -101,19 +111,66 @@ export interface WeaponSpec {
   buyCost: number;
   ammoPackCost: number;
   ammoPackSize: number;
+  upgradeBaseCost: number;
+  barrelLength: number;
+  barrelWidth: number;
+  pierceCount?: number;
+  blastRadius?: number;
 }
 
-export const WEAPON_ORDER: readonly WeaponId[] = ['pistol', 'smg', 'shotgun'] as const;
+export const WEAPON_ORDER: readonly WeaponId[] = [
+  'pistol',
+  'smg',
+  'shotgun',
+  'rifle',
+  'flamethrower',
+  'railgun',
+  'launcher',
+] as const;
+
+export const WEAPON_UPGRADE_CONFIG: Record<
+  WeaponUpgradeTrack,
+  {
+    label: string;
+    shortLabel: string;
+    description: string;
+    maxLevel: number;
+    costMultipliers: readonly [number, number, number];
+  }
+> = {
+  damage: {
+    label: '火力增幅',
+    shortLabel: '火力',
+    description: '每级 +20% 伤害（火箭筒额外扩大爆破半径，磁轨炮 Lv.2 额外+1穿透）',
+    maxLevel: 3,
+    costMultipliers: [0.85, 1.45, 2.25],
+  },
+  firerate: {
+    label: '射速冷却',
+    shortLabel: '射速',
+    description: '每级缩短 12% 射击冷却间隔，连射压制更迅猛',
+    maxLevel: 3,
+    costMultipliers: [0.8, 1.35, 2.1],
+  },
+  capacity: {
+    label: '弹道扩容',
+    shortLabel: '弹容/弹道',
+    description: '每级 +30% 备弹上限（升级即补弹）并提升 +10% 射程与弹速',
+    maxLevel: 3,
+    costMultipliers: [0.75, 1.25, 1.9],
+  },
+};
 
 export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
   pistol: {
     id: 'pistol',
     name: '脉冲手枪 MK-II',
     shortName: '脉冲手枪',
+    tag: '制式副手',
     description: '制式高能电浆手枪，射速稳定、后坐可控，内置微核充能无需耗材。',
     damage: 26,
-    fireIntervalMs: 250,
-    projectileSpeed: 760,
+    fireIntervalMs: 245,
+    projectileSpeed: 780,
     range: 480,
     pellets: 1,
     spreadDeg: 2,
@@ -128,15 +185,19 @@ export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
     buyCost: 0,
     ammoPackCost: 0,
     ammoPackSize: 0,
+    upgradeBaseCost: 140,
+    barrelLength: 9,
+    barrelWidth: 3,
   },
   smg: {
     id: 'smg',
     name: '霓虹冲锋枪 V-9',
-    shortName: '霓虹冲锋枪',
+    shortName: '霓虹冲锋',
+    tag: '高速连射',
     description: '高射速赛博微冲，弹幕压制力极强，适合街头火拼与快速清场。',
     damage: 17,
-    fireIntervalMs: 95,
-    projectileSpeed: 840,
+    fireIntervalMs: 92,
+    projectileSpeed: 860,
     range: 450,
     pellets: 1,
     spreadDeg: 6.5,
@@ -146,21 +207,25 @@ export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
     colorHex: '#FF2E88',
     colorNum: 0xff2e88,
     infiniteAmmo: false,
-    initialAmmo: 120,
-    maxAmmo: 360,
+    initialAmmo: 150,
+    maxAmmo: 400,
     buyCost: 260,
     ammoPackCost: 45,
-    ammoPackSize: 90,
+    ammoPackSize: 100,
+    upgradeBaseCost: 180,
+    barrelLength: 12,
+    barrelWidth: 3,
   },
   shotgun: {
     id: 'shotgun',
     name: '等离子霰弹枪 M8',
     shortName: '等离子霰弹',
+    tag: '近战爆发',
     description: '一次喷射5发高热粒子弹丸，近距离击退与爆发打击感拉满。',
     damage: 19,
-    fireIntervalMs: 580,
-    projectileSpeed: 690,
-    range: 310,
+    fireIntervalMs: 560,
+    projectileSpeed: 710,
+    range: 320,
     pellets: 5,
     spreadDeg: 18,
     recoilPx: 7.5,
@@ -174,6 +239,119 @@ export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
     buyCost: 380,
     ammoPackCost: 50,
     ammoPackSize: 24,
+    upgradeBaseCost: 210,
+    barrelLength: 14,
+    barrelWidth: 4,
+  },
+  rifle: {
+    id: 'rifle',
+    name: '电磁突击步枪 X-47',
+    shortName: '电磁步枪',
+    tag: '中远全能',
+    description: '全自动高初速电磁卡宾枪，弹道平直精准、单发穿透压制力极强。',
+    damage: 34,
+    fireIntervalMs: 145,
+    projectileSpeed: 1080,
+    range: 640,
+    pellets: 1,
+    spreadDeg: 2.2,
+    recoilPx: 3.8,
+    cameraShake: 0.0028,
+    projectileTexture: 'proj_violet',
+    colorHex: '#C000FF',
+    colorNum: 0xc000ff,
+    infiniteAmmo: false,
+    initialAmmo: 120,
+    maxAmmo: 320,
+    buyCost: 520,
+    ammoPackCost: 60,
+    ammoPackSize: 90,
+    upgradeBaseCost: 240,
+    barrelLength: 16,
+    barrelWidth: 3,
+  },
+  flamethrower: {
+    id: 'flamethrower',
+    name: '烈焰喷射器 PYRO-6',
+    shortName: '烈焰喷射',
+    tag: '范围灼烧',
+    description: '连续喷涌高热等离子火浪，近中距离扇形覆盖，横扫成群尸潮与追兵。',
+    damage: 15,
+    fireIntervalMs: 65,
+    projectileSpeed: 420,
+    range: 225,
+    pellets: 2,
+    spreadDeg: 22,
+    recoilPx: 1.5,
+    cameraShake: 0.0014,
+    projectileTexture: 'proj_flame',
+    colorHex: '#FB923C',
+    colorNum: 0xf97316,
+    infiniteAmmo: false,
+    initialAmmo: 220,
+    maxAmmo: 550,
+    buyCost: 620,
+    ammoPackCost: 55,
+    ammoPackSize: 160,
+    upgradeBaseCost: 250,
+    barrelLength: 15,
+    barrelWidth: 5,
+  },
+  railgun: {
+    id: 'railgun',
+    name: '磁轨狙击炮 RAIL-Z',
+    shortName: '磁轨狙击',
+    tag: '穿甲贯通',
+    description: '超音速磁轨重狙，发射穿透力极强的离子束，可直线贯通最多 3 个目标！',
+    damage: 118,
+    fireIntervalMs: 820,
+    projectileSpeed: 1580,
+    range: 820,
+    pellets: 1,
+    spreadDeg: 0.4,
+    recoilPx: 9,
+    cameraShake: 0.0075,
+    projectileTexture: 'proj_rail',
+    colorHex: '#38BDF8',
+    colorNum: 0x38bdf8,
+    infiniteAmmo: false,
+    initialAmmo: 20,
+    maxAmmo: 56,
+    buyCost: 780,
+    ammoPackCost: 75,
+    ammoPackSize: 14,
+    upgradeBaseCost: 300,
+    barrelLength: 19,
+    barrelWidth: 4,
+    pierceCount: 3,
+  },
+  launcher: {
+    id: 'launcher',
+    name: '微型火箭筒 RPG-77',
+    shortName: '火箭筒',
+    tag: '爆破溅射',
+    description: '发射高爆制导微火箭，命中后引爆大范围冲击波，瞬间粉碎机甲与车辆！',
+    damage: 115,
+    fireIntervalMs: 1050,
+    projectileSpeed: 540,
+    range: 580,
+    pellets: 1,
+    spreadDeg: 1.2,
+    recoilPx: 10,
+    cameraShake: 0.009,
+    projectileTexture: 'proj_rocket',
+    colorHex: '#FF4545',
+    colorNum: 0xff4545,
+    infiniteAmmo: false,
+    initialAmmo: 10,
+    maxAmmo: 30,
+    buyCost: 920,
+    ammoPackCost: 95,
+    ammoPackSize: 8,
+    upgradeBaseCost: 340,
+    barrelLength: 17,
+    barrelWidth: 6,
+    blastRadius: 115,
   },
 };
 
@@ -363,12 +541,50 @@ export const VEHICLE_UPGRADE_CONFIG: Record<
 export const ECONOMY_CONFIG = {
   VEHICLE_REPAIR_COST: 60,
   STEALTH_RESPRAY_COST: 120,
+  PAINT_JOB_COST: 40,
   CLINIC_HEAL_COST: 60,
   SNACK_COST: 35,
   SNACK_HEAL: 45,
   RAMEN_COST: 50,
   RAMEN_HEAL: 75,
+  VENDING_DRINK_COST: 15,
+  VENDING_DRINK_HEAL: 25,
+  SAFEHOUSE_PRICE: 750,
+  CLUB_COCKTAIL_COST: 65,
+  CLUB_COCKTAIL_HEAL: 60,
+  CLUB_OVERDRIVE_SEC: 25,
+  CLUB_BRIBE_COST: 80,
 } as const;
+
+export interface VehiclePaintOption {
+  id: string;
+  name: string;
+  colorNum: number | null;
+  swatchHex: string;
+}
+
+export const VEHICLE_PAINT_OPTIONS: VehiclePaintOption[] = [
+  { id: 'stock', name: '原厂涂装', colorNum: null, swatchHex: '#64748B' },
+  { id: 'cyan', name: '赛博青', colorNum: 0x38e8ff, swatchHex: '#00F5FF' },
+  { id: 'pink', name: '霓虹粉', colorNum: 0xff55a3, swatchHex: '#FF2E88' },
+  { id: 'gold', name: '帝国金', colorNum: 0xffd166, swatchHex: '#FFD166' },
+  { id: 'purple', name: '幽冥紫', colorNum: 0xd06bff, swatchHex: '#C000FF' },
+  { id: 'obsidian', name: '暗夜黑', colorNum: 0x64748b, swatchHex: '#1E293B' },
+];
+
+export interface RadioStationDef {
+  index: number;
+  name: string;
+  genre: string;
+  bpm: number;
+}
+
+export const RADIO_STATIONS: RadioStationDef[] = [
+  { index: 0, name: '车载电台已关闭', genre: '静音', bpm: 0 },
+  { index: 1, name: 'FM 98.5 霓虹合成波', genre: 'Synthwave', bpm: 118 },
+  { index: 2, name: 'FM 104.2 暗港重低音', genre: 'Dark Bass', bpm: 130 },
+  { index: 3, name: 'FM 88.8 铬铁工业脉冲', genre: 'Cyber Pulse', bpm: 140 },
+];
 
 export type EnemyKind = 'raider' | 'drone' | 'brute' | 'boss';
 

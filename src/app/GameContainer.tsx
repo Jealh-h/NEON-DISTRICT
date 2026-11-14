@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { createPhaserConfig } from '../game/config/GameConfig';
 import {
+  ArcadeResultPayload,
   ExplorationPayload,
   GAME_EVENT,
   gameEvents,
@@ -12,10 +13,12 @@ import {
   LandmarkInfo,
   MissionSyncPayload,
   NearbyNpcInfo,
+  NearbyPropInfo,
   NearbyVehicleInfo,
   PlayerStatsPayload,
   PlayerTelemetryPayload,
   RaceTelemetryPayload,
+  RadioStationPayload,
   SaveStatusPayload,
   ServiceModalPayload,
   VehicleTelemetryPayload,
@@ -28,6 +31,8 @@ import { useGameStore } from '../store/gameStore';
 export function GameContainer() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const toastTimerRef = useRef<number | null>(null);
+  const districtBannerTimerRef = useRef<number | null>(null);
+  const lastDistrictRef = useRef<string | null>(null);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -45,12 +50,26 @@ export function GameContainer() {
       }, 3600);
     };
 
+    const showDistrictBanner = (name: string) => {
+      useGameStore.getState().setDistrictBanner(name);
+      if (districtBannerTimerRef.current !== null) {
+        window.clearTimeout(districtBannerTimerRef.current);
+      }
+      districtBannerTimerRef.current = window.setTimeout(() => {
+        useGameStore.getState().setDistrictBanner(null);
+      }, 2800);
+    };
+
     const handleSceneReady = (payload: { district: DistrictData }) => {
       useGameStore.getState().setDistrictData(payload.district);
+      lastDistrictRef.current = payload.district.name;
     };
 
     const handleModeChanged = (mode: GameMode) => {
       useGameStore.getState().setMode(mode);
+      if (mode !== 'PLAYING') {
+        useGameStore.getState().setDistrictBanner(null);
+      }
     };
 
     const handlePlayModeChanged = (playMode: GamePlayMode) => {
@@ -58,7 +77,12 @@ export function GameContainer() {
     };
 
     const handlePlayerMoved = (payload: PlayerTelemetryPayload) => {
-      useGameStore.getState().updatePlayerPosition(
+      const store = useGameStore.getState();
+      if (lastDistrictRef.current && lastDistrictRef.current !== payload.district && store.mode === 'PLAYING') {
+        showDistrictBanner(payload.district);
+      }
+      lastDistrictRef.current = payload.district;
+      store.updatePlayerPosition(
         payload.x,
         payload.y,
         payload.facingDeg,
@@ -68,6 +92,10 @@ export function GameContainer() {
 
     const handleLandmarkNearby = (landmark: LandmarkInfo | null) => {
       useGameStore.getState().setNearbyLandmark(landmark);
+    };
+
+    const handlePropNearby = (prop: NearbyPropInfo | null) => {
+      useGameStore.getState().setNearbyProp(prop);
     };
 
     const handleNpcNearby = (npc: NearbyNpcInfo | null) => {
@@ -80,6 +108,18 @@ export function GameContainer() {
 
     const handleVehicleTelemetry = (payload: VehicleTelemetryPayload) => {
       useGameStore.getState().setVehicleTelemetry(payload);
+    };
+
+    const handleRadioChanged = (payload: RadioStationPayload) => {
+      useGameStore.getState().setRadioStation(payload);
+    };
+
+    const handleSafehouseStatus = (owns: boolean) => {
+      useGameStore.getState().setOwnsSafehouse(owns);
+    };
+
+    const handleArcadeResult = (result: ArcadeResultPayload) => {
+      useGameStore.getState().setArcadeResult(result);
     };
 
     const handleWantedChanged = (payload: WantedTelemetryPayload) => {
@@ -135,9 +175,13 @@ export function GameContainer() {
     gameEvents.on(GAME_EVENT.PLAY_MODE_CHANGED, handlePlayModeChanged);
     gameEvents.on(GAME_EVENT.PLAYER_MOVED, handlePlayerMoved);
     gameEvents.on(GAME_EVENT.LANDMARK_NEARBY, handleLandmarkNearby);
+    gameEvents.on(GAME_EVENT.PROP_NEARBY, handlePropNearby);
     gameEvents.on(GAME_EVENT.NPC_NEARBY, handleNpcNearby);
     gameEvents.on(GAME_EVENT.VEHICLE_NEARBY, handleVehicleNearby);
     gameEvents.on(GAME_EVENT.VEHICLE_TELEMETRY, handleVehicleTelemetry);
+    gameEvents.on(GAME_EVENT.RADIO_CHANGED, handleRadioChanged);
+    gameEvents.on(GAME_EVENT.SAFEHOUSE_STATUS, handleSafehouseStatus);
+    gameEvents.on(GAME_EVENT.ARCADE_RESULT, handleArcadeResult);
     gameEvents.on(GAME_EVENT.WANTED_CHANGED, handleWantedChanged);
     gameEvents.on(GAME_EVENT.PLAYER_STATS, handlePlayerStats);
     gameEvents.on(GAME_EVENT.WEAPON_TELEMETRY, handleWeaponTelemetry);
@@ -155,14 +199,21 @@ export function GameContainer() {
       if (toastTimerRef.current !== null) {
         window.clearTimeout(toastTimerRef.current);
       }
+      if (districtBannerTimerRef.current !== null) {
+        window.clearTimeout(districtBannerTimerRef.current);
+      }
       gameEvents.off(GAME_EVENT.SCENE_READY, handleSceneReady);
       gameEvents.off(GAME_EVENT.MODE_CHANGED, handleModeChanged);
       gameEvents.off(GAME_EVENT.PLAY_MODE_CHANGED, handlePlayModeChanged);
       gameEvents.off(GAME_EVENT.PLAYER_MOVED, handlePlayerMoved);
       gameEvents.off(GAME_EVENT.LANDMARK_NEARBY, handleLandmarkNearby);
+      gameEvents.off(GAME_EVENT.PROP_NEARBY, handlePropNearby);
       gameEvents.off(GAME_EVENT.NPC_NEARBY, handleNpcNearby);
       gameEvents.off(GAME_EVENT.VEHICLE_NEARBY, handleVehicleNearby);
       gameEvents.off(GAME_EVENT.VEHICLE_TELEMETRY, handleVehicleTelemetry);
+      gameEvents.off(GAME_EVENT.RADIO_CHANGED, handleRadioChanged);
+      gameEvents.off(GAME_EVENT.SAFEHOUSE_STATUS, handleSafehouseStatus);
+      gameEvents.off(GAME_EVENT.ARCADE_RESULT, handleArcadeResult);
       gameEvents.off(GAME_EVENT.WANTED_CHANGED, handleWantedChanged);
       gameEvents.off(GAME_EVENT.PLAYER_STATS, handlePlayerStats);
       gameEvents.off(GAME_EVENT.WEAPON_TELEMETRY, handleWeaponTelemetry);

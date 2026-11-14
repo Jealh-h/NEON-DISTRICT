@@ -1,5 +1,11 @@
 import Phaser from 'phaser';
-import { GamePlayMode, VehicleType, VehicleUpgradeTrack, WeaponId } from '../config/BalanceConfig';
+import {
+  GamePlayMode,
+  VehicleType,
+  VehicleUpgradeTrack,
+  WeaponId,
+  WeaponUpgradeTrack,
+} from '../config/BalanceConfig';
 
 export type GameMode = 'TITLE' | 'PLAYING' | 'PAUSED';
 
@@ -63,6 +69,28 @@ export interface VehicleSummary {
   maxHealth: number;
   upgrades: VehicleUpgradeLevels;
   accentColor: string;
+  paintColor?: number | null;
+}
+
+export interface NearbyPropInfo {
+  id: string;
+  kind: 'atm' | 'vending';
+  title: string;
+  actionLabel: string;
+}
+
+export interface RadioStationPayload {
+  index: number;
+  name: string;
+  genre: string;
+}
+
+export interface ArcadeResultPayload {
+  bet: number;
+  multiplier: number;
+  payout: number;
+  reels: [string, string, string];
+  message: string;
 }
 
 export interface VehicleTelemetryPayload {
@@ -133,7 +161,16 @@ export interface MissionSyncPayload {
   totalEarnings: number;
 }
 
-export type ServiceModalKind = 'missions' | 'garage' | 'clinic' | 'store' | 'diner' | 'armory';
+export type ServiceModalKind =
+  | 'missions'
+  | 'garage'
+  | 'clinic'
+  | 'store'
+  | 'diner'
+  | 'armory'
+  | 'safehouse'
+  | 'arcade'
+  | 'club';
 
 export interface ServiceModalPayload {
   kind: ServiceModalKind;
@@ -146,16 +183,31 @@ export type PurchaseServicePayload =
   | { serviceType: 'repair'; vehicleId: string }
   | { serviceType: 'respray' }
   | { serviceType: 'upgrade'; vehicleId: string; track: VehicleUpgradeTrack }
+  | { serviceType: 'paint'; vehicleId: string; colorNum: number | null; colorName: string }
   | { serviceType: 'heal' }
   | { serviceType: 'snack' }
   | { serviceType: 'ramen' }
   | { serviceType: 'buy_weapon'; weaponId: WeaponId }
-  | { serviceType: 'buy_ammo'; weaponId: WeaponId };
+  | { serviceType: 'equip_weapon'; weaponId: WeaponId }
+  | { serviceType: 'buy_ammo'; weaponId: WeaponId }
+  | { serviceType: 'upgrade_weapon'; weaponId: WeaponId; track: WeaponUpgradeTrack }
+  | { serviceType: 'buy_safehouse' }
+  | { serviceType: 'safehouse_rest' }
+  | { serviceType: 'rob_store' }
+  | { serviceType: 'arcade_spin'; bet: number }
+  | { serviceType: 'club_cocktail' }
+  | { serviceType: 'club_bribe' };
 
 export interface AimFirePayload {
   x: number;
   y: number;
   firing: boolean;
+}
+
+export interface WeaponUpgradeLevels {
+  damage: number;
+  firerate: number;
+  capacity: number;
 }
 
 export interface WeaponTelemetryPayload {
@@ -167,6 +219,8 @@ export interface WeaponTelemetryPayload {
   infiniteAmmo: boolean;
   ownedIds: WeaponId[];
   ammoByWeapon: Record<WeaponId, number>;
+  maxAmmoByWeapon: Record<WeaponId, number>;
+  upgradesByWeapon: Record<WeaponId, WeaponUpgradeLevels>;
 }
 
 export interface PlayerTelemetryPayload {
@@ -183,10 +237,10 @@ export interface InteractionPayload {
 }
 
 export interface DrivingInputPayload {
-  throttle: number;
-  brake: number;
-  steer: number;
+  driveX: number;
+  driveY: number;
   nitro?: boolean;
+  handbrake?: boolean;
 }
 
 export interface SaveStatusPayload {
@@ -211,6 +265,8 @@ export const GAME_EVENT = {
   RESET_POSITION: 'game:reset_position',
   SET_MODAL_PAUSED: 'game:set_modal_paused',
   SET_MUTED: 'audio:set_muted',
+  CYCLE_RADIO: 'audio:cycle_radio',
+  RADIO_CHANGED: 'audio:radio_changed',
   JOYSTICK_MOVE: 'input:joystick_move',
   AIM_FIRE: 'input:aim_fire',
   SWITCH_WEAPON: 'input:switch_weapon',
@@ -227,11 +283,14 @@ export const GAME_EVENT = {
   SCENE_READY: 'scene:ready',
   PLAYER_MOVED: 'player:moved',
   PLAYER_STATS: 'player:stats',
+  SAFEHOUSE_STATUS: 'player:safehouse_status',
+  ARCADE_RESULT: 'arcade:result',
   WEAPON_TELEMETRY: 'weapon:telemetry',
   HORDE_UPDATED: 'horde:updated',
   RACE_UPDATED: 'race:updated',
   EXPLORATION_UPDATED: 'exploration:updated',
   LANDMARK_NEARBY: 'landmark:nearby',
+  PROP_NEARBY: 'prop:nearby',
   NPC_NEARBY: 'npc:nearby',
   VEHICLE_NEARBY: 'vehicle:nearby',
   VEHICLE_TELEMETRY: 'vehicle:telemetry',

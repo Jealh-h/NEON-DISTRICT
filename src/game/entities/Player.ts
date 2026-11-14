@@ -55,9 +55,7 @@ export class Player {
   public setWeaponVisual(weaponId: WeaponId): void {
     this.activeWeaponId = weaponId;
     const spec = WEAPON_SPECS[weaponId];
-    const len = weaponId === 'shotgun' ? 14 : weaponId === 'smg' ? 12 : 9;
-    const thick = weaponId === 'shotgun' ? 4 : 3;
-    this.weaponBarrel.setSize(len, thick);
+    this.weaponBarrel.setSize(spec.barrelLength, spec.barrelWidth);
     this.weaponBarrel.setFillStyle(spec.colorNum, 1);
     this.syncWeaponBarrel();
   }
@@ -127,7 +125,8 @@ export class Player {
   }
 
   public getMuzzlePosition(): { x: number; y: number } {
-    const barrelReach = this.activeWeaponId === 'shotgun' ? 20 : this.activeWeaponId === 'smg' ? 18 : 16;
+    const spec = WEAPON_SPECS[this.activeWeaponId];
+    const barrelReach = spec.barrelLength + 7;
     const rightSide = 4;
     const cos = Math.cos(this.facingAngle);
     const sin = Math.sin(this.facingAngle);

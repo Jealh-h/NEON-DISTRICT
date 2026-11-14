@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { Radio, Zap } from 'lucide-react';
 import { GAME_EVENT, gameEvents } from '../game/ui/GameEvents';
 import { useGameStore } from '../store/gameStore';
 
@@ -30,51 +30,53 @@ export function MobileControls() {
   const inVehicle = useGameStore((s) => s.inVehicle);
   const vehicleNitro = useGameStore((s) => s.vehicleNitro);
   const nearbyLandmark = useGameStore((s) => s.nearbyLandmark);
+  const nearbyProp = useGameStore((s) => s.nearbyProp);
   const nearbyNpc = useGameStore((s) => s.nearbyNpc);
   const nearbyVehicle = useGameStore((s) => s.nearbyVehicle);
+  const radioStation = useGameStore((s) => s.radioStation);
   const weapon = useGameStore((s) => s.weapon);
 
   const baseRef = useRef<HTMLDivElement | null>(null);
   const [knobOffset, setKnobOffset] = useState({ x: 0, y: 0 });
   const joystickPointerId = useRef<number | null>(null);
+  const driveStickRef = useRef({ x: 0, y: 0 });
 
   const fireBaseRef = useRef<HTMLDivElement | null>(null);
   const [fireKnobOffset, setFireKnobOffset] = useState({ x: 0, y: 0 });
   const [isFiringStick, setIsFiringStick] = useState(false);
   const firePointerId = useRef<number | null>(null);
 
-  const [steerLeft, setSteerLeft] = useState(false);
-  const [steerRight, setSteerRight] = useState(false);
-  const [throttleDown, setThrottleDown] = useState(false);
   const [brakeDown, setBrakeDown] = useState(false);
   const [nitroDown, setNitroDown] = useState(false);
 
   useEffect(() => {
     setKnobOffset({ x: 0, y: 0 });
     joystickPointerId.current = null;
+    driveStickRef.current = { x: 0, y: 0 };
     setFireKnobOffset({ x: 0, y: 0 });
     setIsFiringStick(false);
     firePointerId.current = null;
-    setSteerLeft(false);
-    setSteerRight(false);
-    setThrottleDown(false);
     setBrakeDown(false);
     setNitroDown(false);
     gameEvents.emit(GAME_EVENT.JOYSTICK_MOVE, { x: 0, y: 0 });
     gameEvents.emit(GAME_EVENT.AIM_FIRE, { x: 0, y: 0, firing: false });
-    gameEvents.emit(GAME_EVENT.DRIVING_INPUT, { throttle: 0, brake: 0, steer: 0, nitro: false });
+    gameEvents.emit(GAME_EVENT.DRIVING_INPUT, {
+      driveX: 0,
+      driveY: 0,
+      handbrake: false,
+      nitro: false,
+    });
   }, [inVehicle, visible]);
 
   useEffect(() => {
     if (!inVehicle) return;
-    const steer = (steerRight ? 1 : 0) - (steerLeft ? 1 : 0);
     gameEvents.emit(GAME_EVENT.DRIVING_INPUT, {
-      throttle: throttleDown ? 1 : 0,
-      brake: brakeDown ? 1 : 0,
-      steer,
+      driveX: driveStickRef.current.x,
+      driveY: driveStickRef.current.y,
+      handbrake: brakeDown,
       nitro: nitroDown,
     });
-  }, [inVehicle, steerLeft, steerRight, throttleDown, brakeDown, nitroDown]);
+  }, [inVehicle, brakeDown, nitroDown]);
 
   if (!visible) return null;
 
@@ -96,17 +98,37 @@ export function MobileControls() {
       dy = (dy / dist) * maxRadius;
     }
 
+    const nx = dx / maxRadius;
+    const ny = dy / maxRadius;
     setKnobOffset({ x: dx, y: dy });
-    gameEvents.emit(GAME_EVENT.JOYSTICK_MOVE, {
-      x: dx / maxRadius,
-      y: dy / maxRadius,
-    });
+
+    if (inVehicle) {
+      driveStickRef.current = { x: nx, y: ny };
+      gameEvents.emit(GAME_EVENT.DRIVING_INPUT, {
+        driveX: nx,
+        driveY: ny,
+        handbrake: brakeDown,
+        nitro: nitroDown,
+      });
+    } else {
+      gameEvents.emit(GAME_EVENT.JOYSTICK_MOVE, { x: nx, y: ny });
+    }
   };
 
   const resetStick = () => {
     joystickPointerId.current = null;
     setKnobOffset({ x: 0, y: 0 });
-    gameEvents.emit(GAME_EVENT.JOYSTICK_MOVE, { x: 0, y: 0 });
+    driveStickRef.current = { x: 0, y: 0 };
+    if (inVehicle) {
+      gameEvents.emit(GAME_EVENT.DRIVING_INPUT, {
+        driveX: 0,
+        driveY: 0,
+        handbrake: brakeDown,
+        nitro: nitroDown,
+      });
+    } else {
+      gameEvents.emit(GAME_EVENT.JOYSTICK_MOVE, { x: 0, y: 0 });
+    }
   };
 
   const updateFireStick = (clientX: number, clientY: number) => {
@@ -145,42 +167,36 @@ export function MobileControls() {
   if (inVehicle) {
     return (
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex items-end justify-between p-4 sm:p-5">
-        <div className="pointer-events-auto flex items-center gap-3">
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setSteerLeft(true);
+        <div
+          ref={baseRef}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+            joystickPointerId.current = e.pointerId;
+            updateStick(e.clientX, e.clientY);
+          }}
+          onPointerMove={(e) => {
+            if (joystickPointerId.current === e.pointerId) {
+              updateStick(e.clientX, e.clientY);
+            }
+          }}
+          onPointerUp={(e) => {
+            if (joystickPointerId.current === e.pointerId) {
+              resetStick();
+            }
+          }}
+          onPointerCancel={resetStick}
+          className="pointer-events-auto relative flex h-28 w-28 touch-none items-center justify-center rounded-full border-2 border-[#FFD166]/65 bg-[#080D18]/82"
+          aria-label="全向驾驶摇杆"
+        >
+          <span className="pointer-events-none absolute top-2 text-[9px] font-bold tracking-widest text-[#FFD166]/85">
+            驾驶
+          </span>
+          <div
+            className="h-12 w-12 rounded-full border-2 border-[#FFD166] bg-[#FFD166]/25"
+            style={{
+              transform: `translate(${knobOffset.x}px, ${knobOffset.y}px)`,
             }}
-            onPointerUp={() => setSteerLeft(false)}
-            onPointerCancel={() => setSteerLeft(false)}
-            aria-label="左转"
-            className={`flex h-14 w-16 touch-none items-center justify-center border-2 transition-colors ${
-              steerLeft
-                ? 'border-[#00F5FF] bg-[#00F5FF]/30 text-[#00F5FF]'
-                : 'border-[#00F5FF]/55 bg-[#080D18]/85 text-slate-200'
-            }`}
-          >
-            <ChevronLeft className="h-7 w-7" />
-          </button>
-
-          <button
-            type="button"
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              setSteerRight(true);
-            }}
-            onPointerUp={() => setSteerRight(false)}
-            onPointerCancel={() => setSteerRight(false)}
-            aria-label="右转"
-            className={`flex h-14 w-16 touch-none items-center justify-center border-2 transition-colors ${
-              steerRight
-                ? 'border-[#00F5FF] bg-[#00F5FF]/30 text-[#00F5FF]'
-                : 'border-[#00F5FF]/55 bg-[#080D18]/85 text-slate-200'
-            }`}
-          >
-            <ChevronRight className="h-7 w-7" />
-          </button>
+          />
         </div>
 
         <div className="pointer-events-auto flex flex-col items-end gap-2.5">
@@ -201,20 +217,18 @@ export function MobileControls() {
             <button
               type="button"
               onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                setNitroDown(true);
+                e.preventDefault();
+                gameEvents.emit(GAME_EVENT.CYCLE_RADIO);
               }}
-              onPointerUp={() => setNitroDown(false)}
-              onPointerCancel={() => setNitroDown(false)}
-              className={`flex h-11 min-w-[80px] touch-none items-center justify-center gap-1 border-2 px-3 text-xs font-bold tracking-wider transition-colors ${
-                nitroDown
-                  ? 'border-[#FFD166] bg-[#FFD166] text-[#080D18]'
-                  : 'border-[#FFD166]/80 bg-[#080D18]/90 text-[#FFD166]'
+              aria-label="切换车载电台"
+              className={`flex h-11 min-w-[68px] touch-none items-center justify-center gap-1 border-2 px-2.5 text-xs font-bold tracking-wider transition-colors ${
+                radioStation.index > 0
+                  ? 'border-[#C000FF] bg-[#C000FF]/20 text-[#E08BFF]'
+                  : 'border-slate-700 bg-[#080D18]/90 text-slate-400'
               }`}
-              aria-label="氮气加速"
             >
-              <Zap className="h-3.5 w-3.5" />
-              氮气 {vehicleNitro}%
+              <Radio className="h-3.5 w-3.5" />
+              电台
             </button>
 
             <button
@@ -229,7 +243,7 @@ export function MobileControls() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onPointerDown={(e) => {
@@ -238,7 +252,7 @@ export function MobileControls() {
               }}
               onPointerUp={() => setBrakeDown(false)}
               onPointerCancel={() => setBrakeDown(false)}
-              className={`flex h-14 w-16 touch-none items-center justify-center border-2 text-xs font-bold transition-colors ${
+              className={`flex h-14 min-w-[74px] touch-none items-center justify-center border-2 px-3 text-xs font-bold transition-colors ${
                 brakeDown
                   ? 'border-[#FF4545] bg-[#FF4545]/30 text-[#FF4545]'
                   : 'border-[#FF4545]/60 bg-[#080D18]/85 text-slate-200'
@@ -251,17 +265,19 @@ export function MobileControls() {
               type="button"
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
-                setThrottleDown(true);
+                setNitroDown(true);
               }}
-              onPointerUp={() => setThrottleDown(false)}
-              onPointerCancel={() => setThrottleDown(false)}
-              className={`flex h-14 w-20 touch-none items-center justify-center border-2 text-xs font-bold transition-colors ${
-                throttleDown
-                  ? 'border-[#00F5FF] bg-[#00F5FF]/35 text-[#00F5FF]'
-                  : 'border-[#00F5FF]/65 bg-[#080D18]/85 text-[#00F5FF]'
+              onPointerUp={() => setNitroDown(false)}
+              onPointerCancel={() => setNitroDown(false)}
+              className={`flex h-14 min-w-[104px] touch-none items-center justify-center gap-1 border-2 px-3.5 text-xs font-bold tracking-wider transition-colors ${
+                nitroDown
+                  ? 'border-[#FFD166] bg-[#FFD166] text-[#080D18]'
+                  : 'border-[#FFD166]/85 bg-[#080D18]/90 text-[#FFD166]'
               }`}
+              aria-label="氮气加速"
             >
-              油门
+              <Zap className="h-3.5 w-3.5" />
+              氮气 {vehicleNitro}%
             </button>
           </div>
         </div>
@@ -269,7 +285,8 @@ export function MobileControls() {
     );
   }
 
-  const canInteract = Boolean(nearbyNpc || nearbyLandmark);
+
+  const canInteract = Boolean(nearbyProp || nearbyNpc || nearbyLandmark);
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-10 flex items-end justify-between p-4 sm:p-5">

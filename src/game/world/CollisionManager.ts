@@ -200,6 +200,21 @@ export class CollisionManager {
         return { w: 14, h: 14 };
       case 'billboard':
         return { w: 46, h: 14 };
+      case 'tree_pine':
+      case 'tree_sakura':
+      case 'tree_emerald':
+      case 'tree_autumn':
+      case 'tree_snow':
+      case 'tree_palm':
+        return { w: 20, h: 20 };
+      case 'atm':
+        return { w: 18, h: 18 };
+      case 'radar':
+        return { w: 32, h: 32 };
+      case 'barge':
+        return { w: 120, h: 40 };
+      case 'speedboat':
+        return { w: 40, h: 18 };
     }
   }
 

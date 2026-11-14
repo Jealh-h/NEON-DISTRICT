@@ -1,7 +1,18 @@
 import { create } from 'zustand';
-import { GamePlayMode, PLAYER_CONFIG, VehicleType, WEAPON_SPECS, WORLD_CONFIG } from '../game/config/BalanceConfig';
+import {
+  GamePlayMode,
+  PLAYER_CONFIG,
+  RADIO_STATIONS,
+  VehicleType,
+  WEAPON_ORDER,
+  WEAPON_SPECS,
+  WORLD_CONFIG,
+  WeaponId,
+} from '../game/config/BalanceConfig';
+import type { WeaponUpgradeLevels } from '../game/ui/GameEvents';
 import {
   ActiveMissionState,
+  ArcadeResultPayload,
   ExplorationPayload,
   GAME_EVENT,
   gameEvents,
@@ -10,10 +21,12 @@ import {
   LandmarkInfo,
   MissionSyncPayload,
   NearbyNpcInfo,
+  NearbyPropInfo,
   NearbyVehicleInfo,
   PlayerStatsPayload,
   PoliceMapMarker,
   RaceTelemetryPayload,
+  RadioStationPayload,
   SaveStatusPayload,
   ServiceModalPayload,
   VehicleTelemetryPayload,
@@ -30,6 +43,7 @@ interface GameUIState {
   health: number;
   maxHealth: number;
   cash: number;
+  ownsSafehouse: boolean;
   wantedLevel: number;
   spotted: boolean;
   escapeProgress: number;
@@ -39,13 +53,16 @@ interface GameUIState {
   completedMissionIds: string[];
   totalMissionEarnings: number;
   serviceModal: ServiceModalPayload | null;
+  arcadeResult: ArcadeResultPayload | null;
   saveStatus: SaveStatusPayload;
   districtName: string;
+  districtBanner: string | null;
   playerX: number;
   playerY: number;
   facingDeg: number;
   districtData: DistrictData | null;
   nearbyLandmark: LandmarkInfo | null;
+  nearbyProp: NearbyPropInfo | null;
   nearbyNpc: NearbyNpcInfo | null;
   nearbyVehicle: NearbyVehicleInfo | null;
   inVehicle: boolean;
@@ -56,6 +73,7 @@ interface GameUIState {
   vehicleMaxHealth: number;
   vehicleNitro: number;
   vehicleBoosting: boolean;
+  radioStation: RadioStationPayload;
   horde: HordeTelemetryPayload;
   race: RaceTelemetryPayload;
   exploration: ExplorationPayload;
@@ -69,10 +87,15 @@ interface GameUIState {
   setPlayMode: (playMode: GamePlayMode) => void;
   setDistrictData: (data: DistrictData) => void;
   updatePlayerPosition: (x: number, y: number, facingDeg: number, district: string) => void;
+  setDistrictBanner: (name: string | null) => void;
   setNearbyLandmark: (landmark: LandmarkInfo | null) => void;
+  setNearbyProp: (prop: NearbyPropInfo | null) => void;
   setNearbyNpc: (npc: NearbyNpcInfo | null) => void;
   setNearbyVehicle: (vehicle: NearbyVehicleInfo | null) => void;
   setVehicleTelemetry: (payload: VehicleTelemetryPayload) => void;
+  setRadioStation: (payload: RadioStationPayload) => void;
+  setOwnsSafehouse: (owns: boolean) => void;
+  setArcadeResult: (result: ArcadeResultPayload | null) => void;
   setWantedTelemetry: (payload: WantedTelemetryPayload) => void;
   setPlayerStats: (payload: PlayerStatsPayload) => void;
   setWeaponTelemetry: (payload: WeaponTelemetryPayload) => void;
@@ -95,6 +118,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   health: PLAYER_CONFIG.INITIAL_HEALTH,
   maxHealth: PLAYER_CONFIG.MAX_HEALTH,
   cash: PLAYER_CONFIG.INITIAL_CASH,
+  ownsSafehouse: false,
   wantedLevel: 0,
   spotted: false,
   escapeProgress: 0,
@@ -104,13 +128,16 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   completedMissionIds: [],
   totalMissionEarnings: 0,
   serviceModal: null,
+  arcadeResult: null,
   saveStatus: { hasSave: false, savedAt: null, cash: null, completedCount: 0 },
   districtName: WORLD_CONFIG.STARTING_DISTRICT,
+  districtBanner: null,
   playerX: WORLD_CONFIG.PLAYER_SPAWN.x,
   playerY: WORLD_CONFIG.PLAYER_SPAWN.y,
   facingDeg: -90,
   districtData: null,
   nearbyLandmark: null,
+  nearbyProp: null,
   nearbyNpc: null,
   nearbyVehicle: null,
   inVehicle: false,
@@ -121,6 +148,11 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   vehicleMaxHealth: 0,
   vehicleNitro: 100,
   vehicleBoosting: false,
+  radioStation: {
+    index: RADIO_STATIONS[1].index,
+    name: RADIO_STATIONS[1].name,
+    genre: RADIO_STATIONS[1].genre,
+  },
   horde: {
     active: false,
     wave: 0,
@@ -162,7 +194,15 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     ammo: 999,
     infiniteAmmo: true,
     ownedIds: ['pistol'],
-    ammoByWeapon: { pistol: 999, smg: 0, shotgun: 0 },
+    ammoByWeapon: Object.fromEntries(
+      WEAPON_ORDER.map((id) => [id, id === 'pistol' ? WEAPON_SPECS.pistol.initialAmmo : 0])
+    ) as Record<WeaponId, number>,
+    maxAmmoByWeapon: Object.fromEntries(
+      WEAPON_ORDER.map((id) => [id, WEAPON_SPECS[id].maxAmmo])
+    ) as Record<WeaponId, number>,
+    upgradesByWeapon: Object.fromEntries(
+      WEAPON_ORDER.map((id) => [id, { damage: 0, firerate: 0, capacity: 0 }])
+    ) as Record<WeaponId, WeaponUpgradeLevels>,
   },
   muted: false,
   showMap: false,
@@ -173,12 +213,15 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       mode,
       showMap: mode === 'PLAYING' ? get().showMap : false,
       serviceModal: mode === 'PLAYING' ? get().serviceModal : null,
+      arcadeResult: mode === 'PLAYING' ? get().arcadeResult : null,
     }),
   setPlayMode: (playMode) => set({ playMode }),
   setDistrictData: (districtData) => set({ districtData, districtName: districtData.name }),
   updatePlayerPosition: (playerX, playerY, facingDeg, districtName) =>
     set({ playerX, playerY, facingDeg, districtName }),
+  setDistrictBanner: (districtBanner) => set({ districtBanner }),
   setNearbyLandmark: (nearbyLandmark) => set({ nearbyLandmark }),
+  setNearbyProp: (nearbyProp) => set({ nearbyProp }),
   setNearbyNpc: (nearbyNpc) => set({ nearbyNpc }),
   setNearbyVehicle: (nearbyVehicle) => set({ nearbyVehicle }),
   setVehicleTelemetry: (payload) =>
@@ -192,6 +235,9 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       vehicleNitro: payload.nitro ?? 100,
       vehicleBoosting: Boolean(payload.isBoosting),
     }),
+  setRadioStation: (radioStation) => set({ radioStation }),
+  setOwnsSafehouse: (ownsSafehouse) => set({ ownsSafehouse }),
+  setArcadeResult: (arcadeResult) => set({ arcadeResult }),
   setWantedTelemetry: (payload) =>
     set({
       wantedLevel: payload.wantedLevel,
@@ -218,7 +264,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     }),
   setServiceModal: (serviceModal) => {
     gameEvents.emit(GAME_EVENT.SET_MODAL_PAUSED, Boolean(serviceModal));
-    set({ serviceModal });
+    set({ serviceModal, arcadeResult: serviceModal ? get().arcadeResult : null });
   },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
   setInteractionToast: (interactionToast) => set({ interactionToast }),

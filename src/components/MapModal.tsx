@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { WORLD_CONFIG } from '../game/config/BalanceConfig';
 import { CITY_DISTRICTS } from '../game/world/DistrictManager';
 import { useGameStore } from '../store/gameStore';
+import { MapTerrainSvg } from './MapTerrainSvg';
 
 export function MapModal() {
   const showMap = useGameStore((s) => s.showMap);
@@ -46,175 +47,12 @@ export function MapModal() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
-          <div className="border border-slate-700 bg-[#080D18] p-2">
+          <div className="flex flex-col gap-2 border border-slate-700 bg-[#080D18] p-2">
             <svg
               viewBox={`0 0 ${WORLD_CONFIG.WIDTH} ${WORLD_CONFIG.HEIGHT}`}
               className="h-auto w-full"
             >
-              {districtData.docks.map((dk, idx) => (
-                <rect
-                  key={`dk-${idx}`}
-                  x={dk.x}
-                  y={dk.y}
-                  width={dk.w}
-                  height={dk.h}
-                  fill="#192234"
-                />
-              ))}
-
-              {districtData.parks.map((pk, idx) => (
-                <rect
-                  key={`pk-${idx}`}
-                  x={pk.x}
-                  y={pk.y}
-                  width={pk.w}
-                  height={pk.h}
-                  fill="#0F2A30"
-                />
-              ))}
-
-              {districtData.sidewalks.map((sw, idx) => (
-                <rect
-                  key={`sw-${idx}`}
-                  x={sw.x}
-                  y={sw.y}
-                  width={sw.w}
-                  height={sw.h}
-                  fill="#182032"
-                />
-              ))}
-
-              {districtData.roads.map((road, idx) => (
-                <rect
-                  key={`rd-${idx}`}
-                  x={road.x}
-                  y={road.y}
-                  width={road.w}
-                  height={road.h}
-                  fill="#101726"
-                />
-              ))}
-
-              {districtData.turboStrips.map((ts) => (
-                <rect
-                  key={ts.id}
-                  x={ts.x}
-                  y={ts.y}
-                  width={ts.w}
-                  height={ts.h}
-                  fill="#00F5FF"
-                  fillOpacity={0.55}
-                />
-              ))}
-
-              {districtData.stuntRamps.map((rm) => (
-                <rect
-                  key={rm.id}
-                  x={rm.x}
-                  y={rm.y}
-                  width={rm.w}
-                  height={rm.h}
-                  fill="#FFD166"
-                  fillOpacity={0.75}
-                />
-              ))}
-
-              {districtData.rivers.map((rv, idx) => (
-                <rect
-                  key={`rv-${idx}`}
-                  x={rv.x}
-                  y={rv.y}
-                  width={rv.w}
-                  height={rv.h}
-                  fill="#0B3B60"
-                  stroke="#00F5FF"
-                  strokeWidth={4}
-                  strokeOpacity={0.4}
-                />
-              ))}
-
-              {districtData.bridges.map((br, idx) => (
-                <rect
-                  key={`br-${idx}`}
-                  x={br.x}
-                  y={br.y}
-                  width={br.w}
-                  height={br.h}
-                  fill="#28354C"
-                  stroke="#FFD166"
-                  strokeWidth={5}
-                  strokeOpacity={0.85}
-                />
-              ))}
-
-              {districtData.mountains.map((mt) => (
-                <g key={mt.id}>
-                  <rect
-                    x={mt.x}
-                    y={mt.y}
-                    width={mt.w}
-                    height={mt.h}
-                    fill="#263147"
-                    stroke="#52658A"
-                    strokeWidth={5}
-                  />
-                  <rect
-                    x={mt.x + 24}
-                    y={mt.y + 24}
-                    width={Math.max(20, mt.w - 48)}
-                    height={Math.max(20, mt.h - 48)}
-                    fill="#394B6D"
-                  />
-                  <text
-                    x={mt.x + mt.w / 2}
-                    y={mt.y + mt.h / 2}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#E2E8F0"
-                    fontSize="24"
-                    fontFamily="'Noto Sans SC', sans-serif"
-                    fontWeight="700"
-                  >
-                    {mt.name}
-                  </text>
-                </g>
-              ))}
-
-              <rect
-                x={districtData.parkingLot.x}
-                y={districtData.parkingLot.y}
-                width={districtData.parkingLot.w}
-                height={districtData.parkingLot.h}
-                fill="#0D1320"
-                stroke="#FFD166"
-                strokeWidth={4}
-              />
-
-              {districtData.buildings.map((b) => (
-                <g key={b.id}>
-                  <rect
-                    x={b.x}
-                    y={b.y}
-                    width={b.w}
-                    height={b.h}
-                    fill="#20283A"
-                    stroke={b.accentHex}
-                    strokeWidth={4}
-                  />
-                  <text
-                    x={b.x + b.w / 2}
-                    y={b.y + b.h / 2}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fill="#CBD5E1"
-                    fontSize="22"
-                    fontFamily="'Noto Sans SC', sans-serif"
-                    fontWeight="700"
-                  >
-                    {b.label}
-                  </text>
-                </g>
-              ))}
+              <MapTerrainSvg districtData={districtData} showLabels={true} />
 
               {districtData.landmarks.map((lm) => (
                 <g key={lm.id}>
@@ -300,6 +138,34 @@ export function MapModal() {
                 <polygon points="40,0 -24,-24 -12,0 -24,24" fill="#00F5FF" stroke="#080D18" strokeWidth={5} />
               </g>
             </svg>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-800 pt-2 text-[11px] text-slate-300">
+              <span className="font-bold tracking-wider text-slate-400">地形地貌图例：</span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#93C5FD] bg-[#F1F5F9]" />
+                雪原峰峦
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#F59E0B] bg-[#D97706]" />
+                赤岩荒漠
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#FEF08A] bg-[#F97316]" />
+                黑曜火山
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#4ADE80] bg-[#1E7A4B]" />
+                翠绿林地
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#FDE68A] bg-[#E5A93B]" />
+                黄金海滩
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2.5 w-2.5 border border-[#38BDF8] bg-[#074B83]" />
+                运河海湾
+              </span>
+            </div>
           </div>
 
           <div className="flex flex-col justify-between gap-4 border border-slate-800 bg-[#111827] p-3.5">

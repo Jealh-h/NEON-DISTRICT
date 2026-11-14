@@ -178,7 +178,14 @@ export class VehicleManager {
       this.activeVehicle.setOccupied(false);
     }
 
-    target.restoreState(800, 344, 0, target.getEffectiveMaxHealth(), target.getUpgrades());
+    target.restoreState(
+      800,
+      344,
+      0,
+      target.getEffectiveMaxHealth(),
+      target.getUpgrades(),
+      target.getPaintColor()
+    );
     this.activeVehicle = target;
     this.lastDrivenVehicleId = target.id;
     this.lastNearbyId = null;
@@ -311,11 +318,25 @@ export class VehicleManager {
 
   public serializeAll(): Record<
     string,
-    { x: number; y: number; angleDeg: number; health: number; upgrades: { engine: number; handling: number; armor: number } }
+    {
+      x: number;
+      y: number;
+      angleDeg: number;
+      health: number;
+      upgrades: { engine: number; handling: number; armor: number };
+      paintColor?: number | null;
+    }
   > {
     const out: Record<
       string,
-      { x: number; y: number; angleDeg: number; health: number; upgrades: { engine: number; handling: number; armor: number } }
+      {
+        x: number;
+        y: number;
+        angleDeg: number;
+        health: number;
+        upgrades: { engine: number; handling: number; armor: number };
+        paintColor?: number | null;
+      }
     > = {};
     for (const v of this.vehicles) {
       const pos = v.getPosition();
@@ -325,6 +346,7 @@ export class VehicleManager {
         angleDeg: v.getRotationDeg(),
         health: v.getHealth(),
         upgrades: v.getUpgrades(),
+        paintColor: v.getPaintColor(),
       };
     }
     return out;
@@ -333,7 +355,14 @@ export class VehicleManager {
   public restoreAll(
     savedVehicles: Record<
       string,
-      { x: number; y: number; angleDeg: number; health: number; upgrades: { engine: number; handling: number; armor: number } }
+      {
+        x: number;
+        y: number;
+        angleDeg: number;
+        health: number;
+        upgrades: { engine: number; handling: number; armor: number };
+        paintColor?: number | null;
+      }
     >,
     player: Player
   ): void {
@@ -351,13 +380,27 @@ export class VehicleManager {
       if (!v) continue;
       const saved = savedVehicles[def.id];
       if (saved && this.collisionManager.isPointClearForEntity(saved.x, saved.y, 14)) {
-        v.restoreState(saved.x, saved.y, saved.angleDeg, saved.health, saved.upgrades);
+        v.restoreState(
+          saved.x,
+          saved.y,
+          saved.angleDeg,
+          saved.health,
+          saved.upgrades,
+          saved.paintColor ?? null
+        );
       } else {
-        v.restoreState(def.x, def.y, def.angleDeg, v.spec.maxHealth, {
-          engine: 0,
-          handling: 0,
-          armor: 0,
-        });
+        v.restoreState(
+          def.x,
+          def.y,
+          def.angleDeg,
+          v.spec.maxHealth,
+          {
+            engine: 0,
+            handling: 0,
+            armor: 0,
+          },
+          null
+        );
       }
       v.setOccupied(false);
     }

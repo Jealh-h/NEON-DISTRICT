@@ -7,6 +7,7 @@ export interface SavedVehicleState {
   angleDeg: number;
   health: number;
   upgrades: VehicleUpgradeLevels;
+  paintColor?: number | null;
 }
 
 export interface SaveData {
@@ -19,6 +20,7 @@ export interface SaveData {
     health: number;
     cash: number;
   };
+  ownsSafehouse?: boolean;
   completedMissionIds: string[];
   totalMissionEarnings: number;
   vehicles: Record<string, SavedVehicleState>;
@@ -67,6 +69,7 @@ export class SaveManager {
           health: parsed.player.health,
           cash: parsed.player.cash,
         },
+        ownsSafehouse: Boolean(parsed.ownsSafehouse),
         completedMissionIds: Array.isArray(parsed.completedMissionIds)
           ? parsed.completedMissionIds.filter((id): id is string => typeof id === 'string')
           : [],

@@ -122,6 +122,19 @@ export class WantedManager {
     this.emitState(true);
   }
 
+  public reduceWanted(stars = 1): void {
+    if (this.wantedLevel === 0) return;
+    const next = Math.max(0, this.wantedLevel - stars);
+    if (next === 0) {
+      this.clearWanted(true);
+      return;
+    }
+    this.wantedLevel = next;
+    this.escapeTimer = 0;
+    this.audioManager.playEscapedChime();
+    this.emitState(true);
+  }
+
   public getWantedLevel(): number {
     return this.wantedLevel;
   }

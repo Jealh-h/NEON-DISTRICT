@@ -7,9 +7,8 @@ export interface MovementVector {
 }
 
 export interface DrivingControlsState {
-  throttle: number;
-  brake: number;
-  steer: number;
+  driveX: number;
+  driveY: number;
   handbrake: boolean;
   nitro: boolean;
 }
@@ -38,8 +37,13 @@ export class InputManager {
     slot1: Phaser.Input.Keyboard.Key;
     slot2: Phaser.Input.Keyboard.Key;
     slot3: Phaser.Input.Keyboard.Key;
+    slot4: Phaser.Input.Keyboard.Key;
+    slot5: Phaser.Input.Keyboard.Key;
+    slot6: Phaser.Input.Keyboard.Key;
+    slot7: Phaser.Input.Keyboard.Key;
     handbrake: Phaser.Input.Keyboard.Key;
     nitro: Phaser.Input.Keyboard.Key;
+    radio: Phaser.Input.Keyboard.Key;
     quickArmory: Phaser.Input.Keyboard.Key;
     map: Phaser.Input.Keyboard.Key;
     pause: Phaser.Input.Keyboard.Key;
@@ -47,7 +51,7 @@ export class InputManager {
 
   private joystickVector: MovementVector = { x: 0, y: 0 };
   private aimFireStick: AimFirePayload = { x: 0, y: 0, firing: false };
-  private virtualDriving: DrivingInputPayload = { throttle: 0, brake: 0, steer: 0, nitro: false };
+  private virtualDriving: DrivingInputPayload = { driveX: 0, driveY: 0, nitro: false, handbrake: false };
   private virtualInteractQueued = false;
   private virtualEnterExitQueued = false;
   private virtualSwitchWeaponQueued = false;
@@ -76,8 +80,13 @@ export class InputManager {
         slot1: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE),
         slot2: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO),
         slot3: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE),
+        slot4: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FOUR),
+        slot5: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.FIVE),
+        slot6: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SIX),
+        slot7: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SEVEN),
         handbrake: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
         nitro: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+        radio: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R),
         quickArmory: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B),
         map: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.M),
         pause: scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
@@ -123,10 +132,10 @@ export class InputManager {
   }
 
   public setVirtualDriving(payload: DrivingInputPayload): void {
-    this.virtualDriving.throttle = Phaser.Math.Clamp(payload.throttle, 0, 1);
-    this.virtualDriving.brake = Phaser.Math.Clamp(payload.brake, 0, 1);
-    this.virtualDriving.steer = Phaser.Math.Clamp(payload.steer, -1, 1);
+    this.virtualDriving.driveX = Phaser.Math.Clamp(payload.driveX, -1, 1);
+    this.virtualDriving.driveY = Phaser.Math.Clamp(payload.driveY, -1, 1);
     this.virtualDriving.nitro = Boolean(payload.nitro);
+    this.virtualDriving.handbrake = Boolean(payload.handbrake);
   }
 
   public queueVirtualInteract(): void {
@@ -215,7 +224,7 @@ export class InputManager {
     };
   }
 
-  public consumeSwitchWeaponSlot(): 'next' | 0 | 1 | 2 | null {
+  public consumeSwitchWeaponSlot(): 'next' | number | null {
     if (this.virtualSwitchWeaponQueued) {
       this.virtualSwitchWeaponQueued = false;
       return 'next';
@@ -225,40 +234,52 @@ export class InputManager {
       if (Phaser.Input.Keyboard.JustDown(this.keys.slot1)) return 0;
       if (Phaser.Input.Keyboard.JustDown(this.keys.slot2)) return 1;
       if (Phaser.Input.Keyboard.JustDown(this.keys.slot3)) return 2;
+      if (Phaser.Input.Keyboard.JustDown(this.keys.slot4)) return 3;
+      if (Phaser.Input.Keyboard.JustDown(this.keys.slot5)) return 4;
+      if (Phaser.Input.Keyboard.JustDown(this.keys.slot6)) return 5;
+      if (Phaser.Input.Keyboard.JustDown(this.keys.slot7)) return 6;
     }
     return null;
   }
 
   public getDrivingControls(): DrivingControlsState {
-    let throttle = 0;
-    let brake = 0;
-    let steer = 0;
+    let driveX = 0;
+    let driveY = 0;
     let handbrake = false;
     let nitro = false;
 
     if (this.keys) {
-      if (this.keys.w.isDown || this.keys.up.isDown) throttle = 1;
-      if (this.keys.s.isDown || this.keys.down.isDown) brake = 1;
-      if (this.keys.a.isDown || this.keys.left.isDown) steer -= 1;
-      if (this.keys.d.isDown || this.keys.right.isDown) steer += 1;
+      if (this.keys.a.isDown || this.keys.left.isDown) driveX -= 1;
+      if (this.keys.d.isDown || this.keys.right.isDown) driveX += 1;
+      if (this.keys.w.isDown || this.keys.up.isDown) driveY -= 1;
+      if (this.keys.s.isDown || this.keys.down.isDown) driveY += 1;
       if (this.keys.handbrake.isDown) handbrake = true;
       if (this.keys.nitro.isDown) nitro = true;
     }
 
-    if (throttle === 0 && this.virtualDriving.throttle > 0) {
-      throttle = this.virtualDriving.throttle;
+    if (
+      driveX === 0 &&
+      driveY === 0 &&
+      (Math.abs(this.virtualDriving.driveX) > 0.1 || Math.abs(this.virtualDriving.driveY) > 0.1)
+    ) {
+      driveX = this.virtualDriving.driveX;
+      driveY = this.virtualDriving.driveY;
     }
-    if (brake === 0 && this.virtualDriving.brake > 0) {
-      brake = this.virtualDriving.brake;
+
+    const len = Math.hypot(driveX, driveY);
+    if (len > 1) {
+      driveX /= len;
+      driveY /= len;
     }
-    if (steer === 0 && Math.abs(this.virtualDriving.steer) > 0.05) {
-      steer = this.virtualDriving.steer;
+
+    if (!handbrake && this.virtualDriving.handbrake) {
+      handbrake = true;
     }
     if (!nitro && this.virtualDriving.nitro) {
       nitro = true;
     }
 
-    return { throttle, brake, steer, handbrake, nitro };
+    return { driveX, driveY, handbrake, nitro };
   }
 
   public consumeInteractJustPressed(): boolean {
@@ -285,6 +306,10 @@ export class InputManager {
     return pressed;
   }
 
+  public consumeRadioJustPressed(): boolean {
+    return Boolean(this.keys && Phaser.Input.Keyboard.JustDown(this.keys.radio));
+  }
+
   public consumeQuickArmoryJustPressed(): boolean {
     return Boolean(this.keys && Phaser.Input.Keyboard.JustDown(this.keys.quickArmory));
   }
@@ -302,7 +327,7 @@ export class InputManager {
     this.joystickVector.y = 0;
     this.aimFireStick = { x: 0, y: 0, firing: false };
     this.canvasPointerDown = false;
-    this.virtualDriving = { throttle: 0, brake: 0, steer: 0, nitro: false };
+    this.virtualDriving = { driveX: 0, driveY: 0, nitro: false, handbrake: false };
     this.virtualInteractQueued = false;
     this.virtualEnterExitQueued = false;
     this.virtualSwitchWeaponQueued = false;

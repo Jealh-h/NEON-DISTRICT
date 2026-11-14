@@ -25,7 +25,7 @@ export class BootScene extends Phaser.Scene {
   private createTilesetTexture(): void {
     const tile = 32;
     const cols = 8;
-    const rows = 6;
+    const rows = 10;
     const tex = this.textures.createCanvas('neon_tileset', cols * tile, rows * tile);
     if (!tex) return;
 
@@ -39,17 +39,22 @@ export class BootScene extends Phaser.Scene {
     };
 
     const drawAsphaltBase = (ox: number, oy: number, dark: boolean) => {
-      ctx.fillStyle = dark ? '#111726' : '#151C2B';
+      ctx.fillStyle = dark ? '#111724' : '#161D2C';
       ctx.fillRect(ox, oy, 32, 32);
-      // Deterministic asphalt pixel grit
-      ctx.fillStyle = dark ? '#0C111D' : '#1A2336';
+      // Multi-tone asphalt aggregate & subtle wheel wear
+      ctx.fillStyle = dark ? '#0D121D' : '#1B2335';
       const specks = [
         [3, 5], [11, 2], [21, 9], [28, 4], [7, 15], [16, 19],
         [25, 14], [4, 26], [13, 28], [22, 24], [29, 29], [18, 8],
+        [9, 10], [27, 21], [2, 18], [14, 13],
       ];
       for (const [sx, sy] of specks) {
         ctx.fillRect(ox + sx, oy + sy, 2, 1);
       }
+      ctx.fillStyle = dark ? '#192233' : '#121826';
+      ctx.fillRect(ox + 6, oy + 7, 1, 1);
+      ctx.fillRect(ox + 23, oy + 16, 2, 1);
+      ctx.fillRect(ox + 12, oy + 23, 1, 1);
     };
 
     // 1: ASPHALT_PLAIN
@@ -58,13 +63,17 @@ export class BootScene extends Phaser.Scene {
       drawAsphaltBase(ox, oy, false);
     }
 
-    // 2: ASPHALT_WORN
+    // 2: ASPHALT_WORN (with tar cracks & subtle curb shadow)
     {
       const { ox, oy } = tileOrigin(2);
       drawAsphaltBase(ox, oy, true);
-      ctx.fillStyle = '#0B0F1A';
-      ctx.fillRect(ox, oy + 6, 32, 4);
-      ctx.fillRect(ox, oy + 22, 32, 4);
+      ctx.fillStyle = '#0A0E17';
+      ctx.fillRect(ox, oy + 6, 32, 3);
+      ctx.fillRect(ox, oy + 23, 32, 3);
+      ctx.fillStyle = '#080B13';
+      ctx.fillRect(ox + 4, oy + 11, 6, 1);
+      ctx.fillRect(ox + 10, oy + 12, 4, 1);
+      ctx.fillRect(ox + 14, oy + 13, 5, 1);
     }
 
     // 3: ROAD_DASH_H
@@ -361,147 +370,170 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 24, oy + 26, 8, 4);
     }
 
-    // 29: RIVER_DEEP
+    // 29: RIVER_DEEP (Vibrant cobalt-sapphire ocean & river waves)
     {
       const { ox, oy } = tileOrigin(29);
-      ctx.fillStyle = '#071E36';
+      ctx.fillStyle = '#074B83';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#0B2B4B';
-      ctx.fillRect(ox + 2, oy + 6, 12, 3);
-      ctx.fillRect(ox + 16, oy + 18, 12, 3);
-      ctx.fillRect(ox + 6, oy + 26, 10, 2);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.25)';
-      ctx.fillRect(ox + 4, oy + 7, 6, 1);
-      ctx.fillRect(ox + 18, oy + 19, 7, 1);
+      ctx.fillStyle = '#0A5E9E';
+      ctx.fillRect(ox + 2, oy + 4, 12, 3);
+      ctx.fillRect(ox + 16, oy + 15, 13, 3);
+      ctx.fillRect(ox + 5, oy + 24, 11, 3);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(ox + 4, oy + 4, 7, 1);
+      ctx.fillRect(ox + 18, oy + 15, 8, 1);
+      ctx.fillStyle = '#BAE6FD';
+      ctx.fillRect(ox + 6, oy + 4, 3, 1);
+      ctx.fillRect(ox + 20, oy + 15, 4, 1);
+      ctx.fillRect(ox + 8, oy + 24, 3, 1);
     }
 
-    // 30: RIVER_SHORE
+    // 30: RIVER_SHORE (Textured seawall curb + turquoise water trim)
     {
       const { ox, oy } = tileOrigin(30);
-      ctx.fillStyle = '#0B2742';
+      ctx.fillStyle = '#0B659E';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#243147';
+      ctx.fillStyle = '#2B3A55';
       ctx.fillRect(ox + 2, oy + 2, 28, 28);
-      ctx.fillStyle = '#364966';
+      ctx.fillStyle = '#3E5275';
       ctx.fillRect(ox + 4, oy + 4, 24, 24);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox + 2, oy + 2, 28, 1);
-      ctx.fillRect(ox + 2, oy + 29, 28, 1);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(ox + 4, oy + 4, 24, 2);
+      ctx.fillStyle = '#22D3EE';
+      ctx.fillRect(ox + 2, oy + 2, 28, 2);
+      ctx.fillRect(ox + 2, oy + 28, 28, 2);
     }
 
-    // 31: BRIDGE_DECK
+    // 31: BRIDGE_DECK (Crisp steel deck + glowing cyan edge rails)
     {
       const { ox, oy } = tileOrigin(31);
-      ctx.fillStyle = '#1B2436';
+      ctx.fillStyle = '#1B253B';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#25324B';
+      ctx.fillStyle = '#283654';
       ctx.fillRect(ox + 1, oy + 2, 14, 28);
       ctx.fillRect(ox + 17, oy + 2, 14, 28);
-      ctx.fillStyle = '#0F1624';
+      ctx.fillStyle = '#0E1421';
       ctx.fillRect(ox + 15, oy, 2, 32);
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(ox + 4, oy + 6, 8, 2);
-      ctx.fillRect(ox + 20, oy + 22, 8, 2);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(ox + 3, oy + 5, 10, 2);
+      ctx.fillRect(ox + 19, oy + 23, 10, 2);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(ox, oy + 1, 32, 1);
+      ctx.fillRect(ox, oy + 30, 32, 1);
     }
 
-    // 32: BRIDGE_RAIL
+    // 32: BRIDGE_RAIL (Heavy pixel suspension truss & gold/cyan rail)
     {
       const { ox, oy } = tileOrigin(32);
-      ctx.fillStyle = '#071E36';
+      ctx.fillStyle = '#074B83';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#27344B';
-      ctx.fillRect(ox, oy + 8, 32, 16);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(ox, oy + 6, 32, 20);
       ctx.fillStyle = '#475569';
-      ctx.fillRect(ox + 2, oy + 10, 28, 12);
+      ctx.fillRect(ox + 1, oy + 8, 30, 16);
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(ox + 4, oy + 11, 24, 10);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(ox + 2, oy + 14, 10, 4);
-      ctx.fillRect(ox + 20, oy + 14, 10, 4);
+      ctx.fillRect(ox + 3, oy + 14, 9, 4);
+      ctx.fillRect(ox + 20, oy + 14, 9, 4);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox, oy + 8, 32, 1);
-      ctx.fillRect(ox, oy + 23, 32, 1);
+      ctx.fillRect(ox, oy + 6, 32, 2);
+      ctx.fillRect(ox, oy + 24, 32, 2);
     }
 
-    // 33: MOUNTAIN_BASE (Highland slate gravel)
+    // 33: MOUNTAIN_BASE (Lush highland grass + rocky shale foothills)
     {
       const { ox, oy } = tileOrigin(33);
-      ctx.fillStyle = '#181F2D';
+      ctx.fillStyle = '#184D35';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#222C3F';
-      ctx.fillRect(ox + 4, oy + 5, 6, 4);
-      ctx.fillRect(ox + 18, oy + 12, 8, 5);
-      ctx.fillRect(ox + 8, oy + 22, 7, 4);
-      ctx.fillStyle = '#121824';
-      ctx.fillRect(ox + 14, oy + 4, 3, 2);
-      ctx.fillRect(ox + 24, oy + 24, 4, 3);
+      ctx.fillStyle = '#236B49';
+      ctx.fillRect(ox + 2, oy + 3, 10, 6);
+      ctx.fillRect(ox + 18, oy + 14, 11, 6);
+      ctx.fillRect(ox + 5, oy + 22, 10, 5);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(ox + 15, oy + 4, 8, 5);
+      ctx.fillRect(ox + 19, oy + 24, 8, 5);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(ox + 16, oy + 4, 5, 2);
     }
 
-    // 34: MOUNTAIN_CLIFF (Stepped faceted rock)
+    // 34: MOUNTAIN_CLIFF (Stepped geological slate cliff)
     {
       const { ox, oy } = tileOrigin(34);
-      ctx.fillStyle = '#263044';
+      ctx.fillStyle = '#334155';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#33415A';
-      ctx.fillRect(ox + 2, oy + 2, 28, 22);
-      ctx.fillStyle = '#192132';
-      ctx.fillRect(ox, oy + 24, 32, 8);
-      ctx.fillStyle = '#475978';
-      ctx.fillRect(ox + 4, oy + 4, 10, 6);
-      ctx.fillRect(ox + 18, oy + 10, 10, 6);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox + 8, oy + 14, 4, 2);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(ox + 1, oy + 1, 30, 21);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(ox + 2, oy + 2, 28, 4);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(ox, oy + 22, 32, 10);
     }
 
-    // 35: MOUNTAIN_PEAK
+    // 35: MOUNTAIN_PEAK (High altitude granite & snow crest)
     {
       const { ox, oy } = tileOrigin(35);
-      ctx.fillStyle = '#33415A';
+      ctx.fillStyle = '#475569';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#4A5D7F';
-      ctx.fillRect(ox + 4, oy + 4, 24, 24);
-      ctx.fillStyle = '#94A3B8';
-      ctx.fillRect(ox + 8, oy + 6, 16, 10);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(ox + 3, oy + 3, 26, 26);
       ctx.fillStyle = '#E2E8F0';
-      ctx.fillRect(ox + 11, oy + 7, 10, 5);
+      ctx.fillRect(ox + 6, oy + 5, 20, 12);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(ox + 9, oy + 6, 14, 6);
     }
 
-    // 36: PARK_TURF (Cyber emerald park turf)
+    // 36: PARK_TURF (Vibrant emerald pixel grass with leaf clusters & clover)
     {
       const { ox, oy } = tileOrigin(36);
-      ctx.fillStyle = '#0D262B';
+      ctx.fillStyle = '#145C39';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#13373E';
-      ctx.fillRect(ox + 4, oy + 6, 4, 2);
-      ctx.fillRect(ox + 18, oy + 14, 5, 2);
-      ctx.fillRect(ox + 9, oy + 24, 4, 2);
-      ctx.fillRect(ox + 24, oy + 5, 3, 2);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox + 20, oy + 13, 1, 1);
-      ctx.fillRect(ox + 5, oy + 5, 1, 1);
+      ctx.fillStyle = '#1E7A4B';
+      ctx.fillRect(ox + 2, oy + 4, 7, 4);
+      ctx.fillRect(ox + 16, oy + 12, 8, 4);
+      ctx.fillRect(ox + 6, oy + 22, 7, 4);
+      ctx.fillRect(ox + 22, oy + 3, 6, 4);
+      ctx.fillStyle = '#2EA363';
+      ctx.fillRect(ox + 4, oy + 3, 3, 2);
+      ctx.fillRect(ox + 18, oy + 11, 4, 2);
+      ctx.fillRect(ox + 8, oy + 21, 3, 2);
+      ctx.fillStyle = '#0D4027';
+      ctx.fillRect(ox + 12, oy + 8, 4, 2);
+      ctx.fillRect(ox + 24, oy + 20, 4, 2);
+      ctx.fillStyle = '#86EFAC';
+      ctx.fillRect(ox + 5, oy + 4, 1, 1);
+      ctx.fillRect(ox + 19, oy + 12, 1, 1);
     }
 
-    // 37: WOOD_PIER (Synthetic timber dock/footbridge)
+    // 37: WOOD_PIER (Warm sunlit boardwalk planks + iron studs)
     {
       const { ox, oy } = tileOrigin(37);
-      ctx.fillStyle = '#2B1F24';
+      ctx.fillStyle = '#452A1D';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#473239';
+      ctx.fillStyle = '#7C4D34';
       for (let py = 1; py < 32; py += 6) {
         ctx.fillRect(ox + 1, oy + py, 30, 4);
+        ctx.fillStyle = '#A16646';
+        ctx.fillRect(ox + 2, oy + py, 28, 1);
+        ctx.fillStyle = '#291810';
+        ctx.fillRect(ox + 3, oy + py + 2, 1, 1);
+        ctx.fillRect(ox + 28, oy + py + 2, 1, 1);
+        ctx.fillStyle = '#7C4D34';
       }
-      ctx.fillStyle = '#FF2E88';
+      ctx.fillStyle = '#C2855A';
       ctx.fillRect(ox, oy, 32, 1);
       ctx.fillRect(ox, oy + 31, 32, 1);
     }
 
-    // 38: RIVER_FOAM (transparent overlay)
+    // 38: RIVER_FOAM (Crisp white-cyan surf crests overlay)
     {
       const { ox, oy } = tileOrigin(38);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.35)';
+      ctx.fillStyle = 'rgba(125, 211, 252, 0.55)';
       ctx.fillRect(ox + 4, oy + 10, 14, 2);
       ctx.fillRect(ox + 14, oy + 20, 12, 2);
-      ctx.fillStyle = 'rgba(224, 255, 255, 0.45)';
-      ctx.fillRect(ox + 8, oy + 10, 5, 1);
-      ctx.fillRect(ox + 18, oy + 20, 4, 1);
+      ctx.fillStyle = 'rgba(240, 249, 255, 0.85)';
+      ctx.fillRect(ox + 7, oy + 10, 7, 1);
+      ctx.fillRect(ox + 17, oy + 20, 6, 1);
     }
 
     // 39: NITRO_PAD (Glowing Turbo Boost Strip on asphalt)
@@ -538,23 +570,28 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 6, oy + 20, 20, 4);
     }
 
-    // 41: DOCK_CONCRETE (Industrial harbor slab)
+    // 41: DOCK_CONCRETE (Weathered Maritime Harbor Slab w/ rust & tire marks)
     {
       const { ox, oy } = tileOrigin(41);
-      ctx.fillStyle = '#171E2C';
+      ctx.fillStyle = '#1C222D';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#0E131E';
+      ctx.fillStyle = '#12161E';
       ctx.fillRect(ox, oy + 31, 32, 1);
       ctx.fillRect(ox + 31, oy, 1, 32);
-      ctx.fillStyle = '#232D42';
-      ctx.fillRect(ox + 4, oy + 4, 8, 2);
-      ctx.fillRect(ox + 18, oy + 20, 6, 2);
+      ctx.fillStyle = '#293242';
+      ctx.fillRect(ox + 2, oy + 2, 27, 1);
+      ctx.fillRect(ox + 2, oy + 2, 1, 27);
+      ctx.fillStyle = '#3B2821'; // Subtle harbor rust stain
+      ctx.fillRect(ox + 6, oy + 18, 7, 4);
+      ctx.fillRect(ox + 20, oy + 6, 5, 3);
+      ctx.fillStyle = '#141922';
+      ctx.fillRect(ox + 16, oy + 22, 6, 3);
     }
 
     // 42: HELIPAD_TILE (Glowing H landing circle mark)
     {
       const { ox, oy } = tileOrigin(42);
-      ctx.fillStyle = '#121826';
+      ctx.fillStyle = '#141A26';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#FFD166';
       ctx.fillRect(ox + 4, oy + 4, 24, 2);
@@ -564,27 +601,353 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 12, oy + 15, 8, 3);
     }
 
-    // 43: CHROME_FLOOR (Industrial cyber factory floor)
+    // 43: CHROME_FLOOR (Industrial Brushed Steel Grating & Rivets)
     {
       const { ox, oy } = tileOrigin(43);
-      ctx.fillStyle = '#151A28';
+      ctx.fillStyle = '#171C28';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#232B42';
-      ctx.fillRect(ox + 2, oy + 2, 28, 28);
-      ctx.fillStyle = '#C000FF';
-      ctx.fillRect(ox + 4, oy + 4, 4, 2);
-      ctx.fillRect(ox + 24, oy + 26, 4, 2);
+      ctx.fillStyle = '#222A3B';
+      ctx.fillRect(ox + 1, oy + 1, 30, 30);
+      ctx.fillStyle = '#2F3B52';
+      ctx.fillRect(ox + 2, oy + 2, 28, 2);
+      ctx.fillStyle = '#111520';
+      ctx.fillRect(ox + 6, oy + 8, 20, 2);
+      ctx.fillRect(ox + 6, oy + 16, 20, 2);
+      ctx.fillRect(ox + 6, oy + 24, 20, 2);
+      ctx.fillStyle = '#F59E0B'; // Corner industrial rivets
+      ctx.fillRect(ox + 3, oy + 3, 2, 2);
+      ctx.fillRect(ox + 27, oy + 3, 2, 2);
+      ctx.fillRect(ox + 3, oy + 27, 2, 2);
+      ctx.fillRect(ox + 27, oy + 27, 2, 2);
     }
 
-    // 44: SAND_SHORE (Harbor seawall / sand edge)
+    // 44: SAND_SHORE (Warm sunlit golden sand w/ pixel dune highlights)
     {
       const { ox, oy } = tileOrigin(44);
-      ctx.fillStyle = '#142B3E';
+      ctx.fillStyle = '#D99B38';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#2A3E52';
-      ctx.fillRect(ox, oy, 32, 20);
+      ctx.fillStyle = '#F5BA4B';
+      ctx.fillRect(ox + 2, oy + 4, 14, 5);
+      ctx.fillRect(ox + 15, oy + 15, 14, 5);
+      ctx.fillRect(ox + 4, oy + 24, 14, 4);
+      ctx.fillStyle = '#B47B24';
+      ctx.fillRect(ox + 3, oy + 10, 11, 2);
+      ctx.fillRect(ox + 16, oy + 21, 12, 2);
+      ctx.fillStyle = '#FDE68A';
+      ctx.fillRect(ox + 8, oy + 5, 5, 2);
+      ctx.fillRect(ox + 21, oy + 16, 5, 2);
+      ctx.fillRect(ox + 11, oy + 26, 3, 1);
+    }
+
+    // 45: SPEEDWAY_CURB_N (F1 Red/White Racing Curb on north asphalt edge)
+    {
+      const { ox, oy } = tileOrigin(45);
+      drawAsphaltBase(ox, oy, true);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(ox, oy, 16, 6);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(ox + 16, oy, 16, 6);
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(ox, oy + 6, 32, 1);
+    }
+
+    // 46: SPEEDWAY_CURB_S (F1 Red/White Racing Curb on south asphalt edge)
+    {
+      const { ox, oy } = tileOrigin(46);
+      drawAsphaltBase(ox, oy, true);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(ox, oy + 26, 16, 6);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(ox + 16, oy + 26, 16, 6);
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(ox, oy + 25, 32, 1);
+    }
+
+    // 47: HARBOR_HAZARD_EDGE (Yellow/Black Dock Safety Stripe)
+    {
+      const { ox, oy } = tileOrigin(47);
+      ctx.fillStyle = '#1C222D';
+      ctx.fillRect(ox, oy, 32, 32);
+      for (let hx = 0; hx < 32; hx += 8) {
+        ctx.fillStyle = '#EAB308';
+        ctx.fillRect(ox + hx, oy + 24, 4, 6);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(ox + hx + 4, oy + 24, 4, 6);
+      }
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(ox, oy + 22, 32, 2);
+    }
+
+    // 48: HIGHLAND_ASPHALT (Mountain road w/ warm amber shoulder)
+    {
+      const { ox, oy } = tileOrigin(48);
+      drawAsphaltBase(ox, oy, true);
+      ctx.fillStyle = '#D97706';
+      ctx.fillRect(ox, oy + 1, 32, 2);
+      ctx.fillRect(ox, oy + 29, 32, 2);
+    }
+
+    // 49: PARK_COBBLE (Warm stone park cobblestone walkway)
+    {
+      const { ox, oy } = tileOrigin(49);
+      ctx.fillStyle = '#242B35';
+      ctx.fillRect(ox, oy, 32, 32);
+      const stones = [
+        [2, 2, 12, 8], [16, 2, 14, 8],
+        [1, 12, 8, 8], [11, 12, 12, 8], [25, 12, 6, 8],
+        [3, 22, 14, 8], [19, 22, 11, 8],
+      ];
+      for (const [sx, sy, sw, sh] of stones) {
+        ctx.fillStyle = '#333D4D';
+        ctx.fillRect(ox + sx, oy + sy, sw, sh);
+        ctx.fillStyle = '#475469';
+        ctx.fillRect(ox + sx, oy + sy, sw, 1);
+      }
+    }
+
+    // 50: PARK_FLOWERBED (Lush grass w/ sakura pink & cyan cyber blossoms)
+    {
+      const { ox, oy } = tileOrigin(50);
+      ctx.fillStyle = '#113329';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#1B4D3E';
+      ctx.fillRect(ox + 3, oy + 3, 26, 26);
+      ctx.fillStyle = '#FF6B9D';
+      ctx.fillRect(ox + 6, oy + 7, 3, 3);
+      ctx.fillRect(ox + 20, oy + 18, 3, 3);
+      ctx.fillStyle = '#FCD34D';
+      ctx.fillRect(ox + 15, oy + 8, 2, 2);
+      ctx.fillRect(ox + 9, oy + 21, 3, 2);
       ctx.fillStyle = '#38BDF8';
-      ctx.fillRect(ox, oy + 20, 32, 2);
+      ctx.fillRect(ox + 22, oy + 6, 2, 3);
+    }
+
+    // 51: CHROME_MOLTEN_GRATE (Glowing industrial foundry vent)
+    {
+      const { ox, oy } = tileOrigin(51);
+      ctx.fillStyle = '#1A1412';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(ox + 5, oy + 5, 22, 22);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(ox + 8, oy + 8, 16, 16);
+      ctx.fillStyle = '#1E2430';
+      for (let gx = 4; gx <= 24; gx += 6) {
+        ctx.fillRect(ox + gx, oy + 3, 3, 26);
+      }
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(ox + 2, oy + 2, 28, 28);
+    }
+
+    // 52: SIDEWALK_CHROME (Brushed metallic sidewalk for Chrome Town)
+    {
+      const { ox, oy } = tileOrigin(52);
+      ctx.fillStyle = '#202634';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#2B3345';
+      ctx.fillRect(ox + 1, oy + 1, 14, 14);
+      ctx.fillRect(ox + 17, oy + 17, 14, 14);
+      ctx.fillStyle = '#171C26';
+      ctx.fillRect(ox, oy + 15, 32, 1);
+      ctx.fillRect(ox + 15, oy, 1, 32);
+      ctx.fillStyle = '#F59E0B';
+      ctx.fillRect(ox + 2, oy + 2, 2, 2);
+      ctx.fillRect(ox + 28, oy + 28, 2, 2);
+    }
+
+    // 53: WATER_SHALLOW (Bright vivid turquoise coastal shallows w/ sunlit ripples)
+    {
+      const { ox, oy } = tileOrigin(53);
+      ctx.fillStyle = '#0891B2';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#06B6D4';
+      ctx.fillRect(ox + 2, oy + 3, 14, 5);
+      ctx.fillRect(ox + 16, oy + 14, 13, 5);
+      ctx.fillRect(ox + 4, oy + 24, 15, 4);
+      ctx.fillStyle = '#67E8F9';
+      ctx.fillRect(ox + 4, oy + 5, 9, 2);
+      ctx.fillRect(ox + 18, oy + 16, 8, 2);
+      ctx.fillStyle = '#ECFEFF';
+      ctx.fillRect(ox + 6, oy + 5, 4, 1);
+      ctx.fillRect(ox + 20, oy + 25, 5, 1);
+    }
+
+    // 54: WATERFALL_CASCADE (Vertical rushing white-cyan cascade foam over cliff water)
+    {
+      const { ox, oy } = tileOrigin(54);
+      ctx.fillStyle = '#0369A1';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(ox + 2, oy, 7, 32);
+      ctx.fillRect(ox + 12, oy, 8, 32);
+      ctx.fillRect(ox + 23, oy, 7, 32);
+      ctx.fillStyle = '#BAE6FD';
+      ctx.fillRect(ox + 4, oy + 2, 4, 14);
+      ctx.fillRect(ox + 14, oy + 8, 4, 16);
+      ctx.fillRect(ox + 25, oy + 3, 3, 13);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(ox + 1, oy + 25, 30, 6);
+      ctx.fillStyle = '#67E8F9';
+      ctx.fillRect(ox + 3, oy + 23, 26, 2);
+    }
+
+    // 55: FOREST_FLOOR (Rich layered emerald-jade woodland turf + ferns)
+    {
+      const { ox, oy } = tileOrigin(55);
+      ctx.fillStyle = '#114A31';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#186642';
+      ctx.fillRect(ox + 2, oy + 4, 10, 6);
+      ctx.fillRect(ox + 16, oy + 12, 11, 6);
+      ctx.fillRect(ox + 5, oy + 21, 11, 6);
+      ctx.fillStyle = '#228B57';
+      ctx.fillRect(ox + 4, oy + 5, 5, 3);
+      ctx.fillRect(ox + 19, oy + 13, 5, 3);
+      ctx.fillStyle = '#4ADE80';
+      ctx.fillRect(ox + 24, oy + 4, 3, 2);
+      ctx.fillRect(ox + 11, oy + 17, 3, 2);
+      ctx.fillStyle = '#092E1E';
+      ctx.fillRect(ox + 12, oy + 25, 5, 2);
+    }
+
+    // 56: SNOW_PLAIN (Crisp alpine snowfield w/ bright icy drift highlights)
+    {
+      const { ox, oy } = tileOrigin(56);
+      ctx.fillStyle = '#E2EDF8';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#BAE6FD';
+      ctx.fillRect(ox + 2, oy + 9, 13, 4);
+      ctx.fillRect(ox + 16, oy + 21, 14, 4);
+      ctx.fillRect(ox + 5, oy + 27, 10, 2);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(ox + 3, oy + 3, 12, 4);
+      ctx.fillRect(ox + 17, oy + 14, 12, 4);
+      ctx.fillStyle = '#7DD3FC';
+      ctx.fillRect(ox + 10, oy + 15, 2, 2);
+      ctx.fillRect(ox + 25, oy + 6, 2, 2);
+    }
+
+    // 57: DESERT_CANYON (Vivid ochre terracotta sandstone & canyon dunes)
+    {
+      const { ox, oy } = tileOrigin(57);
+      ctx.fillStyle = '#B45309';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#D97706';
+      ctx.fillRect(ox + 2, oy + 3, 13, 8);
+      ctx.fillRect(ox + 17, oy + 15, 13, 8);
+      ctx.fillRect(ox + 4, oy + 21, 11, 7);
+      ctx.fillStyle = '#7C2D12';
+      ctx.fillRect(ox + 14, oy + 2, 1, 12);
+      ctx.fillRect(ox + 2, oy + 14, 16, 1);
+      ctx.fillRect(ox + 15, oy + 24, 15, 1);
+      ctx.fillStyle = '#FCD34D';
+      ctx.fillRect(ox + 5, oy + 5, 5, 2);
+      ctx.fillRect(ox + 21, oy + 17, 5, 2);
+    }
+
+    // 58: VOLCANIC_ROCK (Charred obsidian basalt w/ glowing magma fissures)
+    {
+      const { ox, oy } = tileOrigin(58);
+      ctx.fillStyle = '#1D1824';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#2F263B';
+      ctx.fillRect(ox + 3, oy + 4, 11, 8);
+      ctx.fillRect(ox + 17, oy + 15, 12, 9);
+      ctx.fillRect(ox + 6, oy + 21, 9, 7);
+      ctx.fillStyle = '#0F0B14';
+      ctx.fillRect(ox + 14, oy + 3, 2, 15);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(ox + 14, oy + 9, 2, 6);
+      ctx.fillRect(ox + 8, oy + 25, 5, 2);
+      ctx.fillStyle = '#FDE047';
+      ctx.fillRect(ox + 14, oy + 11, 1, 3);
+    }
+
+    // 59: LAVA_MAGMA (Incandescent glowing molten lava river)
+    {
+      const { ox, oy } = tileOrigin(59);
+      ctx.fillStyle = '#DC2626';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(ox + 2, oy + 2, 28, 28);
+      ctx.fillStyle = '#FB923C';
+      ctx.fillRect(ox + 4, oy + 5, 13, 9);
+      ctx.fillRect(ox + 14, oy + 17, 14, 9);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(ox + 7, oy + 7, 8, 4);
+      ctx.fillRect(ox + 16, oy + 19, 9, 4);
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(ox + 9, oy + 8, 4, 2);
+      ctx.fillRect(ox + 19, oy + 20, 4, 2);
+    }
+
+    // 60: SAND_DUNE_EDGE (Sunlit beach + crisp white surf foam edge)
+    {
+      const { ox, oy } = tileOrigin(60);
+      ctx.fillStyle = '#D99B38';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#F5BA4B';
+      ctx.fillRect(ox, oy, 32, 18);
+      ctx.fillStyle = '#06B6D4';
+      ctx.fillRect(ox, oy + 22, 32, 10);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(ox + 1, oy + 20, 30, 3);
+      ctx.fillStyle = '#67E8F9';
+      ctx.fillRect(ox + 3, oy + 23, 26, 2);
+    }
+
+    // 61: DIRT_TRAIL (Sunlit packed earth path through woodland & canyons)
+    {
+      const { ox, oy } = tileOrigin(61);
+      ctx.fillStyle = '#785032';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#92643F';
+      ctx.fillRect(ox + 3, oy + 4, 9, 5);
+      ctx.fillRect(ox + 17, oy + 13, 10, 6);
+      ctx.fillRect(ox + 7, oy + 22, 9, 5);
+      ctx.fillStyle = '#573822';
+      ctx.fillRect(ox + 13, oy + 8, 4, 3);
+      ctx.fillRect(ox + 23, oy + 24, 4, 2);
+    }
+
+    // 62: BOARDWALK_COAST (Coastal timber boardwalk w/ neon cyan rails)
+    {
+      const { ox, oy } = tileOrigin(62);
+      ctx.fillStyle = '#523424';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#85543A';
+      for (let bx = 1; bx < 32; bx += 6) {
+        ctx.fillRect(ox + bx, oy + 1, 4, 30);
+      }
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(ox, oy + 1, 32, 2);
+      ctx.fillRect(ox, oy + 29, 32, 2);
+    }
+
+    // 63: STADIUM_TURF (Glowing Neon Stadium plaza paving)
+    {
+      const { ox, oy } = tileOrigin(63);
+      ctx.fillStyle = '#182442';
+      ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#223259';
+      ctx.fillRect(ox + 2, oy + 2, 28, 28);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(ox + 2, oy + 15, 28, 2);
+      ctx.fillStyle = '#FF2E88';
+      ctx.fillRect(ox + 15, oy + 2, 2, 28);
+    }
+
+    // 64: PLAZA_ROUNDABOUT (Crisp circular neon intersection ring accent)
+    {
+      const { ox, oy } = tileOrigin(64);
+      ctx.strokeStyle = 'rgba(0, 245, 255, 0.72)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ox + 16, oy + 16, 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 209, 102, 0.75)';
+      ctx.fillRect(ox + 14, oy + 14, 4, 4);
     }
 
     tex.refresh();
@@ -1240,6 +1603,307 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(7, 7, 4, 4);
       fan.refresh();
     }
+
+    // Helper to paint stepped pixel canopy clusters (with dark pixel outline & trunk)
+    const drawRoundedCanopy = (
+      ctx: CanvasRenderingContext2D,
+      cx: number,
+      cy: number,
+      trunkColor: string,
+      outlineColor: string,
+      darkColor: string,
+      midColor: string,
+      lightColor: string,
+      accentColor?: string
+    ) => {
+      // Ground shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.fillRect(cx - 8, cy + 5, 16, 8);
+      // Trunk
+      ctx.fillStyle = trunkColor;
+      ctx.fillRect(cx - 2, cy + 2, 4, 10);
+      // Dark stepped pixel foliage silhouette
+      ctx.fillStyle = outlineColor;
+      ctx.fillRect(cx - 8, cy - 11, 16, 16);
+      ctx.fillRect(cx - 11, cy - 8, 22, 10);
+      ctx.fillRect(cx - 5, cy - 13, 10, 20);
+      // Base canopy shadow tone
+      ctx.fillStyle = darkColor;
+      ctx.fillRect(cx - 7, cy - 10, 14, 14);
+      ctx.fillRect(cx - 10, cy - 7, 20, 8);
+      // Midtone leaf tufts
+      ctx.fillStyle = midColor;
+      ctx.fillRect(cx - 8, cy - 8, 13, 9);
+      ctx.fillRect(cx - 4, cy - 11, 9, 11);
+      // Sunlit highlights
+      ctx.fillStyle = lightColor;
+      ctx.fillRect(cx - 6, cy - 9, 6, 5);
+      ctx.fillRect(cx + 1, cy - 5, 4, 4);
+      if (accentColor) {
+        ctx.fillStyle = accentColor;
+        ctx.fillRect(cx - 5, cy - 8, 3, 2);
+        ctx.fillRect(cx + 2, cy - 3, 2, 2);
+      }
+    };
+
+    // Alpine Pine Tree (32x32 stepped conifer layers)
+    const pine = this.textures.createCanvas('prop_tree_pine', 32, 32);
+    if (pine) {
+      const ctx = pine.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(7, 17, 18, 10);
+      ctx.fillStyle = '#3B2314';
+      ctx.fillRect(14, 21, 4, 7);
+      // Tiered conifer silhouette
+      ctx.fillStyle = '#092418';
+      ctx.fillRect(6, 15, 20, 9);
+      ctx.fillRect(8, 9, 16, 8);
+      ctx.fillRect(11, 4, 10, 7);
+      ctx.fillRect(14, 2, 4, 3);
+      ctx.fillStyle = '#155E3E';
+      ctx.fillRect(8, 16, 16, 6);
+      ctx.fillRect(10, 10, 12, 6);
+      ctx.fillRect(12, 5, 8, 5);
+      ctx.fillStyle = '#228B57';
+      ctx.fillRect(10, 16, 10, 4);
+      ctx.fillRect(11, 10, 8, 4);
+      ctx.fillRect(13, 6, 5, 3);
+      ctx.fillStyle = '#4ADE80';
+      ctx.fillRect(14, 4, 2, 2);
+      ctx.fillRect(12, 11, 3, 2);
+      pine.refresh();
+    }
+
+    // Park Cyber Sakura / Blossom Tree (32x32)
+    const sakura = this.textures.createCanvas('prop_tree_sakura', 32, 32);
+    if (sakura) {
+      const ctx = sakura.getContext();
+      ctx.imageSmoothingEnabled = false;
+      drawRoundedCanopy(ctx, 16, 17, '#4A1D36', '#500724', '#9D174D', '#EC4899', '#F472B6', '#FBCFE8');
+      sakura.refresh();
+    }
+
+    // Lush Emerald Broadleaf Forest Tree (32x32)
+    const emerald = this.textures.createCanvas('prop_tree_emerald', 32, 32);
+    if (emerald) {
+      const ctx = emerald.getContext();
+      ctx.imageSmoothingEnabled = false;
+      drawRoundedCanopy(ctx, 16, 17, '#422817', '#052E16', '#14532D', '#16A34A', '#4ADE80', '#BBF7D0');
+      emerald.refresh();
+    }
+
+    // Autumn / Desert Gold-Amber Tree (32x32)
+    const autumn = this.textures.createCanvas('prop_tree_autumn', 32, 32);
+    if (autumn) {
+      const ctx = autumn.getContext();
+      ctx.imageSmoothingEnabled = false;
+      drawRoundedCanopy(ctx, 16, 17, '#451A03', '#431407', '#9A3412', '#EA580C', '#FACC15', '#FEF08A');
+      autumn.refresh();
+    }
+
+    // Snow-Dusted Alpine Pine (32x32)
+    const snowTree = this.textures.createCanvas('prop_tree_snow', 32, 32);
+    if (snowTree) {
+      const ctx = snowTree.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.fillRect(7, 18, 18, 10);
+      ctx.fillStyle = '#3B2314';
+      ctx.fillRect(14, 21, 4, 7);
+      ctx.fillStyle = '#0F2E28';
+      ctx.fillRect(6, 15, 20, 9);
+      ctx.fillRect(8, 9, 16, 8);
+      ctx.fillRect(11, 4, 10, 7);
+      ctx.fillStyle = '#1D5E4C';
+      ctx.fillRect(8, 16, 16, 6);
+      ctx.fillRect(10, 10, 12, 6);
+      // Heavy white snow caps on boughs
+      ctx.fillStyle = '#BAE6FD';
+      ctx.fillRect(7, 15, 18, 3);
+      ctx.fillRect(9, 9, 14, 3);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(9, 15, 12, 2);
+      ctx.fillRect(11, 9, 9, 2);
+      ctx.fillRect(12, 4, 8, 4);
+      snowTree.refresh();
+    }
+
+    // Tropical Coastal Palm Tree (34x34 curved pixel fronds + coconuts)
+    const palm = this.textures.createCanvas('prop_tree_palm', 34, 34);
+    if (palm) {
+      const ctx = palm.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(10, 20, 14, 8);
+      // Curved bark trunk
+      ctx.fillStyle = '#5C3820';
+      ctx.fillRect(15, 17, 4, 11);
+      ctx.fillStyle = '#855331';
+      ctx.fillRect(16, 15, 3, 10);
+      // Dark frond outline
+      ctx.fillStyle = '#052E16';
+      ctx.fillRect(4, 11, 26, 5);
+      ctx.fillRect(14, 3, 6, 20);
+      ctx.fillRect(7, 6, 20, 14);
+      // Vivid palm fronds radiating out
+      ctx.fillStyle = '#15803D';
+      ctx.fillRect(5, 12, 24, 3);
+      ctx.fillRect(15, 4, 4, 18);
+      ctx.fillRect(8, 7, 18, 12);
+      ctx.fillStyle = '#22C55E';
+      ctx.fillRect(7, 12, 20, 2);
+      ctx.fillRect(16, 5, 2, 15);
+      ctx.fillRect(10, 8, 14, 4);
+      ctx.fillStyle = '#86EFAC';
+      ctx.fillRect(14, 10, 6, 4);
+      // Coconuts cluster
+      ctx.fillStyle = '#451A03';
+      ctx.fillRect(15, 14, 2, 2);
+      ctx.fillRect(18, 14, 2, 2);
+      palm.refresh();
+    }
+
+    // Cyber ATM Terminal (20x20)
+    const atm = this.textures.createCanvas('prop_atm', 20, 20);
+    if (atm) {
+      const ctx = atm.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#090D16';
+      ctx.fillRect(2, 2, 16, 16);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(3, 3, 14, 14);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(5, 5, 10, 6);
+      ctx.fillStyle = '#E0FFFF';
+      ctx.fillRect(6, 6, 5, 2);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(6, 13, 8, 2);
+      atm.refresh();
+    }
+
+    // Explosive Red Fuel Barrel (18x18)
+    const barrel = this.textures.createCanvas('prop_barrel', 18, 18);
+    if (barrel) {
+      const ctx = barrel.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#090D16';
+      ctx.fillRect(2, 2, 14, 14);
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(3, 3, 12, 12);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(4, 4, 10, 10);
+      ctx.fillStyle = '#FACC15'; // Hazard band
+      ctx.fillRect(4, 7, 10, 3);
+      ctx.fillStyle = '#FCA5A5'; // Top rim highlight
+      ctx.fillRect(6, 5, 5, 2);
+      ctx.fillStyle = '#0F172A'; // Bung cap
+      ctx.fillRect(11, 5, 2, 2);
+      barrel.refresh();
+    }
+
+    // Destructible Supply Crate (22x22)
+    const crate = this.textures.createCanvas('prop_crate', 22, 22);
+    if (crate) {
+      const ctx = crate.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#1C140D';
+      ctx.fillRect(2, 2, 18, 18);
+      ctx.fillStyle = '#784E2C';
+      ctx.fillRect(3, 3, 16, 16);
+      ctx.fillStyle = '#A16C3F';
+      ctx.fillRect(5, 5, 12, 12);
+      ctx.fillStyle = '#52341C';
+      ctx.fillRect(5, 10, 12, 2);
+      ctx.fillRect(10, 5, 2, 12);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(4, 4, 2, 2);
+      ctx.fillRect(16, 4, 2, 2);
+      ctx.fillRect(4, 16, 2, 2);
+      ctx.fillRect(16, 16, 2, 2);
+      crate.refresh();
+    }
+
+    // Red Street Fire Hydrant (14x14)
+    const hydrant = this.textures.createCanvas('prop_hydrant', 14, 14);
+    if (hydrant) {
+      const ctx = hydrant.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#090D16';
+      ctx.fillRect(3, 3, 8, 8);
+      ctx.fillStyle = '#DC2626';
+      ctx.fillRect(4, 4, 6, 6);
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(2, 6, 10, 2);
+      ctx.fillStyle = '#FCA5A5';
+      ctx.fillRect(6, 5, 2, 2);
+      hydrant.refresh();
+    }
+
+    // Highland Observatory Radar Dish (36x36)
+    const radar = this.textures.createCanvas('prop_radar', 36, 36);
+    if (radar) {
+      const ctx = radar.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(6, 6, 24, 24);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(8, 8, 20, 20);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(11, 10, 14, 16);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(17, 6, 2, 14);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(16, 16, 4, 4);
+      radar.refresh();
+    }
+
+    // Harbor Moored Cargo Barge (128x48)
+    const barge = this.textures.createCanvas('prop_barge', 128, 48);
+    if (barge) {
+      const ctx = barge.getContext();
+      ctx.imageSmoothingEnabled = false;
+      // Hull
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(4, 6, 120, 36);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(8, 8, 112, 32);
+      ctx.fillStyle = '#B91C1C'; // Red waterline trim
+      ctx.fillRect(6, 6, 116, 3);
+      ctx.fillRect(6, 39, 116, 3);
+      // Deck containers
+      ctx.fillStyle = '#0284C7';
+      ctx.fillRect(16, 12, 36, 11);
+      ctx.fillStyle = '#D97706';
+      ctx.fillRect(56, 12, 36, 11);
+      ctx.fillStyle = '#DC2626';
+      ctx.fillRect(16, 25, 36, 11);
+      ctx.fillStyle = '#0D9488';
+      ctx.fillRect(56, 25, 36, 11);
+      // Bridge cabin
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(98, 11, 18, 26);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(102, 14, 4, 20);
+      barge.refresh();
+    }
+
+    // Harbor Moored Speedboat (44x20)
+    const boat = this.textures.createCanvas('prop_speedboat', 44, 20);
+    if (boat) {
+      const ctx = boat.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(2, 3, 38, 14);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(4, 4, 34, 12);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(22, 6, 8, 8);
+      ctx.fillStyle = '#FF2E88';
+      ctx.fillRect(6, 5, 14, 2);
+      ctx.fillRect(6, 13, 14, 2);
+      boat.refresh();
+    }
   }
 
   private createFxTextures(): void {
@@ -1299,11 +1963,12 @@ export class BootScene extends Phaser.Scene {
       beam.refresh();
     }
 
-    // Weapon projectiles (14x6 facing RIGHT +X)
+    // Weapon projectiles (facing RIGHT +X)
     const projColors: Array<{ key: string; outer: string; core: string }> = [
       { key: 'proj_cyan', outer: '#00F5FF', core: '#E0FFFF' },
       { key: 'proj_pink', outer: '#FF2E88', core: '#FFE4F1' },
       { key: 'proj_gold', outer: '#FFD166', core: '#FFFBEB' },
+      { key: 'proj_violet', outer: '#C000FF', core: '#F5D0FE' },
     ];
     for (const p of projColors) {
       const pTex = this.textures.createCanvas(p.key, 14, 6);
@@ -1317,6 +1982,52 @@ export class BootScene extends Phaser.Scene {
         ctx.fillRect(3, 2, 10, 2);
         pTex.refresh();
       }
+    }
+
+    // Hyper-velocity electric railgun slug (26x6)
+    const railTex = this.textures.createCanvas('proj_rail', 26, 6);
+    if (railTex) {
+      const ctx = railTex.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0EA5E9';
+      ctx.fillRect(0, 1, 24, 4);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(4, 0, 20, 6);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(6, 2, 20, 2);
+      railTex.refresh();
+    }
+
+    // Incendiary plasma flame puff (12x12)
+    const flameTex = this.textures.createCanvas('proj_flame', 12, 12);
+    if (flameTex) {
+      const ctx = flameTex.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#EA580C';
+      ctx.fillRect(2, 1, 8, 10);
+      ctx.fillRect(1, 2, 10, 8);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(3, 2, 6, 8);
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(4, 4, 4, 4);
+      flameTex.refresh();
+    }
+
+    // Explosive cyber rocket (16x8)
+    const rocketTex = this.textures.createCanvas('proj_rocket', 16, 8);
+    if (rocketTex) {
+      const ctx = rocketTex.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(0, 2, 4, 4);
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(1, 3, 2, 2);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(4, 2, 8, 4);
+      ctx.fillStyle = '#EF4444';
+      ctx.fillRect(12, 1, 3, 6);
+      ctx.fillRect(14, 2, 2, 4);
+      rocketTex.refresh();
     }
 
     // Muzzle flash (18x16 facing RIGHT +X)
@@ -1358,6 +2069,22 @@ export class BootScene extends Phaser.Scene {
       ctx.arc(8, 8, 6, 0, Math.PI * 2);
       ctx.stroke();
       hitRing.refresh();
+    }
+
+    // Scorch crater decal (36x36)
+    const scorch = this.textures.createCanvas('fx_scorch', 36, 36);
+    if (scorch) {
+      const ctx = scorch.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(8, 10, 16, 0.72)';
+      ctx.fillRect(6, 6, 24, 24);
+      ctx.fillRect(3, 11, 30, 14);
+      ctx.fillRect(11, 3, 14, 30);
+      ctx.fillStyle = 'rgba(24, 28, 38, 0.85)';
+      ctx.fillRect(11, 11, 14, 14);
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.35)';
+      ctx.fillRect(15, 15, 6, 6);
+      scorch.refresh();
     }
   }
 }

@@ -25,6 +25,7 @@ export class Vehicle {
 
   private health: number;
   private upgrades: VehicleUpgradeLevels = { engine: 0, handling: 0, armor: 0 };
+  private paintColor: number | null = null;
   private forwardSpeed = 0;
   private occupied = false;
   private lastImpactAt = 0;
@@ -157,7 +158,7 @@ export class Vehicle {
     }
 
     if (this.occupied && controls) {
-      const { throttle, brake, steer, handbrake, nitro } = controls;
+      const { driveX, driveY, handbrake, nitro } = controls;
 
       const headingX = Math.cos(this.sprite.rotation);
       const headingY = Math.sin(this.sprite.rotation);
@@ -172,13 +173,15 @@ export class Vehicle {
         this.forwardSpeed = currentForward;
       }
 
-      const wantNitro = Boolean(nitro && throttle > 0 && this.nitro > 4);
+      const inputMag = Math.min(1, Math.hypot(driveX, driveY));
+      const hasDriveInput = inputMag > 0.08 && !handbrake;
+      const wantNitro = Boolean(nitro && hasDriveInput && this.nitro > 4);
       this.isBoosting = wantNitro || this.turboPadTimer > 0;
 
       if (wantNitro) {
         this.nitro = Math.max(0, this.nitro - 26 * dtSeconds);
       } else {
-        this.nitro = Math.min(100, this.nitro + 12 * dtSeconds);
+        this.nitro = Math.min(100, this.nitro + 14 * dtSeconds);
       }
 
       const boostSpeedMult = this.turboPadTimer > 0 ? 1.42 : wantNitro ? 1.34 : 1;
@@ -192,26 +195,39 @@ export class Vehicle {
       body.setMaxVelocity(maxSpeed * 1.15, maxSpeed * 1.15);
 
       if (handbrake) {
-        const decel = this.spec.braking * 1.45 * dtSeconds;
+        const decel = this.spec.braking * 1.65 * dtSeconds;
         if (Math.abs(this.forwardSpeed) <= decel) {
           this.forwardSpeed = 0;
         } else {
           this.forwardSpeed -= Math.sign(this.forwardSpeed) * decel;
         }
-      } else if (throttle > 0) {
-        if (this.forwardSpeed < 0) {
-          this.forwardSpeed += this.spec.braking * throttle * dtSeconds;
+      } else if (hasDriveInput) {
+        const targetAngle = Math.atan2(driveY, driveX);
+        const angleDiff = Phaser.Math.Angle.Wrap(targetAngle - this.sprite.rotation);
+
+        // Responsive arcade-style turning: pivots quickly from low speed and sweeps smoothly at high speed
+        const lowSpeedAgility = Math.abs(this.forwardSpeed) < 90 ? 1.45 : 1.0;
+        const maxTurnStep = turnSpeed * 2.65 * lowSpeedAgility * dtSeconds;
+        if (Math.abs(angleDiff) <= maxTurnStep) {
+          this.sprite.rotation = targetAngle;
         } else {
-          this.forwardSpeed += accel * throttle * dtSeconds;
+          this.sprite.rotation += Math.sign(angleDiff) * maxTurnStep;
         }
-      } else if (brake > 0) {
-        if (this.forwardSpeed > 15) {
-          this.forwardSpeed -= this.spec.braking * brake * dtSeconds;
+
+        const remainingDiff = Math.abs(Phaser.Math.Angle.Wrap(targetAngle - this.sprite.rotation));
+        const alignFactor = Math.max(0.32, Math.cos(remainingDiff * 0.5));
+        const targetSpeed = maxSpeed * inputMag * alignFactor;
+
+        if (this.forwardSpeed < targetSpeed) {
+          this.forwardSpeed = Math.min(targetSpeed, this.forwardSpeed + accel * dtSeconds);
         } else {
-          this.forwardSpeed -= accel * 0.72 * brake * dtSeconds;
+          this.forwardSpeed = Math.max(
+            targetSpeed,
+            this.forwardSpeed - this.spec.braking * 0.85 * dtSeconds
+          );
         }
       } else {
-        const dragAmount = this.spec.drag * 92 * dtSeconds;
+        const dragAmount = this.spec.drag * 125 * dtSeconds;
         if (Math.abs(this.forwardSpeed) <= dragAmount) {
           this.forwardSpeed = 0;
         } else {
@@ -219,26 +235,14 @@ export class Vehicle {
         }
       }
 
-      this.forwardSpeed = Phaser.Math.Clamp(
-        this.forwardSpeed,
-        -this.spec.maxReverseSpeed,
-        maxSpeed
-      );
-
-      const speedAbs = Math.abs(this.forwardSpeed);
-      if (speedAbs > 12 && Math.abs(steer) > 0.05) {
-        const steerAuthority = Math.min(1, speedAbs / 110);
-        const reverseSign = this.forwardSpeed >= 0 ? 1 : -1;
-        const turnBoost = handbrake ? 1.3 : 1;
-        this.sprite.rotation += steer * turnSpeed * steerAuthority * reverseSign * turnBoost * dtSeconds;
-      }
+      this.forwardSpeed = Phaser.Math.Clamp(this.forwardSpeed, 0, maxSpeed);
 
       // Apply forward speed directly along heading while damping lateral slip naturally
       const nextHeadingX = Math.cos(this.sprite.rotation);
       const nextHeadingY = Math.sin(this.sprite.rotation);
       const nextRightX = -nextHeadingY;
       const nextRightY = nextHeadingX;
-      const slipDamp = Math.max(0, 1 - lateralGrip * dtSeconds);
+      const slipDamp = Math.max(0, 1 - lateralGrip * 1.35 * dtSeconds);
       const nextLateral = currentLateral * slipDamp;
 
       body.setVelocity(
@@ -332,7 +336,7 @@ export class Vehicle {
       this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 8);
       this.sprite.setTint(PALETTE.GOLD);
       this.scene.time.delayedCall(80, () => {
-        if (this.sprite.active) this.sprite.clearTint();
+        if (this.sprite.active) this.applyBaseTint();
       });
       return Math.min(1, impactSpeed / this.spec.maxSpeed);
     }
@@ -345,8 +349,25 @@ export class Vehicle {
     this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 6);
     this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
     this.scene.time.delayedCall(55, () => {
-      if (this.sprite.active) this.sprite.clearTint();
+      if (this.sprite.active) this.applyBaseTint();
     });
+  }
+
+  public setPaintColor(colorNum: number | null): void {
+    this.paintColor = colorNum;
+    this.applyBaseTint();
+  }
+
+  public getPaintColor(): number | null {
+    return this.paintColor;
+  }
+
+  private applyBaseTint(): void {
+    if (this.paintColor !== null) {
+      this.sprite.setTint(this.paintColor).setTintMode(Phaser.TintModes.MULTIPLY);
+    } else {
+      this.sprite.clearTint();
+    }
   }
 
   public findSafeExitPosition(
@@ -450,6 +471,7 @@ export class Vehicle {
       maxHealth: this.getEffectiveMaxHealth(),
       upgrades: this.getUpgrades(),
       accentColor: this.spec.accentHex,
+      paintColor: this.paintColor,
     };
   }
 
@@ -458,13 +480,16 @@ export class Vehicle {
     y: number,
     angleDeg: number,
     health: number,
-    upgrades: VehicleUpgradeLevels
+    upgrades: VehicleUpgradeLevels,
+    paintColor: number | null = null
   ): void {
     this.upgrades = {
       engine: Phaser.Math.Clamp(upgrades?.engine ?? 0, 0, VEHICLE_UPGRADE_CONFIG.engine.maxLevel),
       handling: Phaser.Math.Clamp(upgrades?.handling ?? 0, 0, VEHICLE_UPGRADE_CONFIG.handling.maxLevel),
       armor: Phaser.Math.Clamp(upgrades?.armor ?? 0, 0, VEHICLE_UPGRADE_CONFIG.armor.maxLevel),
     };
+    this.paintColor = paintColor ?? null;
+    this.applyBaseTint();
     const maxHp = this.getEffectiveMaxHealth();
     this.health = Phaser.Math.Clamp(Math.round(health), 10, maxHp);
     this.forwardSpeed = 0;

@@ -1,4 +1,4 @@
-import { WeaponId } from '../config/BalanceConfig';
+import { RADIO_STATIONS, WeaponId } from '../config/BalanceConfig';
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
@@ -13,6 +13,11 @@ export class AudioManager {
   private sirenOsc: OscillatorNode | null = null;
   private sirenGain: GainNode | null = null;
   private sirenPhase = 0;
+
+  private radioStationIndex = 1;
+  private radioActive = false;
+  private radioStep = 0;
+  private radioTimer: number | null = null;
 
   public unlock(): void {
     if (!this.ctx && typeof window !== 'undefined') {
@@ -33,11 +38,100 @@ export class AudioManager {
     if (muted) {
       this.stopEngineSound();
       this.stopSirenSound();
+      this.stopRadioLoop();
+    } else if (this.radioActive && this.radioStationIndex > 0) {
+      this.startRadioLoop();
     }
   }
 
   public isMuted(): boolean {
     return this.muted;
+  }
+
+  public getRadioStationIndex(): number {
+    return this.radioStationIndex;
+  }
+
+  public setRadioPlaying(active: boolean): void {
+    this.radioActive = active;
+    if (!active || this.muted || this.radioStationIndex === 0) {
+      this.stopRadioLoop();
+    } else {
+      this.startRadioLoop();
+    }
+  }
+
+  public cycleRadioStation(): number {
+    this.radioStationIndex = (this.radioStationIndex + 1) % RADIO_STATIONS.length;
+    this.radioStep = 0;
+    this.stopRadioLoop();
+    if (this.radioActive && !this.muted && this.radioStationIndex > 0) {
+      this.startRadioLoop();
+    }
+    return this.radioStationIndex;
+  }
+
+  private startRadioLoop(): void {
+    if (typeof window === 'undefined' || this.radioTimer !== null) return;
+    const station = RADIO_STATIONS[this.radioStationIndex];
+    if (!station || station.bpm <= 0) return;
+    const stepMs = Math.round((60 / station.bpm / 2) * 1000);
+    this.radioTimer = window.setInterval(() => {
+      this.playRadioStep();
+    }, stepMs);
+  }
+
+  private stopRadioLoop(): void {
+    if (this.radioTimer !== null && typeof window !== 'undefined') {
+      window.clearInterval(this.radioTimer);
+      this.radioTimer = null;
+    }
+  }
+
+  private playRadioStep(): void {
+    if (!this.radioActive || this.muted || !this.ctx || this.ctx.state !== 'running') return;
+    const step = this.radioStep++ % 16;
+    const t = this.ctx.currentTime;
+
+    const bassLines: Record<number, number[]> = {
+      1: [110, 110, 130.81, 110, 98, 98, 130.81, 146.83, 110, 110, 164.81, 146.83, 98, 110, 130.81, 146.83],
+      2: [82.41, 0, 82.41, 98, 73.42, 0, 110, 98, 82.41, 0, 82.41, 123.47, 73.42, 98, 110, 82.41],
+      3: [65.41, 65.41, 98, 65.41, 73.42, 73.42, 110, 98, 65.41, 65.41, 130.81, 98, 82.41, 73.42, 98, 110],
+    };
+    const leadLines: Record<number, number[]> = {
+      1: [440, 0, 523.25, 0, 659.25, 0, 587.33, 523.25, 440, 0, 392, 0, 523.25, 587.33, 659.25, 0],
+      2: [329.63, 0, 0, 392, 0, 293.66, 0, 329.63, 440, 0, 392, 0, 329.63, 0, 293.66, 0],
+      3: [261.63, 392, 0, 329.63, 293.66, 0, 440, 392, 261.63, 392, 523.25, 0, 329.63, 293.66, 261.63, 0],
+    };
+
+    const bassFreq = bassLines[this.radioStationIndex]?.[step] ?? 0;
+    const leadFreq = leadLines[this.radioStationIndex]?.[step] ?? 0;
+
+    if (bassFreq > 0) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = this.radioStationIndex === 3 ? 'sawtooth' : 'triangle';
+      osc.frequency.setValueAtTime(bassFreq, t);
+      gain.gain.setValueAtTime(0.022, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.15);
+    }
+
+    if (leadFreq > 0) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = this.radioStationIndex === 1 ? 'sine' : 'square';
+      osc.frequency.setValueAtTime(leadFreq, t);
+      gain.gain.setValueAtTime(0.014, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    }
   }
 
   public playFootstep(nowMs: number): void {
@@ -399,6 +493,47 @@ export class AudioManager {
         gain.connect(this.ctx.destination);
         src.start(t);
         src.stop(t + 0.22);
+      } else if (weaponId === 'launcher') {
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(1400, t);
+        filter.frequency.exponentialRampToValueAtTime(180, t + 0.28);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        src.start(t);
+        src.stop(t + 0.31);
+      } else if (weaponId === 'flamethrower') {
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(750 + Math.random() * 260, t);
+        gain.gain.setValueAtTime(0.08, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        src.start(t);
+        src.stop(t + 0.095);
+      } else if (weaponId === 'railgun') {
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(1600, t);
+        gain.gain.setValueAtTime(0.15, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        src.start(t);
+        src.stop(t + 0.23);
+      } else if (weaponId === 'rifle') {
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(2200 + Math.random() * 250, t);
+        gain.gain.setValueAtTime(0.13, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        src.start(t);
+        src.stop(t + 0.095);
       } else if (weaponId === 'smg') {
         filter.type = 'bandpass';
         filter.frequency.setValueAtTime(2600 + Math.random() * 400, t);
@@ -422,10 +557,15 @@ export class AudioManager {
       }
     }
 
-    // 2. Low-end punch body thump
+    // 2. Low-end punch body thump / sci-fi sweep
     const osc = this.ctx.createOscillator();
     const oscGain = this.ctx.createGain();
-    osc.type = weaponId === 'shotgun' ? 'sawtooth' : 'triangle';
+    osc.type =
+      weaponId === 'shotgun' || weaponId === 'launcher'
+        ? 'sawtooth'
+        : weaponId === 'railgun'
+          ? 'square'
+          : 'triangle';
 
     if (weaponId === 'shotgun') {
       osc.frequency.setValueAtTime(195, t);
@@ -436,6 +576,42 @@ export class AudioManager {
       oscGain.connect(this.ctx.destination);
       osc.start(t);
       osc.stop(t + 0.19);
+    } else if (weaponId === 'launcher') {
+      osc.frequency.setValueAtTime(155, t);
+      osc.frequency.exponentialRampToValueAtTime(34, t + 0.25);
+      oscGain.gain.setValueAtTime(0.17, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+      osc.connect(oscGain);
+      oscGain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.27);
+    } else if (weaponId === 'railgun') {
+      osc.frequency.setValueAtTime(1180, t);
+      osc.frequency.exponentialRampToValueAtTime(95, t + 0.24);
+      oscGain.gain.setValueAtTime(0.13, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+      osc.connect(oscGain);
+      oscGain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.26);
+    } else if (weaponId === 'flamethrower') {
+      osc.frequency.setValueAtTime(140, t);
+      osc.frequency.exponentialRampToValueAtTime(70, t + 0.06);
+      oscGain.gain.setValueAtTime(0.035, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.065);
+      osc.connect(oscGain);
+      oscGain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.07);
+    } else if (weaponId === 'rifle') {
+      osc.frequency.setValueAtTime(310, t);
+      osc.frequency.exponentialRampToValueAtTime(72, t + 0.085);
+      oscGain.gain.setValueAtTime(0.11, t);
+      oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+      osc.connect(oscGain);
+      oscGain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.095);
     } else if (weaponId === 'smg') {
       osc.frequency.setValueAtTime(320 + Math.random() * 45, t);
       osc.frequency.exponentialRampToValueAtTime(85, t + 0.055);

@@ -1,7 +1,21 @@
-import { Crosshair, Flame, Map, Pause, Timer, Volume2, VolumeX, Zap } from 'lucide-react';
+import { Crosshair, Flame, Map, Pause, Radio, Timer, Volume2, VolumeX, Zap } from 'lucide-react';
 import { GAME_EVENT, gameEvents } from '../game/ui/GameEvents';
 import { useGameStore } from '../store/gameStore';
 import { MiniMap } from './MiniMap';
+
+const SERVICE_LANDMARK_IDS = new Set([
+  'nexus-ops',
+  'plaza-garage',
+  'chrome-workshop',
+  'plaza-tech',
+  'harbor-market',
+  'cyber-clinic',
+  'byte-mart',
+  'kitsune-noodles',
+  'skyline-apts',
+  'arcade-lounge',
+  'synth-club',
+]);
 
 export function GameHUD() {
   const playMode = useGameStore((s) => s.playMode);
@@ -13,13 +27,16 @@ export function GameHUD() {
   const escapeProgress = useGameStore((s) => s.escapeProgress);
   const activeMission = useGameStore((s) => s.activeMission);
   const districtName = useGameStore((s) => s.districtName);
+  const districtBanner = useGameStore((s) => s.districtBanner);
   const playerX = useGameStore((s) => s.playerX);
   const playerY = useGameStore((s) => s.playerY);
   const nearbyLandmark = useGameStore((s) => s.nearbyLandmark);
+  const nearbyProp = useGameStore((s) => s.nearbyProp);
   const nearbyNpc = useGameStore((s) => s.nearbyNpc);
   const nearbyVehicle = useGameStore((s) => s.nearbyVehicle);
   const inVehicle = useGameStore((s) => s.inVehicle);
   const vehicleName = useGameStore((s) => s.vehicleName);
+  const radioStation = useGameStore((s) => s.radioStation);
   const vehicleSpeedKmh = useGameStore((s) => s.vehicleSpeedKmh);
   const vehicleHealth = useGameStore((s) => s.vehicleHealth);
   const vehicleMaxHealth = useGameStore((s) => s.vehicleMaxHealth);
@@ -43,6 +60,8 @@ export function GameHUD() {
     horde.bossMaxHp > 0
       ? Math.max(0, Math.min(100, Math.round((horde.bossHp / horde.bossMaxHp) * 100)))
       : 0;
+  const isAtServiceTerminal =
+    nearbyLandmark !== null && SERVICE_LANDMARK_IDS.has(nearbyLandmark.id);
 
   return (
     <div className="pointer-events-none fixed inset-0 z-10 flex flex-col justify-between p-2.5 sm:p-4">
@@ -237,40 +256,64 @@ export function GameHUD() {
           )}
 
           {/* Active Weapon Telemetry (on foot) */}
-          {!inVehicle && (
-            <button
-              type="button"
-              onClick={() => gameEvents.emit(GAME_EVENT.SWITCH_WEAPON, 'next')}
-              title="切换武器 (Q / 1-3)"
-              className="pointer-events-auto flex items-center justify-between gap-3 border bg-[#080D18]/92 px-3 py-1.5 text-left transition-colors hover:brightness-110"
-              style={{
-                borderColor: horde.overdriveSec > 0 ? '#FFD166' : `${weapon.colorHex}80`,
-              }}
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-block h-3 w-1"
-                  style={{ backgroundColor: weapon.colorHex }}
-                />
-                <div>
-                  <div className="text-[11px] font-bold tracking-wider" style={{ color: weapon.colorHex }}>
-                    {weapon.shortName}
+          {!inVehicle && (() => {
+            const curUpg = weapon.upgradesByWeapon?.[weapon.equippedId];
+            const totalUpg = curUpg ? curUpg.damage + curUpg.firerate + curUpg.capacity : 0;
+            return (
+              <div className="flex items-stretch gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => gameEvents.emit(GAME_EVENT.SWITCH_WEAPON, 'next')}
+                  title="切换武器 (Q / 1-7)"
+                  className="pointer-events-auto flex flex-1 items-center justify-between gap-3 border bg-[#080D18]/92 px-3 py-1.5 text-left transition-colors hover:brightness-110"
+                  style={{
+                    borderColor: horde.overdriveSec > 0 ? '#FFD166' : `${weapon.colorHex}80`,
+                  }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="inline-block h-3 w-1"
+                      style={{ backgroundColor: weapon.colorHex }}
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="text-[11px] font-bold tracking-wider"
+                          style={{ color: weapon.colorHex }}
+                        >
+                          {weapon.shortName}
+                        </span>
+                        {totalUpg > 0 && (
+                          <span className="border border-[#FFD166]/65 bg-[#FFD166]/15 px-1 font-mono-tabular text-[9px] font-bold text-[#FFD166]">
+                            +{totalUpg}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {weapon.ownedIds.length > 1 ? 'Q / 1-7 切枪' : '按 B 军械购买与升级'}
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    {weapon.ownedIds.length > 1 ? '点击或按 Q 切枪' : '按 B 或去科技坊购重枪'}
+                  <div className="text-right font-mono-tabular">
+                    <div className="text-sm font-bold leading-none text-slate-100">
+                      {weapon.infiniteAmmo ? '∞' : weapon.ammo}
+                    </div>
+                    <div className="text-[9px] text-slate-400">
+                      {weapon.infiniteAmmo ? '微核供能' : '备弹'}
+                    </div>
                   </div>
-                </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => gameEvents.emit(GAME_EVENT.OPEN_QUICK_ARMORY)}
+                  title="打开军械库与升级 (B)"
+                  className="pointer-events-auto flex cursor-pointer items-center justify-center border border-[#FFD166]/65 bg-[#080D18]/92 px-2.5 text-[11px] font-bold text-[#FFD166] transition-colors hover:bg-[#FFD166] hover:text-[#080D18]"
+                >
+                  [B] 升级
+                </button>
               </div>
-              <div className="text-right font-mono-tabular">
-                <div className="text-sm font-bold leading-none text-slate-100">
-                  {weapon.infiniteAmmo ? '∞' : weapon.ammo}
-                </div>
-                <div className="text-[9px] text-slate-400">
-                  {weapon.infiniteAmmo ? '微核供能' : '备弹'}
-                </div>
-              </div>
-            </button>
-          )}
+            );
+          })()}
 
           {/* Active Vehicle Speedometer, Integrity & Nitro */}
           {inVehicle && (
@@ -320,6 +363,19 @@ export function GameHUD() {
                   />
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => gameEvents.emit(GAME_EVENT.CYCLE_RADIO)}
+                title="切换车载电台 (R)"
+                className="pointer-events-auto mt-1.5 flex w-full cursor-pointer items-center justify-between gap-2 border-t border-slate-800/80 pt-1.5 text-left text-[10px] transition-colors hover:text-[#00F5FF]"
+              >
+                <span className="flex items-center gap-1.5 font-bold text-[#C000FF]">
+                  <Radio className="h-3 w-3" />
+                  <span>[R] {radioStation.name}</span>
+                </span>
+                <span className="font-mono-tabular text-slate-400">{radioStation.genre}</span>
+              </button>
             </div>
           )}
 
@@ -355,8 +411,19 @@ export function GameHUD() {
           )}
         </div>
 
-        {/* Top-Center: Horde Boss Bar or Race Countdown */}
-        <div className="hidden flex-1 justify-center pt-1 sm:flex">
+        {/* Top-Center: District Arrival Banner, Horde Boss Bar or Race Countdown */}
+        <div className="hidden flex-1 flex-col items-center gap-2 pt-1 sm:flex">
+          {districtBanner && (
+            <div className="border-y-2 border-[#00F5FF] bg-[#080D18]/92 px-8 py-1.5 text-center">
+              <div className="text-[10px] font-bold tracking-widest text-[#00F5FF]">
+                已进入区域
+              </div>
+              <div className="text-base font-bold tracking-widest text-[#FFD166]">
+                {districtBanner}
+              </div>
+            </div>
+          )}
+
           {playMode === 'horde' && horde.active && horde.bossName && (
             <div className="w-full max-w-sm border-2 border-[#FFD166] bg-[#080D18]/94 px-4 py-2 text-center">
               <div className="flex items-center justify-between text-xs font-bold">
@@ -440,6 +507,13 @@ export function GameHUD() {
 
       {/* Center-Bottom: Context Interaction Hints & Toast */}
       <div className="flex flex-col items-center gap-2 pb-16 sm:pb-2">
+        {districtBanner && (
+          <div className="border-y border-[#00F5FF] bg-[#080D18]/92 px-5 py-1 text-center sm:hidden">
+            <span className="text-[10px] font-bold text-[#00F5FF]">进入区域 · </span>
+            <span className="text-xs font-bold text-[#FFD166]">{districtBanner}</span>
+          </div>
+        )}
+
         {playMode === 'race' && race.active && race.countdownSec > 0 && (
           <div className="border-2 border-[#FFD166] bg-[#080D18]/95 px-6 py-2 text-center sm:hidden">
             <span className="font-mono-tabular text-2xl font-bold text-[#FFD166]">
@@ -462,7 +536,25 @@ export function GameHUD() {
           </div>
         )}
 
-        {!inVehicle && nearbyNpc && (
+        {!inVehicle && isAtServiceTerminal && nearbyLandmark && (
+          <div className="border border-[#FFD166]/85 bg-[#080D18]/92 px-3.5 py-1.5 text-xs text-slate-100">
+            <span className="font-mono-tabular font-bold text-[#FFD166]">按 E</span>
+            <span className="mx-2 text-slate-500">·</span>
+            <span>进入 {nearbyLandmark.name}</span>
+          </div>
+        )}
+
+        {!inVehicle && !isAtServiceTerminal && nearbyProp && (
+          <div className="border border-[#00F5FF]/85 bg-[#080D18]/92 px-3.5 py-1.5 text-xs text-slate-100">
+            <span className="font-mono-tabular font-bold text-[#00F5FF]">按 E</span>
+            <span className="mx-2 text-slate-500">·</span>
+            <span>
+              {nearbyProp.title} — {nearbyProp.actionLabel}
+            </span>
+          </div>
+        )}
+
+        {!inVehicle && !isAtServiceTerminal && !nearbyProp && nearbyNpc && (
           <div className="border border-[#FF2E88]/85 bg-[#080D18]/92 px-3.5 py-1.5 text-xs text-slate-100">
             <span className="font-mono-tabular font-bold text-[#FF2E88]">按 E</span>
             <span className="mx-2 text-slate-500">·</span>
@@ -470,11 +562,11 @@ export function GameHUD() {
           </div>
         )}
 
-        {!inVehicle && !nearbyNpc && nearbyLandmark && (
+        {!inVehicle && !isAtServiceTerminal && !nearbyProp && !nearbyNpc && nearbyLandmark && (
           <div className="border border-[#FFD166]/80 bg-[#080D18]/92 px-3.5 py-1.5 text-xs text-slate-100">
             <span className="font-mono-tabular font-bold text-[#FFD166]">按 E</span>
             <span className="mx-2 text-slate-500">·</span>
-            <span>进入 {nearbyLandmark.name}</span>
+            <span>查看 {nearbyLandmark.name}</span>
           </div>
         )}
 
@@ -488,11 +580,11 @@ export function GameHUD() {
 
         {inVehicle ? (
           <div className="hidden border border-slate-700/80 bg-[#080D18]/88 px-3 py-1 font-mono-tabular text-[11px] text-slate-300 md:block">
-            W/S 油门刹车 · A/D 转向 · Shift 氮气加速 · 空格 手刹 · F 下车
+            WASD / 方向键 全向驾驶 · Shift 氮气加速 · 空格 手刹 · R 切换电台 · F 下车
           </div>
         ) : (
           <div className="hidden border border-slate-700/80 bg-[#080D18]/88 px-3 py-1 font-mono-tabular text-[11px] text-slate-300 md:block">
-            WASD 移动 · 左键/J 开火 · Q/1-3 切枪 · B 军械补给 · E 交互 · F 上车
+            WASD 移动 · 左键/J 开火 · Q/1-7 切枪 · B 军械与升级 · E 交互 · F 上车
           </div>
         )}
       </div>

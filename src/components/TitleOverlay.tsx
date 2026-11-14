@@ -242,7 +242,7 @@ export function TitleOverlay() {
         </div>
 
         <p className="mt-5 font-mono-tabular text-[11px] tracking-wide text-slate-400">
-          WASD 移动 · 左键/J 开火 · Q/1-3 切枪 · B 随身军械 · Shift 氮气加速 · F 上下车 · M 地图
+          WASD 移动/全向驾驶 · 左键/J 开火 · Q/1-7 切枪 · B 军械升级 · Shift 氮气 · F 上下车 · M 地图
         </p>
       </div>
     </div>
