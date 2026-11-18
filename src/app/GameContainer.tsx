@@ -3,11 +3,13 @@ import Phaser from 'phaser';
 import { createPhaserConfig } from '../game/config/GameConfig';
 import {
   ArcadeResultPayload,
+  EnvironmentTelemetryPayload,
   ExplorationPayload,
   GAME_EVENT,
   gameEvents,
   GameMode,
   GamePlayMode,
+  HordePerkOfferPayload,
   HordeTelemetryPayload,
   InteractionPayload,
   LandmarkInfo,
@@ -17,8 +19,10 @@ import {
   NearbyVehicleInfo,
   PlayerStatsPayload,
   PlayerTelemetryPayload,
+  ProgressionTelemetryPayload,
   RaceTelemetryPayload,
   RadioStationPayload,
+  RandomEventMarker,
   SaveStatusPayload,
   ServiceModalPayload,
   VehicleTelemetryPayload,
@@ -170,6 +174,26 @@ export function GameContainer() {
       useGameStore.getState().toggleMap();
     };
 
+    const handleEnvironmentUpdated = (payload: EnvironmentTelemetryPayload) => {
+      useGameStore.getState().setEnvironment(payload);
+    };
+
+    const handleRandomEventsUpdated = (events: RandomEventMarker[]) => {
+      useGameStore.getState().setRandomEvents(events);
+    };
+
+    const handleProgressionUpdated = (payload: ProgressionTelemetryPayload) => {
+      useGameStore.getState().setProgression(payload);
+    };
+
+    const handleHordePerkOffer = (offer: HordePerkOfferPayload | null) => {
+      useGameStore.getState().setHordePerkOffer(offer);
+    };
+
+    const handleToggleCharacterModal = () => {
+      useGameStore.getState().toggleCharacterModal();
+    };
+
     gameEvents.on(GAME_EVENT.SCENE_READY, handleSceneReady);
     gameEvents.on(GAME_EVENT.MODE_CHANGED, handleModeChanged);
     gameEvents.on(GAME_EVENT.PLAY_MODE_CHANGED, handlePlayModeChanged);
@@ -186,14 +210,19 @@ export function GameContainer() {
     gameEvents.on(GAME_EVENT.PLAYER_STATS, handlePlayerStats);
     gameEvents.on(GAME_EVENT.WEAPON_TELEMETRY, handleWeaponTelemetry);
     gameEvents.on(GAME_EVENT.HORDE_UPDATED, handleHordeUpdated);
+    gameEvents.on(GAME_EVENT.HORDE_PERK_OFFER, handleHordePerkOffer);
     gameEvents.on(GAME_EVENT.RACE_UPDATED, handleRaceUpdated);
     gameEvents.on(GAME_EVENT.EXPLORATION_UPDATED, handleExplorationUpdated);
+    gameEvents.on(GAME_EVENT.ENVIRONMENT_UPDATED, handleEnvironmentUpdated);
+    gameEvents.on(GAME_EVENT.RANDOM_EVENTS_UPDATED, handleRandomEventsUpdated);
+    gameEvents.on(GAME_EVENT.PROGRESSION_UPDATED, handleProgressionUpdated);
     gameEvents.on(GAME_EVENT.MISSION_UPDATED, handleMissionUpdated);
     gameEvents.on(GAME_EVENT.SERVICE_MODAL_OPEN, handleServiceModalOpen);
     gameEvents.on(GAME_EVENT.SAVE_STATUS_CHANGED, handleSaveStatusChanged);
     gameEvents.on(GAME_EVENT.INTERACTION_RESULT, handleInteractionResult);
     gameEvents.on(GAME_EVENT.STATUS_TOAST, handleStatusToast);
     gameEvents.on(GAME_EVENT.TOGGLE_MAP, handleToggleMap);
+    gameEvents.on(GAME_EVENT.TOGGLE_CHARACTER_MODAL, handleToggleCharacterModal);
 
     return () => {
       if (toastTimerRef.current !== null) {
@@ -218,14 +247,19 @@ export function GameContainer() {
       gameEvents.off(GAME_EVENT.PLAYER_STATS, handlePlayerStats);
       gameEvents.off(GAME_EVENT.WEAPON_TELEMETRY, handleWeaponTelemetry);
       gameEvents.off(GAME_EVENT.HORDE_UPDATED, handleHordeUpdated);
+      gameEvents.off(GAME_EVENT.HORDE_PERK_OFFER, handleHordePerkOffer);
       gameEvents.off(GAME_EVENT.RACE_UPDATED, handleRaceUpdated);
       gameEvents.off(GAME_EVENT.EXPLORATION_UPDATED, handleExplorationUpdated);
+      gameEvents.off(GAME_EVENT.ENVIRONMENT_UPDATED, handleEnvironmentUpdated);
+      gameEvents.off(GAME_EVENT.RANDOM_EVENTS_UPDATED, handleRandomEventsUpdated);
+      gameEvents.off(GAME_EVENT.PROGRESSION_UPDATED, handleProgressionUpdated);
       gameEvents.off(GAME_EVENT.MISSION_UPDATED, handleMissionUpdated);
       gameEvents.off(GAME_EVENT.SERVICE_MODAL_OPEN, handleServiceModalOpen);
       gameEvents.off(GAME_EVENT.SAVE_STATUS_CHANGED, handleSaveStatusChanged);
       gameEvents.off(GAME_EVENT.INTERACTION_RESULT, handleInteractionResult);
       gameEvents.off(GAME_EVENT.STATUS_TOAST, handleStatusToast);
       gameEvents.off(GAME_EVENT.TOGGLE_MAP, handleToggleMap);
+      gameEvents.off(GAME_EVENT.TOGGLE_CHARACTER_MODAL, handleToggleCharacterModal);
       game.destroy(true);
     };
   }, []);

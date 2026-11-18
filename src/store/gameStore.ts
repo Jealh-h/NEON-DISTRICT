@@ -4,6 +4,7 @@ import {
   PLAYER_CONFIG,
   RADIO_STATIONS,
   VehicleType,
+  VehicleWeaponKind,
   WEAPON_ORDER,
   WEAPON_SPECS,
   WORLD_CONFIG,
@@ -13,10 +14,12 @@ import type { WeaponUpgradeLevels } from '../game/ui/GameEvents';
 import {
   ActiveMissionState,
   ArcadeResultPayload,
+  EnvironmentTelemetryPayload,
   ExplorationPayload,
   GAME_EVENT,
   gameEvents,
   GameMode,
+  HordePerkOfferPayload,
   HordeTelemetryPayload,
   LandmarkInfo,
   MissionSyncPayload,
@@ -25,8 +28,10 @@ import {
   NearbyVehicleInfo,
   PlayerStatsPayload,
   PoliceMapMarker,
+  ProgressionTelemetryPayload,
   RaceTelemetryPayload,
   RadioStationPayload,
+  RandomEventMarker,
   SaveStatusPayload,
   ServiceModalPayload,
   VehicleTelemetryPayload,
@@ -37,11 +42,24 @@ import { DistrictData } from '../game/world/DistrictManager';
 
 export type TouchControlsMode = 'auto' | 'on' | 'off';
 
+function emitModalPauseState(
+  serviceModal: ServiceModalPayload | null,
+  showCharacterModal: boolean,
+  hordePerkOffer: HordePerkOfferPayload | null
+): void {
+  gameEvents.emit(
+    GAME_EVENT.SET_MODAL_PAUSED,
+    Boolean(serviceModal || showCharacterModal || hordePerkOffer)
+  );
+}
+
 interface GameUIState {
   mode: GameMode;
   playMode: GamePlayMode;
   health: number;
   maxHealth: number;
+  armor: number;
+  maxArmor: number;
   cash: number;
   ownsSafehouse: boolean;
   wantedLevel: number;
@@ -73,14 +91,23 @@ interface GameUIState {
   vehicleMaxHealth: number;
   vehicleNitro: number;
   vehicleBoosting: boolean;
+  vehicleFlying: boolean;
+  vehicleHasTurret: boolean;
+  vehicleWeaponKind: VehicleWeaponKind | null;
   radioStation: RadioStationPayload;
   horde: HordeTelemetryPayload;
+  hordePerkOffer: HordePerkOfferPayload | null;
   race: RaceTelemetryPayload;
   exploration: ExplorationPayload;
+  environment: EnvironmentTelemetryPayload;
+  randomEvents: RandomEventMarker[];
+  progression: ProgressionTelemetryPayload;
+  showCharacterModal: boolean;
   interactionToast: string | null;
   weapon: WeaponTelemetryPayload;
   muted: boolean;
   showMap: boolean;
+  hudCompact: boolean;
   touchControlsMode: TouchControlsMode;
 
   setMode: (mode: GameMode) => void;
@@ -100,8 +127,14 @@ interface GameUIState {
   setPlayerStats: (payload: PlayerStatsPayload) => void;
   setWeaponTelemetry: (payload: WeaponTelemetryPayload) => void;
   setHordeTelemetry: (payload: HordeTelemetryPayload) => void;
+  setHordePerkOffer: (offer: HordePerkOfferPayload | null) => void;
   setRaceTelemetry: (payload: RaceTelemetryPayload) => void;
   setExploration: (payload: ExplorationPayload) => void;
+  setEnvironment: (payload: EnvironmentTelemetryPayload) => void;
+  setRandomEvents: (events: RandomEventMarker[]) => void;
+  setProgression: (payload: ProgressionTelemetryPayload) => void;
+  setShowCharacterModal: (open: boolean) => void;
+  toggleCharacterModal: () => void;
   setMissionSync: (payload: MissionSyncPayload) => void;
   setServiceModal: (modal: ServiceModalPayload | null) => void;
   setSaveStatus: (status: SaveStatusPayload) => void;
@@ -109,6 +142,7 @@ interface GameUIState {
   toggleMute: () => void;
   toggleMap: () => void;
   setShowMap: (open: boolean) => void;
+  toggleHudCompact: () => void;
   cycleTouchControlsMode: () => void;
 }
 
@@ -117,6 +151,8 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   playMode: 'sandbox',
   health: PLAYER_CONFIG.INITIAL_HEALTH,
   maxHealth: PLAYER_CONFIG.MAX_HEALTH,
+  armor: 0,
+  maxArmor: PLAYER_CONFIG.MAX_ARMOR,
   cash: PLAYER_CONFIG.INITIAL_CASH,
   ownsSafehouse: false,
   wantedLevel: 0,
@@ -148,6 +184,9 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   vehicleMaxHealth: 0,
   vehicleNitro: 100,
   vehicleBoosting: false,
+  vehicleFlying: false,
+  vehicleHasTurret: false,
+  vehicleWeaponKind: null,
   radioStation: {
     index: RADIO_STATIONS[1].index,
     name: RADIO_STATIONS[1].name,
@@ -168,7 +207,21 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     bestWave: 0,
     bestScore: 0,
     enemyMarkers: [],
+    mech: {
+      active: false,
+      kind: null,
+      name: null,
+      hp: 0,
+      maxHp: 0,
+      abilityLabel: null,
+      abilityCooldownSec: 0,
+      abilityMaxCooldownSec: 0,
+      turretCount: 0,
+      maxTurrets: 2,
+    },
+    activePerks: [],
   },
+  hordePerkOffer: null,
   race: {
     active: false,
     checkpointIndex: 0,
@@ -185,6 +238,50 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     totalChips: 10,
     chipMarkers: [],
   },
+  environment: {
+    timePhase: 'night',
+    timeLabel: '霓虹深夜',
+    clockText: '22:00',
+    weather: 'clear',
+    weatherLabel: '晴朗夜空',
+    weatherEffectHint: '视野与路面抓地力最佳',
+    darknessAlpha: 0.28,
+  },
+  randomEvents: [],
+  progression: {
+    level: 1,
+    exp: 0,
+    nextLevelExp: 120,
+    skillPoints: 0,
+    skills: {
+      combat: 0,
+      mechanics: 0,
+      hacking: 0,
+      survival: 0,
+    },
+    cyberware: {
+      optics: 0,
+      arms: 0,
+      legs: 0,
+      spine: 0,
+      neural: 0,
+    },
+    reputation: {
+      street: 0,
+      hacker: 0,
+      law: 0,
+    },
+    jammerUnlocked: false,
+    jammerCooldownSec: 0,
+    jammerActiveSec: 0,
+    damageBonusPct: 0,
+    critChancePct: 0,
+    fireRateBonusPct: 0,
+    moveSpeedBonusPct: 0,
+    vehicleSpeedBonusPct: 0,
+    damageReductionPct: 0,
+  },
+  showCharacterModal: false,
   interactionToast: null,
   weapon: {
     equippedId: 'pistol',
@@ -206,6 +303,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   },
   muted: false,
   showMap: false,
+  hudCompact: false,
   touchControlsMode: 'auto',
 
   setMode: (mode) =>
@@ -214,6 +312,8 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       showMap: mode === 'PLAYING' ? get().showMap : false,
       serviceModal: mode === 'PLAYING' ? get().serviceModal : null,
       arcadeResult: mode === 'PLAYING' ? get().arcadeResult : null,
+      showCharacterModal: mode === 'PLAYING' ? get().showCharacterModal : false,
+      hordePerkOffer: mode === 'PLAYING' ? get().hordePerkOffer : null,
     }),
   setPlayMode: (playMode) => set({ playMode }),
   setDistrictData: (districtData) => set({ districtData, districtName: districtData.name }),
@@ -234,6 +334,9 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       vehicleMaxHealth: payload.maxHealth,
       vehicleNitro: payload.nitro ?? 100,
       vehicleBoosting: Boolean(payload.isBoosting),
+      vehicleFlying: Boolean(payload.isFlying),
+      vehicleHasTurret: Boolean(payload.hasTurret),
+      vehicleWeaponKind: payload.weaponKind ?? null,
     }),
   setRadioStation: (radioStation) => set({ radioStation }),
   setOwnsSafehouse: (ownsSafehouse) => set({ ownsSafehouse }),
@@ -250,12 +353,34 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     set({
       health: payload.health,
       maxHealth: payload.maxHealth,
+      armor: payload.armor ?? get().armor,
+      maxArmor: payload.maxArmor ?? get().maxArmor,
       cash: payload.cash,
     }),
   setWeaponTelemetry: (weapon) => set({ weapon }),
   setHordeTelemetry: (horde) => set({ horde }),
+  setHordePerkOffer: (hordePerkOffer) => {
+    emitModalPauseState(get().serviceModal, get().showCharacterModal, hordePerkOffer);
+    set({ hordePerkOffer });
+  },
   setRaceTelemetry: (race) => set({ race }),
   setExploration: (exploration) => set({ exploration }),
+  setEnvironment: (environment) => set({ environment }),
+  setRandomEvents: (randomEvents) => set({ randomEvents }),
+  setProgression: (progression) => set({ progression }),
+  setShowCharacterModal: (showCharacterModal) => {
+    const nextOpen = get().mode === 'PLAYING' ? showCharacterModal : false;
+    emitModalPauseState(get().serviceModal, nextOpen, get().hordePerkOffer);
+    set({ showCharacterModal: nextOpen });
+  },
+  toggleCharacterModal: () => {
+    const state = get();
+    if (state.mode !== 'PLAYING') return;
+    if (state.serviceModal || state.hordePerkOffer) return;
+    const nextOpen = !state.showCharacterModal;
+    emitModalPauseState(state.serviceModal, nextOpen, state.hordePerkOffer);
+    set({ showCharacterModal: nextOpen, showMap: nextOpen ? false : state.showMap });
+  },
   setMissionSync: (payload) =>
     set({
       activeMission: payload.activeMission,
@@ -263,7 +388,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       totalMissionEarnings: payload.totalEarnings,
     }),
   setServiceModal: (serviceModal) => {
-    gameEvents.emit(GAME_EVENT.SET_MODAL_PAUSED, Boolean(serviceModal));
+    emitModalPauseState(serviceModal, get().showCharacterModal, get().hordePerkOffer);
     set({ serviceModal, arcadeResult: serviceModal ? get().arcadeResult : null });
   },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
@@ -275,6 +400,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   },
   toggleMap: () => set((s) => ({ showMap: !s.showMap })),
   setShowMap: (showMap) => set({ showMap }),
+  toggleHudCompact: () => set((s) => ({ hudCompact: !s.hudCompact })),
   cycleTouchControlsMode: () => {
     const current = get().touchControlsMode;
     const next: TouchControlsMode =

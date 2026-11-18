@@ -1,6 +1,22 @@
 import Phaser from 'phaser';
-import { ENEMY_SPECS, EnemyKind, PALETTE, WORLD_CONFIG } from '../config/BalanceConfig';
-import { GAME_EVENT, gameEvents } from '../ui/GameEvents';
+import {
+  ENEMY_SPECS,
+  EnemyKind,
+  HORDE_GEAR_COSTS,
+  MECH_SPECS,
+  MechKind,
+  PALETTE,
+  WORLD_CONFIG,
+} from '../config/BalanceConfig';
+import { HORDE_ROGUELITE_PERKS } from '../config/ExpansionConfig';
+import { Player } from '../entities/Player';
+import {
+  ActiveHordePerkSummary,
+  GAME_EVENT,
+  gameEvents,
+  HordePerkChoice,
+  MechTelemetryPayload,
+} from '../ui/GameEvents';
 import { CollisionManager } from '../world/CollisionManager';
 import { AudioManager } from './AudioManager';
 import { PickupManager } from './PickupManager';
@@ -36,6 +52,23 @@ interface EnemyProjectile {
   damage: number;
 }
 
+interface ActiveMechState {
+  kind: MechKind;
+  hp: number;
+  maxHp: number;
+  abilityCooldownSec: number;
+  stompCooldownSec: number;
+}
+
+interface ActiveSentryTurret {
+  base: Phaser.GameObjects.Image;
+  gun: Phaser.GameObjects.Image;
+  x: number;
+  y: number;
+  ttlSec: number;
+  fireCooldownSec: number;
+}
+
 interface HordeRecordData {
   bestWave: number;
   bestScore: number;
@@ -64,6 +97,11 @@ export class HordeManager {
 
   private enemies: ActiveHordeEnemy[] = [];
   private projectiles: EnemyProjectile[] = [];
+  private activeMech: ActiveMechState | null = null;
+  private turrets: ActiveSentryTurret[] = [];
+  private perks: Record<string, number> = {};
+  private awaitingPerkChoice = false;
+  private regenAccumulator = 0;
   private bestWave = 0;
   private bestScore = 0;
 
@@ -115,17 +153,124 @@ export class HordeManager {
     this.score = 0;
     this.overdriveTimer = 0;
     this.restTimer = 0;
+    this.activeMech = null;
+    this.perks = {};
+    this.awaitingPerkChoice = false;
+    this.regenAccumulator = 0;
+    gameEvents.emit(GAME_EVENT.HORDE_PERK_OFFER, null);
     this.startNextWave();
   }
 
-  public stop(): void {
+  public stop(player?: Player): void {
     this.active = false;
     this.wave = 0;
     this.enemiesToSpawn = 0;
     this.restTimer = 0;
     this.overdriveTimer = 0;
+    this.activeMech = null;
+    this.perks = {};
+    this.awaitingPerkChoice = false;
+    this.regenAccumulator = 0;
+    gameEvents.emit(GAME_EVENT.HORDE_PERK_OFFER, null);
+    if (player) {
+      player.setMechForm(null);
+    }
     this.clearEntities();
     this.emitTelemetry(true);
+  }
+
+  public getPerkStacks(perkId: string): number {
+    return this.perks[perkId] ?? 0;
+  }
+
+  public getDamageMultiplier(playerHpRatio = 1): number {
+    const overload = this.getPerkStacks('overload_ammo') * 0.22;
+    const berserk = playerHpRatio <= 0.55 ? this.getPerkStacks('cyber_berserk') * 0.42 : 0;
+    return 1 + overload + berserk;
+  }
+
+  public getFireRateMultiplier(): number {
+    return 1 + this.getPerkStacks('rapid_cycling') * 0.14;
+  }
+
+  public getBonusPierce(): number {
+    return this.getPerkStacks('quantum_pierce');
+  }
+
+  public getProjectileSpeedMultiplier(): number {
+    return 1 + this.getPerkStacks('quantum_pierce') * 0.15;
+  }
+
+  public getDamageReduction(): number {
+    return Math.min(0.6, this.getPerkStacks('tactical_plate') * 0.14);
+  }
+
+  public getArcChainStacks(): number {
+    return this.getPerkStacks('arc_chain');
+  }
+
+  public getVampiricStacks(): number {
+    return this.getPerkStacks('vampiric_core');
+  }
+
+  public getMechAndTurretPowerMultiplier(): number {
+    return 1 + this.getPerkStacks('mech_overclock') * 0.3;
+  }
+
+  public getCashDropMultiplier(): number {
+    return 1 + this.getPerkStacks('bounty_multiplier') * 0.35;
+  }
+
+  public selectPerk(
+    perkId: string,
+    callbacks?: { onArmorBonus?: (amt: number) => void; onCashBonus?: (amt: number) => void }
+  ): void {
+    if (!this.active || !this.awaitingPerkChoice) return;
+    const spec = HORDE_ROGUELITE_PERKS.find((p) => p.id === perkId);
+    if (spec) {
+      const prev = this.perks[perkId] ?? 0;
+      this.perks[perkId] = Math.min(spec.maxStacks, prev + 1);
+      this.audioManager.playPurchase();
+
+      if (perkId === 'tactical_plate') {
+        callbacks?.onArmorBonus?.(45);
+      } else if (perkId === 'bounty_multiplier') {
+        callbacks?.onCashBonus?.(260);
+      }
+
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        `已装配波次强化【${spec.name} Lv.${this.perks[perkId]}】· ${spec.description}`
+      );
+    }
+    this.awaitingPerkChoice = false;
+    gameEvents.emit(GAME_EVENT.HORDE_PERK_OFFER, null);
+    this.restTimer = 2.6;
+    this.emitTelemetry(true);
+  }
+
+  private offerRoguelitePerks(): void {
+    const available = HORDE_ROGUELITE_PERKS.filter(
+      (p) => (this.perks[p.id] ?? 0) < p.maxStacks
+    );
+    if (available.length === 0) return;
+
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const choices: HordePerkChoice[] = shuffled.slice(0, 3).map((p) => ({
+      id: p.id,
+      name: p.name,
+      tagline: p.tagline,
+      description: p.description,
+      accentColor: p.accentColor,
+      currentStacks: this.perks[p.id] ?? 0,
+      maxStacks: p.maxStacks,
+    }));
+
+    this.awaitingPerkChoice = true;
+    gameEvents.emit(GAME_EVENT.HORDE_PERK_OFFER, {
+      waveCleared: this.wave,
+      choices,
+    });
   }
 
   public isActive(): boolean {
@@ -140,6 +285,136 @@ export class HordeManager {
     this.overdriveTimer = Math.max(this.overdriveTimer, durationSec);
     gameEvents.emit(GAME_EVENT.STATUS_TOAST, `武器过载激活！${durationSec}秒内射速与火力暴涨！`);
     this.emitTelemetry(true);
+  }
+
+  public isMechActive(): boolean {
+    return this.active && this.activeMech !== null;
+  }
+
+  public getMechKind(): MechKind | null {
+    return this.activeMech?.kind ?? null;
+  }
+
+  public canUseMechAbility(): boolean {
+    return Boolean(this.activeMech && this.activeMech.abilityCooldownSec <= 0);
+  }
+
+  public markMechAbilityUsed(): void {
+    if (!this.activeMech) return;
+    const baseCd = MECH_SPECS[this.activeMech.kind].abilityCooldownSec;
+    const cdScale = Math.max(0.4, 1 - this.getPerkStacks('mech_overclock') * 0.2);
+    this.activeMech.abilityCooldownSec = Number((baseCd * cdScale).toFixed(1));
+    this.emitTelemetry(true);
+  }
+
+  public deployMech(kind: MechKind, player: Player, onCashBonus?: (cash: number) => void): void {
+    if (!this.active) return;
+    const spec = MECH_SPECS[kind];
+    this.activeMech = {
+      kind,
+      hp: spec.maxHp,
+      maxHp: spec.maxHp,
+      abilityCooldownSec: 0,
+      stompCooldownSec: 0,
+    };
+    player.setMechForm(kind);
+
+    // Deployment impact shockwave clears immediate crowd
+    const pos = player.getPosition();
+    const ring = this.scene.add.circle(pos.x, pos.y, 16, PALETTE.NEON_CYAN, 0.25);
+    ring.setStrokeStyle(3, kind === 'titan' ? PALETTE.GOLD : PALETTE.NEON_CYAN, 0.95);
+    ring.setDepth(26);
+    this.scene.tweens.add({
+      targets: ring,
+      radius: 170,
+      alpha: 0,
+      duration: 320,
+      onComplete: () => ring.destroy(),
+    });
+    this.audioManager.playOrbitalStrike();
+    this.scene.cameras.main.shake(180, 0.008);
+
+    for (const enemy of [...this.enemies]) {
+      const dist = Phaser.Math.Distance.Between(pos.x, pos.y, enemy.x, enemy.y);
+      if (dist <= 165) {
+        const ang = Math.atan2(enemy.y - pos.y, enemy.x - pos.x);
+        const res = this.damageEnemy(enemy, 110, Math.cos(ang), Math.sin(ang), true);
+        if (res.killed) onCashBonus?.(res.cashDrop);
+      }
+    }
+
+    gameEvents.emit(
+      GAME_EVENT.STATUS_TOAST,
+      `【${spec.name}】空降部署完成！按 [空格] 释放「${spec.abilityLabel}」！`
+    );
+    this.emitTelemetry(true);
+  }
+
+  public absorbDamageByMech(damage: number, player: Player, onCashBonus?: (cash: number) => void): boolean {
+    if (!this.activeMech) return false;
+    this.activeMech.hp = Math.max(0, this.activeMech.hp - damage);
+
+    if (this.activeMech.hp <= 0) {
+      const pos = player.getPosition();
+      this.activeMech = null;
+      player.setMechForm(null);
+
+      // Safe emergency eject pulse
+      const shock = this.scene.add.circle(pos.x, pos.y, 14, PALETTE.GOLD, 0.3);
+      shock.setStrokeStyle(3, PALETTE.WARNING_RED, 0.95);
+      shock.setDepth(26);
+      this.scene.tweens.add({
+        targets: shock,
+        radius: 180,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => shock.destroy(),
+      });
+      this.audioManager.playExplosion();
+      this.scene.cameras.main.shake(220, 0.01);
+
+      for (const enemy of [...this.enemies]) {
+        const dist = Phaser.Math.Distance.Between(pos.x, pos.y, enemy.x, enemy.y);
+        if (dist <= 175) {
+          const ang = Math.atan2(enemy.y - pos.y, enemy.x - pos.x);
+          const res = this.damageEnemy(enemy, 95, Math.cos(ang), Math.sin(ang), true);
+          if (res.killed) onCashBonus?.(res.cashDrop);
+        }
+      }
+
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, '机甲护盾归零，已紧急弹射并震退周围敌军！');
+    }
+
+    this.emitTelemetry(true);
+    return true;
+  }
+
+  public deploySentryTurret(x: number, y: number): boolean {
+    if (!this.active) return false;
+    if (this.turrets.length >= HORDE_GEAR_COSTS.MAX_TURRETS) {
+      return false;
+    }
+    const base = this.scene.add.image(x, y, 'prop_turret').setDepth(18);
+    const gun = this.scene.add.image(x, y, 'prop_turret_gun').setDepth(19);
+    this.turrets.push({
+      base,
+      gun,
+      x,
+      y,
+      ttlSec: HORDE_GEAR_COSTS.TURRET_DURATION_SEC,
+      fireCooldownSec: 0.2,
+    });
+    this.audioManager.playPurchase();
+    gameEvents.emit(
+      GAME_EVENT.STATUS_TOAST,
+      `已部署自动激光哨戒炮（${this.turrets.length}/${HORDE_GEAR_COSTS.MAX_TURRETS}），持续 ${HORDE_GEAR_COSTS.TURRET_DURATION_SEC} 秒！`
+    );
+    this.emitTelemetry(true);
+    return true;
+  }
+
+  public getTurretCount(): number {
+    return this.turrets.length;
   }
 
   public getEnemies(): ActiveHordeEnemy[] {
@@ -175,7 +450,9 @@ export class HordeManager {
     nowMs: number,
     playerPos: { x: number; y: number },
     onPlayerDamaged: (damage: number) => void,
-    onWaveClearHeal: (amount: number) => void
+    onWaveClearHeal: (amount: number) => void,
+    onTurretShoot?: (sx: number, sy: number, angleRad: number) => void,
+    onMechStompKilled?: (cash: number) => void
   ): void {
     if (!this.active) return;
 
@@ -183,11 +460,67 @@ export class HordeManager {
       this.overdriveTimer = Math.max(0, this.overdriveTimer - dtSeconds);
     }
 
+    if (this.activeMech) {
+      if (this.activeMech.abilityCooldownSec > 0) {
+        this.activeMech.abilityCooldownSec = Math.max(0, this.activeMech.abilityCooldownSec - dtSeconds);
+      }
+      if (this.activeMech.stompCooldownSec > 0) {
+        this.activeMech.stompCooldownSec = Math.max(0, this.activeMech.stompCooldownSec - dtSeconds);
+      }
+    }
+
     if (this.combo > 0) {
       this.comboTimer -= dtSeconds;
       if (this.comboTimer <= 0) {
         this.combo = 0;
       }
+    }
+
+    // Update Auto-Sentry Turrets
+    for (let i = this.turrets.length - 1; i >= 0; i--) {
+      const t = this.turrets[i];
+      t.ttlSec -= dtSeconds;
+      if (t.ttlSec <= 0) {
+        t.base.destroy();
+        t.gun.destroy();
+        this.turrets.splice(i, 1);
+        this.emitTelemetry(true);
+        continue;
+      }
+      t.fireCooldownSec -= dtSeconds;
+      if (this.enemies.length > 0) {
+        let nearest: ActiveHordeEnemy | null = null;
+        let bestD: number = HORDE_GEAR_COSTS.TURRET_RANGE;
+        for (const e of this.enemies) {
+          const d = Phaser.Math.Distance.Between(t.x, t.y, e.x, e.y);
+          if (d < bestD && this.collisionManager.hasLineOfSight(t.x, t.y, e.x, e.y)) {
+            bestD = d;
+            nearest = e;
+          }
+        }
+        if (nearest) {
+          const ang = Math.atan2(nearest.y - t.y, nearest.x - t.x);
+          t.gun.setRotation(ang);
+          if (t.fireCooldownSec <= 0) {
+            t.fireCooldownSec = HORDE_GEAR_COSTS.TURRET_FIRE_INTERVAL_MS / 1000;
+            onTurretShoot?.(t.x + Math.cos(ang) * 14, t.y + Math.sin(ang) * 14, ang);
+          }
+        }
+      }
+    }
+
+    const nanoStacks = this.getPerkStacks('nano_regen');
+    if (nanoStacks > 0 && !this.awaitingPerkChoice) {
+      this.regenAccumulator += dtSeconds * nanoStacks * 3;
+      if (this.regenAccumulator >= 1) {
+        const healInt = Math.floor(this.regenAccumulator);
+        this.regenAccumulator -= healInt;
+        onWaveClearHeal(healInt);
+      }
+    }
+
+    if (this.awaitingPerkChoice) {
+      return;
     }
 
     // Wave intermission rest countdown
@@ -203,31 +536,38 @@ export class HordeManager {
 
     // Check wave completion
     if (this.enemiesToSpawn <= 0 && this.enemies.length === 0) {
-      this.restTimer = 4.2;
       this.audioManager.playMissionComplete();
       onWaveClearHeal(25);
+      if (this.wave % 3 === 0) {
+        this.offerRoguelitePerks();
+        if (this.awaitingPerkChoice) {
+          this.emitTelemetry(true, nowMs);
+          return;
+        }
+      }
+      this.restTimer = 4.2;
       gameEvents.emit(
         GAME_EVENT.STATUS_TOAST,
-        `第 ${this.wave} 波肃清！生命 +25，4秒后开启第 ${this.wave + 1} 波（按 B 打开军械补给）`
+        `第 ${this.wave} 波肃清！生命 +25，4秒后开启第 ${this.wave + 1} 波（按 B 部署机甲与武装）`
       );
       this.emitTelemetry(true, nowMs);
       return;
     }
 
     // Spawn enemies smoothly up to cap
-    const maxConcurrent = Math.min(18, 6 + this.wave * 2);
+    const maxConcurrent = Math.min(20, 6 + this.wave * 2);
     if (this.enemiesToSpawn > 0 && this.enemies.length < maxConcurrent) {
       this.spawnTimer -= dtSeconds;
       if (this.spawnTimer <= 0) {
         const shouldSpawnBoss = this.wave % 5 === 0 && this.enemiesToSpawn === 1;
         this.spawnEnemyAroundPlayer(playerPos, shouldSpawnBoss);
         this.enemiesToSpawn -= 1;
-        this.spawnTimer = Math.max(0.28, 0.92 - this.wave * 0.04);
+        this.spawnTimer = Math.max(0.25, 0.92 - this.wave * 0.04);
       }
     }
 
     // Update active enemies
-    for (const enemy of this.enemies) {
+    for (const enemy of [...this.enemies]) {
       if (enemy.attackCooldown > 0) enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dtSeconds);
       if (enemy.shootCooldown > 0) enemy.shootCooldown = Math.max(0, enemy.shootCooldown - dtSeconds);
 
@@ -238,7 +578,6 @@ export class HordeManager {
 
       enemy.sprite.setRotation(baseAngle);
 
-      // Determine desired travel speed (ranged drones hold standoff distance)
       let moveFactor = 1;
       if (enemy.kind === 'drone' && dist < 210) {
         moveFactor = dist < 140 ? -0.45 : 0.15;
@@ -264,8 +603,20 @@ export class HordeManager {
       enemy.sprite.setPosition(enemy.x, enemy.y);
       enemy.glow.setPosition(enemy.x, enemy.y);
 
+      // Mech stomp crush damage against non-boss enemies
+      if (this.activeMech && !enemy.isBoss && dist <= enemy.radius + 24 && this.activeMech.stompCooldownSec <= 0) {
+        this.activeMech.stompCooldownSec = 0.32;
+        const stompDmg = MECH_SPECS[this.activeMech.kind].stompDamage;
+        const res = this.damageEnemy(enemy, stompDmg, -Math.cos(baseAngle), -Math.sin(baseAngle), true);
+        this.audioManager.playImpactHit(true);
+        if (res.killed) {
+          onMechStompKilled?.(res.cashDrop);
+          continue;
+        }
+      }
+
       // Melee contact damage
-      if (dist <= enemy.radius + 14 && enemy.attackCooldown <= 0) {
+      if (dist <= enemy.radius + (this.activeMech ? 20 : 14) && enemy.attackCooldown <= 0) {
         enemy.attackCooldown = 0.85;
         onPlayerDamaged(enemy.damage);
       }
@@ -294,7 +645,7 @@ export class HordeManager {
       }
       if (!remove) {
         const distPlayer = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, playerPos.x, playerPos.y);
-        if (distPlayer <= 16) {
+        if (distPlayer <= (this.activeMech ? 22 : 16)) {
           onPlayerDamaged(p.damage);
           remove = true;
         }
@@ -420,7 +771,6 @@ export class HordeManager {
   ): { killed: boolean; cashDrop: number; scoreGained: number } {
     enemy.hp -= damage;
 
-    // Knockback
     const kb = enemy.isBoss ? 4 : isHeavy ? 18 : 10;
     const kx = enemy.x + dirX * kb;
     const ky = enemy.y + dirY * kb;
@@ -439,7 +789,6 @@ export class HordeManager {
       return { killed: false, cashDrop: 0, scoreGained: 0 };
     }
 
-    // Killed!
     this.kills += 1;
     this.combo += 1;
     this.comboTimer = 4.5;
@@ -452,19 +801,20 @@ export class HordeManager {
       this.saveRecords();
     }
 
-    // Spawn loot drop
     if (enemy.isBoss) {
       this.pickupManager.spawnDrop(enemy.x, enemy.y, 'overdrive', 8);
-      this.pickupManager.spawnDrop(enemy.x + 18, enemy.y, 'medkit', 50);
+      this.pickupManager.spawnDrop(enemy.x + 18, enemy.y, 'armor', 50);
     } else {
       const roll = Math.random();
       if (roll < 0.08) {
         this.pickupManager.spawnDrop(enemy.x, enemy.y, 'overdrive', 8);
-      } else if (roll < 0.24) {
+      } else if (roll < 0.19) {
+        this.pickupManager.spawnDrop(enemy.x, enemy.y, 'armor', 35);
+      } else if (roll < 0.34) {
         this.pickupManager.spawnDrop(enemy.x, enemy.y, 'medkit', 30);
-      } else if (roll < 0.42) {
+      } else if (roll < 0.5) {
         this.pickupManager.spawnDrop(enemy.x, enemy.y, 'ammo', 40);
-      } else if (roll < 0.7) {
+      } else if (roll < 0.76) {
         this.pickupManager.spawnDrop(enemy.x, enemy.y, 'cash', enemy.cashDrop);
       }
     }
@@ -487,9 +837,51 @@ export class HordeManager {
     this.projectiles = [];
   }
 
+  public getMechTelemetry(): MechTelemetryPayload {
+    if (!this.activeMech) {
+      return {
+        active: false,
+        kind: null,
+        name: null,
+        hp: 0,
+        maxHp: 0,
+        abilityLabel: null,
+        abilityCooldownSec: 0,
+        abilityMaxCooldownSec: 0,
+        turretCount: this.turrets.length,
+        maxTurrets: HORDE_GEAR_COSTS.MAX_TURRETS,
+      };
+    }
+    const spec = MECH_SPECS[this.activeMech.kind];
+    return {
+      active: true,
+      kind: this.activeMech.kind,
+      name: spec.shortName,
+      hp: Math.round(this.activeMech.hp),
+      maxHp: this.activeMech.maxHp,
+      abilityLabel: spec.abilityLabel,
+      abilityCooldownSec: Number(this.activeMech.abilityCooldownSec.toFixed(1)),
+      abilityMaxCooldownSec: spec.abilityCooldownSec,
+      turretCount: this.turrets.length,
+      maxTurrets: HORDE_GEAR_COSTS.MAX_TURRETS,
+    };
+  }
+
   public emitTelemetry(force: boolean, nowMs = Date.now()): void {
     if (!force && nowMs - this.lastEmitAt < 140) return;
     this.lastEmitAt = nowMs;
+
+    const activePerks: ActiveHordePerkSummary[] = Object.entries(this.perks)
+      .filter(([, stacks]) => stacks > 0)
+      .map(([id, stacks]) => {
+        const spec = HORDE_ROGUELITE_PERKS.find((p) => p.id === id);
+        return {
+          id,
+          name: spec?.name ?? id,
+          stacks,
+          accentColor: spec?.accentColor ?? '#00F5FF',
+        };
+      });
 
     const boss = this.enemies.find((e) => e.isBoss);
     gameEvents.emit(GAME_EVENT.HORDE_UPDATED, {
@@ -511,6 +903,8 @@ export class HordeManager {
         y: Math.round(e.y),
         isBoss: e.isBoss,
       })),
+      mech: this.getMechTelemetry(),
+      activePerks,
     });
   }
 
@@ -524,6 +918,11 @@ export class HordeManager {
       p.sprite.destroy();
     }
     this.projectiles = [];
+    for (const t of this.turrets) {
+      t.base.destroy();
+      t.gun.destroy();
+    }
+    this.turrets = [];
   }
 
   public destroy(): void {

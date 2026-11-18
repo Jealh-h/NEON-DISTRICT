@@ -3,25 +3,33 @@ import { PALETTE, WANTED_CONFIG } from '../config/BalanceConfig';
 import { CollisionManager } from '../world/CollisionManager';
 
 export type PoliceState = 'PATROL' | 'PURSUE' | 'SEARCH' | 'DISABLED';
+export type PoliceUnitKind = 'cruiser' | 'interceptor' | 'heli' | 'swat' | 'tank';
 
 export class Police {
   public readonly id: string;
+  public readonly unitKind: PoliceUnitKind;
+  public readonly minWantedStars: number;
   public readonly sprite: Phaser.Physics.Arcade.Sprite;
 
   private scene: Phaser.Scene;
   private shadow: Phaser.GameObjects.Ellipse;
   private headlight: Phaser.GameObjects.Image;
   private lightbarGlow: Phaser.GameObjects.Image;
+  private rotorOverlay: Phaser.GameObjects.Image | null = null;
+  private turretOverlay: Phaser.GameObjects.Image | null = null;
   private smokeEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private patrolLoop: Array<{ x: number; y: number }>;
   private patrolIdx = 0;
 
-  private hp = 160;
-  private readonly maxHp = 160;
+  private hp: number;
+  private readonly maxHp: number;
+  private readonly bounty: number;
   private disabledTimer = 0;
   private smokeTimer = 0;
+  private shootTimer = 0;
 
   private state: PoliceState = 'PATROL';
+  private unitVisible = true;
   private lightbarTimer = 0;
   private aiTimer: number;
   private stuckTimer = 0;
@@ -31,24 +39,55 @@ export class Police {
   private searchOrbitAngle = 0;
   private desiredAngle = 0;
   private currentSpeed = 0;
+  private rotorAngle = 0;
 
   constructor(
     scene: Phaser.Scene,
     id: string,
     patrolLoop: Array<{ x: number; y: number }>,
-    startIdx = 0
+    startIdx = 0,
+    unitKind: PoliceUnitKind = 'cruiser',
+    minWantedStars = 0
   ) {
     this.scene = scene;
     this.id = id;
+    this.unitKind = unitKind;
+    this.minWantedStars = minWantedStars;
     this.patrolLoop = patrolLoop;
     this.patrolIdx = startIdx % patrolLoop.length;
     this.aiTimer = Math.random() * 0.15;
+
+    const hpMap: Record<PoliceUnitKind, number> = {
+      cruiser: 160,
+      interceptor: 195,
+      heli: 280,
+      swat: 380,
+      tank: 620,
+    };
+    const bountyMap: Record<PoliceUnitKind, number> = {
+      cruiser: 120,
+      interceptor: 180,
+      heli: WANTED_CONFIG.POLICE_HELI_BOUNTY,
+      swat: 240,
+      tank: WANTED_CONFIG.POLICE_TANK_BOUNTY,
+    };
+    const texMap: Record<PoliceUnitKind, string> = {
+      cruiser: 'veh_cruiser',
+      interceptor: 'veh_racer',
+      heli: 'veh_heli',
+      swat: 'veh_swat',
+      tank: 'veh_tank',
+    };
+
+    this.maxHp = hpMap[unitKind];
+    this.hp = this.maxHp;
+    this.bounty = bountyMap[unitKind];
 
     const start = this.patrolLoop[this.patrolIdx];
     const next = this.patrolLoop[(this.patrolIdx + 1) % this.patrolLoop.length];
     this.desiredAngle = Math.atan2(next.y - start.y, next.x - start.x);
 
-    this.shadow = scene.add.ellipse(start.x + 3, start.y + 4, 50, 28, 0x000000, 0.5);
+    this.shadow = scene.add.ellipse(start.x + 3, start.y + 4, 52, 30, 0x000000, unitKind === 'heli' ? 0.34 : 0.5);
     this.shadow.setDepth(18);
 
     this.headlight = scene.add.image(start.x, start.y, 'fx_headlight');
@@ -57,10 +96,14 @@ export class Police {
     this.headlight.setAlpha(0.5);
     this.headlight.setDepth(19);
 
-    this.sprite = scene.physics.add.sprite(start.x, start.y, 'veh_cruiser');
-    this.sprite.setDepth(21);
+    this.sprite = scene.physics.add.sprite(start.x, start.y, texMap[unitKind]);
+    this.sprite.setDepth(unitKind === 'heli' ? 34 : 21);
     this.sprite.setRotation(this.desiredAngle);
     this.sprite.setCollideWorldBounds(true);
+
+    if (unitKind === 'interceptor') {
+      this.sprite.setTint(0x38bdf8);
+    }
 
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setCircle(14, (this.sprite.width - 28) / 2, (this.sprite.height - 28) / 2);
@@ -69,9 +112,20 @@ export class Police {
     this.lightbarGlow = scene.add.image(start.x, start.y, 'fx_pixel_glow');
     this.lightbarGlow.setTint(PALETTE.NEON_CYAN);
     this.lightbarGlow.setAlpha(0.18);
-    this.lightbarGlow.setScale(1.15);
+    this.lightbarGlow.setScale(unitKind === 'heli' ? 1.4 : 1.15);
     this.lightbarGlow.setBlendMode(Phaser.BlendModes.ADD);
-    this.lightbarGlow.setDepth(22);
+    this.lightbarGlow.setDepth(unitKind === 'heli' ? 35 : 22);
+
+    if (unitKind === 'heli') {
+      this.rotorOverlay = scene.add.image(start.x, start.y, 'veh_heli_rotor');
+      this.rotorOverlay.setDepth(36);
+      this.sprite.setScale(1.15);
+      this.rotorOverlay.setScale(1.15);
+    } else if (unitKind === 'tank') {
+      this.turretOverlay = scene.add.image(start.x, start.y, 'veh_tank_turret');
+      this.turretOverlay.setOrigin(18 / 58, 0.5);
+      this.turretOverlay.setDepth(22);
+    }
 
     this.smokeEmitter = scene.add.particles(0, 0, 'fx_smoke', {
       speed: { min: 10, max: 35 },
@@ -80,9 +134,35 @@ export class Police {
       lifespan: 700,
       emitting: false,
     });
-    this.smokeEmitter.setDepth(22);
+    this.smokeEmitter.setDepth(37);
 
     this.patrolIdx = (this.patrolIdx + 1) % this.patrolLoop.length;
+    this.syncAttachments();
+  }
+
+  public isFlying(): boolean {
+    return this.unitKind === 'heli';
+  }
+
+  public isActiveOnMap(): boolean {
+    return this.unitVisible;
+  }
+
+  public deployNear(x: number, y: number): void {
+    this.hp = this.maxHp;
+    this.state = 'PURSUE';
+    this.ramCooldownTimer = 0;
+    this.reverseTimer = 0;
+    this.currentSpeed = 0;
+    this.shootTimer = 1.0;
+    this.sprite.clearTint();
+    if (this.unitKind === 'interceptor') {
+      this.sprite.setTint(0x38bdf8);
+    }
+    this.sprite.setPosition(x, y);
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.reset(x, y);
+    this.setUnitVisible(true);
     this.syncAttachments();
   }
 
@@ -102,12 +182,13 @@ export class Police {
   }
 
   public isDisabled(): boolean {
-    return this.state === 'DISABLED';
+    return this.state === 'DISABLED' || !this.unitVisible;
   }
 
   public triggerRamRecovery(): void {
-    this.ramCooldownTimer = 0.85;
-    this.currentSpeed *= 0.45;
+    if (this.unitKind === 'heli') return;
+    this.ramCooldownTimer = this.unitKind === 'tank' ? 0.35 : 0.85;
+    this.currentSpeed *= this.unitKind === 'tank' ? 0.8 : 0.45;
   }
 
   public takeHit(
@@ -115,21 +196,24 @@ export class Police {
     dirX: number,
     dirY: number
   ): { destroyed: boolean; cashBonus: number } {
-    if (this.state === 'DISABLED') {
+    if (this.state === 'DISABLED' || !this.unitVisible) {
       return { destroyed: false, cashBonus: 0 };
     }
 
     this.hp = Math.max(0, this.hp - damage);
-    this.currentSpeed *= 0.86;
+    this.currentSpeed *= 0.88;
 
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
-    body.setVelocity(body.velocity.x + dirX * 55, body.velocity.y + dirY * 55);
+    const kbScale = this.unitKind === 'tank' ? 12 : this.unitKind === 'swat' ? 24 : 55;
+    body.setVelocity(body.velocity.x + dirX * kbScale, body.velocity.y + dirY * kbScale);
 
     this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
     this.scene.time.delayedCall(60, () => {
       if (!this.sprite.active) return;
       if (this.state === 'DISABLED') {
         this.sprite.setTint(0x475569).setTintMode(Phaser.TintModes.MULTIPLY);
+      } else if (this.unitKind === 'interceptor') {
+        this.sprite.setTint(0x38bdf8);
       } else {
         this.sprite.clearTint();
       }
@@ -137,13 +221,13 @@ export class Police {
 
     if (this.hp <= 0) {
       this.state = 'DISABLED';
-      this.disabledTimer = 11.0;
+      this.disabledTimer = this.unitKind === 'heli' || this.unitKind === 'tank' ? 18.0 : 11.0;
       this.currentSpeed = 0;
       body.setVelocity(0, 0);
       this.sprite.setTint(0x475569).setTintMode(Phaser.TintModes.MULTIPLY);
       this.headlight.setAlpha(0);
       this.lightbarGlow.setAlpha(0);
-      return { destroyed: true, cashBonus: 120 };
+      return { destroyed: true, cashBonus: this.bounty };
     }
 
     return { destroyed: false, cashBonus: 0 };
@@ -154,9 +238,16 @@ export class Police {
     playerPos: { x: number; y: number },
     playerInVehicle: boolean,
     lastKnownPos: { x: number; y: number } | null,
-    collisionManager: CollisionManager
+    collisionManager: CollisionManager,
+    onShoot?: (x: number, y: number, angleRad: number, damage: number, speed: number) => void
   ): void {
+    if (!this.unitVisible) return;
+
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+
+    if (this.rotorOverlay) {
+      this.rotorAngle = Phaser.Math.Angle.Wrap(this.rotorAngle + (this.state === 'DISABLED' ? 2 : 18) * dtSeconds);
+    }
 
     if (this.state === 'DISABLED') {
       body.setVelocity(0, 0);
@@ -168,7 +259,11 @@ export class Police {
 
       this.disabledTimer -= dtSeconds;
       if (this.disabledTimer <= 0) {
-        this.resetToPatrol();
+        if (this.minWantedStars > 0) {
+          this.setUnitVisible(false);
+        } else {
+          this.resetToPatrol();
+        }
       }
       this.syncAttachments();
       return;
@@ -212,9 +307,19 @@ export class Police {
 
     if (this.state === 'PURSUE') {
       targetPos = playerPos;
-      targetSpeed = playerInVehicle
-        ? WANTED_CONFIG.POLICE_PURSUIT_VEH_SPEED
-        : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED;
+      if (this.unitKind === 'heli') {
+        targetSpeed = WANTED_CONFIG.POLICE_HELI_SPEED;
+      } else if (this.unitKind === 'tank') {
+        targetSpeed = WANTED_CONFIG.POLICE_TANK_SPEED;
+      } else if (this.unitKind === 'swat') {
+        targetSpeed = WANTED_CONFIG.POLICE_SWAT_SPEED;
+      } else if (this.unitKind === 'interceptor') {
+        targetSpeed = playerInVehicle ? WANTED_CONFIG.POLICE_INTERCEPTOR_SPEED : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED + 25;
+      } else {
+        targetSpeed = playerInVehicle
+          ? WANTED_CONFIG.POLICE_PURSUIT_VEH_SPEED
+          : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED;
+      }
     } else if (this.state === 'SEARCH') {
       const anchor = lastKnownPos ?? playerPos;
       const distToAnchor = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, anchor.x, anchor.y);
@@ -240,9 +345,10 @@ export class Police {
     if (this.aiTimer >= 0.14) {
       this.aiTimer = 0;
       const rawAngle = Math.atan2(targetPos.y - this.sprite.y, targetPos.x - this.sprite.x);
-      this.desiredAngle = this.computeAvoidanceAngle(rawAngle, collisionManager);
+      this.desiredAngle =
+        this.unitKind === 'heli' ? rawAngle : this.computeAvoidanceAngle(rawAngle, collisionManager);
 
-      if (this.state !== 'PATROL' && body.speed < 22) {
+      if (this.unitKind !== 'heli' && this.state !== 'PATROL' && body.speed < 22) {
         this.stuckTimer += 0.14;
         if (this.stuckTimer >= 0.65) {
           this.stuckTimer = 0;
@@ -254,23 +360,45 @@ export class Police {
       }
     }
 
-    // Realistic cruiser steering inertia instead of guided-missile snapping
     const angleDiff = Phaser.Math.Angle.Wrap(this.desiredAngle - this.sprite.rotation);
-    const turnRate = (this.state === 'PURSUE' ? 2.35 : 2.1) * dtSeconds;
+    const turnRate = (this.unitKind === 'heli' ? 3.2 : this.state === 'PURSUE' ? 2.45 : 2.1) * dtSeconds;
     if (Math.abs(angleDiff) <= turnRate) {
       this.sprite.rotation = this.desiredAngle;
     } else {
       this.sprite.rotation += Math.sign(angleDiff) * turnRate;
     }
 
-    const turnSlowdown = Math.abs(angleDiff) > 0.7 ? 0.48 : 1;
-    const goalSpeed = targetSpeed * turnSlowdown;
+    const turnSlowdown = this.unitKind === 'heli' ? 0.85 : Math.abs(angleDiff) > 0.7 ? 0.48 : 1;
+    const distToPlayer = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerPos.x, playerPos.y);
+    const orbitSlow = this.unitKind === 'heli' && distToPlayer < 160 ? 0.45 : 1;
+    const goalSpeed = targetSpeed * turnSlowdown * orbitSlow;
     this.currentSpeed = Phaser.Math.Linear(this.currentSpeed, goalSpeed, Math.min(1, 3.4 * dtSeconds));
 
     body.setVelocity(
       Math.cos(this.sprite.rotation) * this.currentSpeed,
       Math.sin(this.sprite.rotation) * this.currentSpeed
     );
+
+    if (this.turretOverlay) {
+      const aimToPlayer = Math.atan2(playerPos.y - this.sprite.y, playerPos.x - this.sprite.x);
+      this.turretOverlay.setRotation(this.state === 'PURSUE' ? aimToPlayer : this.sprite.rotation);
+    }
+
+    // Armed Police Helicopter (4★+) & Tank (5★) fire pursuit rounds
+    if (onShoot && this.state === 'PURSUE' && (this.unitKind === 'heli' || this.unitKind === 'tank')) {
+      this.shootTimer -= dtSeconds;
+      const fireDist = this.unitKind === 'heli' ? 420 : 390;
+      if (this.shootTimer <= 0 && distToPlayer <= fireDist) {
+        const aimAngle = Math.atan2(playerPos.y - this.sprite.y, playerPos.x - this.sprite.x);
+        if (this.unitKind === 'heli') {
+          this.shootTimer = 0.52;
+          onShoot(this.sprite.x, this.sprite.y, aimAngle + (Math.random() - 0.5) * 0.08, 7, 460);
+        } else {
+          this.shootTimer = 1.65;
+          onShoot(this.sprite.x + Math.cos(aimAngle) * 30, this.sprite.y + Math.sin(aimAngle) * 30, aimAngle, 20, 420);
+        }
+      }
+    }
 
     this.updateLightbar(dtSeconds);
     this.syncAttachments();
@@ -283,7 +411,11 @@ export class Police {
     this.ramCooldownTimer = 0;
     this.reverseTimer = 0;
     this.currentSpeed = 0;
-    this.sprite.clearTint();
+    if (this.unitKind === 'interceptor') {
+      this.sprite.setTint(0x38bdf8);
+    } else {
+      this.sprite.clearTint();
+    }
     const respawn = this.patrolLoop[this.patrolIdx];
     this.sprite.setPosition(respawn.x, respawn.y);
     body.reset(respawn.x, respawn.y);
@@ -292,10 +424,13 @@ export class Police {
   }
 
   public setUnitVisible(visible: boolean): void {
+    this.unitVisible = visible;
     this.sprite.setVisible(visible);
     this.shadow.setVisible(visible);
     this.headlight.setVisible(visible);
     this.lightbarGlow.setVisible(visible);
+    if (this.rotorOverlay) this.rotorOverlay.setVisible(visible);
+    if (this.turretOverlay) this.turretOverlay.setVisible(visible);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.enable = visible;
     if (!visible) {
@@ -350,14 +485,23 @@ export class Police {
     const x = this.sprite.x;
     const y = this.sprite.y;
     const rot = this.sprite.rotation;
+    const airOffset = this.unitKind === 'heli' ? 18 : 0;
 
-    this.shadow.setPosition(x + 3, y + 4);
+    this.shadow.setPosition(x + 3 + airOffset, y + 4 + airOffset);
     this.shadow.setRotation(rot);
 
     this.headlight.setPosition(x + Math.cos(rot) * 20, y + Math.sin(rot) * 20);
     this.headlight.setRotation(rot);
 
     this.lightbarGlow.setPosition(x, y);
+
+    if (this.rotorOverlay) {
+      this.rotorOverlay.setPosition(x, y);
+      this.rotorOverlay.setRotation(this.rotorAngle);
+    }
+    if (this.turretOverlay) {
+      this.turretOverlay.setPosition(x, y);
+    }
   }
 
   public destroy(): void {
@@ -365,6 +509,8 @@ export class Police {
     this.shadow.destroy();
     this.headlight.destroy();
     this.lightbarGlow.destroy();
+    if (this.rotorOverlay) this.rotorOverlay.destroy();
+    if (this.turretOverlay) this.turretOverlay.destroy();
     this.sprite.destroy();
   }
 }

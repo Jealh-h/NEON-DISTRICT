@@ -1,4 +1,5 @@
 import { VehicleUpgradeLevels } from '../ui/GameEvents';
+import type { SavedProgressionState } from './ProgressionManager';
 import type { SavedWeaponState } from './WeaponManager';
 
 export interface SavedVehicleState {
@@ -11,13 +12,14 @@ export interface SavedVehicleState {
 }
 
 export interface SaveData {
-  version: 1;
+  version: 1 | 2;
   savedAt: number;
   district: string;
   player: {
     x: number;
     y: number;
     health: number;
+    armor?: number;
     cash: number;
   };
   ownsSafehouse?: boolean;
@@ -26,6 +28,7 @@ export interface SaveData {
   vehicles: Record<string, SavedVehicleState>;
   weapons?: SavedWeaponState;
   collectedChipIds?: string[];
+  progression?: SavedProgressionState;
   settings: {
     muted: boolean;
   };
@@ -48,7 +51,7 @@ export class SaveManager {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Partial<SaveData>;
       if (
-        parsed.version !== 1 ||
+        (parsed.version !== 1 && parsed.version !== 2) ||
         typeof parsed.savedAt !== 'number' ||
         !parsed.player ||
         typeof parsed.player.x !== 'number' ||
@@ -60,13 +63,14 @@ export class SaveManager {
       }
 
       return {
-        version: 1,
+        version: 2,
         savedAt: parsed.savedAt,
         district: typeof parsed.district === 'string' ? parsed.district : '霓虹广场',
         player: {
           x: parsed.player.x,
           y: parsed.player.y,
           health: parsed.player.health,
+          armor: typeof parsed.player.armor === 'number' ? parsed.player.armor : 0,
           cash: parsed.player.cash,
         },
         ownsSafehouse: Boolean(parsed.ownsSafehouse),
@@ -80,6 +84,7 @@ export class SaveManager {
         collectedChipIds: Array.isArray(parsed.collectedChipIds)
           ? parsed.collectedChipIds.filter((id): id is string => typeof id === 'string')
           : [],
+        progression: parsed.progression,
         settings: {
           muted: Boolean(parsed.settings?.muted),
         },

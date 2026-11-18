@@ -23,8 +23,11 @@ class TrafficCar {
   private aiTimer: number;
   private pauseTimer = 0;
   private blockedAhead = false;
+  public readonly textureKey: string;
+  private hiddenUntilMs = 0;
 
   constructor(scene: Phaser.Scene, def: TrafficLoopDef) {
+    this.textureKey = def.textureKey;
     this.waypoints = def.waypoints;
     this.wpIdx = def.startWaypointIdx;
     this.maxCruiseSpeed = TRAFFIC_CONFIG.CRUISE_SPEED * def.speedMultiplier;
@@ -59,9 +62,25 @@ class TrafficCar {
   public update(
     dtSeconds: number,
     timeSeconds: number,
+    nowMs: number,
     obstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }>
   ): void {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+
+    if (this.hiddenUntilMs > 0) {
+      if (nowMs >= this.hiddenUntilMs) {
+        this.hiddenUntilMs = 0;
+        const wp = this.waypoints[this.wpIdx];
+        this.sprite.setPosition(wp.x, wp.y);
+        body.reset(wp.x, wp.y);
+        body.enable = true;
+        this.sprite.setVisible(true);
+        this.shadow.setVisible(true);
+        this.headlight.setVisible(true);
+      } else {
+        return;
+      }
+    }
 
     if (this.pauseTimer > 0) {
       this.pauseTimer -= dtSeconds;
@@ -189,8 +208,30 @@ class TrafficCar {
     this.currentSpeed = 0;
   }
 
+  public isHidden(): boolean {
+    return this.hiddenUntilMs > 0;
+  }
+
+  public markHijacked(nowMs: number): { x: number; y: number; rotation: number; textureKey: string } {
+    const info = {
+      x: this.sprite.x,
+      y: this.sprite.y,
+      rotation: this.sprite.rotation,
+      textureKey: this.textureKey,
+    };
+    this.hiddenUntilMs = nowMs + 25000;
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(0, 0);
+    body.enable = false;
+    this.sprite.setVisible(false);
+    this.shadow.setVisible(false);
+    this.headlight.setVisible(false);
+    this.currentSpeed = 0;
+    return info;
+  }
+
   public getSpeedPx(): number {
-    return Math.round(this.currentSpeed);
+    return this.hiddenUntilMs > 0 ? 0 : Math.round(this.currentSpeed);
   }
 
   private syncAttachments(): void {
@@ -329,14 +370,36 @@ export class TrafficManager {
     timeSeconds: number,
     dynamicObstacles: Array<{ x: number; y: number }>
   ): void {
+    const nowMs = this.scene.time.now;
     const allObstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }> = [
       ...dynamicObstacles,
-      ...this.cars.map((c) => ({ x: c.sprite.x, y: c.sprite.y, selfSprite: c.sprite })),
+      ...this.cars
+        .filter((c) => !c.isHidden())
+        .map((c) => ({ x: c.sprite.x, y: c.sprite.y, selfSprite: c.sprite })),
     ];
 
     for (const car of this.cars) {
-      car.update(dtSeconds, timeSeconds, allObstacles);
+      car.update(dtSeconds, timeSeconds, nowMs, allObstacles);
     }
+  }
+
+  public hijackNearestCar(
+    x: number,
+    y: number,
+    maxDist: number
+  ): { x: number; y: number; rotation: number; textureKey: string } | null {
+    let best: TrafficCar | null = null;
+    let bestDist = maxDist;
+    for (const car of this.cars) {
+      if (car.isHidden()) continue;
+      const d = Phaser.Math.Distance.Between(x, y, car.sprite.x, car.sprite.y);
+      if (d <= bestDist) {
+        bestDist = d;
+        best = car;
+      }
+    }
+    if (!best) return null;
+    return best.markHijacked(this.scene.time.now);
   }
 
   public getCarSprites(): Phaser.Physics.Arcade.Sprite[] {
@@ -344,11 +407,13 @@ export class TrafficManager {
   }
 
   public getFastVehicleData(): Array<{ x: number; y: number; speedPx: number }> {
-    return this.cars.map((c) => ({
-      x: c.sprite.x,
-      y: c.sprite.y,
-      speedPx: c.getSpeedPx(),
-    }));
+    return this.cars
+      .filter((c) => !c.isHidden())
+      .map((c) => ({
+        x: c.sprite.x,
+        y: c.sprite.y,
+        speedPx: c.getSpeedPx(),
+      }));
   }
 
   public freezeAll(): void {

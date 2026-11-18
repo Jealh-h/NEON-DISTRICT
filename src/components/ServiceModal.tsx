@@ -17,7 +17,10 @@ import {
 import { useEffect } from 'react';
 import {
   ECONOMY_CONFIG,
+  HORDE_GEAR_COSTS,
+  MECH_SPECS,
   MISSION_DEFINITIONS,
+  MechKind,
   VEHICLE_PAINT_OPTIONS,
   VEHICLE_UPGRADE_CONFIG,
   VehicleUpgradeTrack,
@@ -41,8 +44,11 @@ export function ServiceModal() {
   const arcadeResult = useGameStore((s) => s.arcadeResult);
   const health = useGameStore((s) => s.health);
   const maxHealth = useGameStore((s) => s.maxHealth);
+  const armor = useGameStore((s) => s.armor);
+  const maxArmor = useGameStore((s) => s.maxArmor);
   const wantedLevel = useGameStore((s) => s.wantedLevel);
   const weapon = useGameStore((s) => s.weapon);
+  const horde = useGameStore((s) => s.horde);
   const activeMission = useGameStore((s) => s.activeMission);
   const completedMissionIds = useGameStore((s) => s.completedMissionIds);
   const totalMissionEarnings = useGameStore((s) => s.totalMissionEarnings);
@@ -597,26 +603,166 @@ export function ServiceModal() {
               })}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 border border-[#00F5FF]/40 bg-[#111827] p-3.5">
-              <div>
-                <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
-                  <HeartPulse className="h-4 w-4 text-[#00F5FF]" />
-                  <span>战地紧急纳米急救</span>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 border border-[#00F5FF]/40 bg-[#111827] p-3.5">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
+                    <HeartPulse className="h-4 w-4 text-[#00F5FF]" />
+                    <span>战地紧急纳米急救</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    生命 {health}/{maxHealth}，恢复全部生命值。
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  当前生命 {health}/{maxHealth}，立即注射纳米修复液将生命恢复至上限。
-                </p>
+                <button
+                  type="button"
+                  disabled={health >= maxHealth || cash < ECONOMY_CONFIG.CLINIC_HEAL_COST}
+                  onClick={() =>
+                    gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'heal' })
+                  }
+                  className="min-h-[44px] min-w-[112px] cursor-pointer border border-[#00F5FF] bg-[#00F5FF]/15 px-3.5 py-2 font-mono-tabular text-xs font-bold text-[#00F5FF] hover:bg-[#00F5FF] hover:text-[#080D18] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-transparent disabled:text-slate-500"
+                >
+                  {health >= maxHealth ? '生命已满' : `急救 $${ECONOMY_CONFIG.CLINIC_HEAL_COST}`}
+                </button>
               </div>
-              <button
-                type="button"
-                disabled={health >= maxHealth || cash < ECONOMY_CONFIG.CLINIC_HEAL_COST}
-                onClick={() =>
-                  gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'heal' })
-                }
-                className="min-h-[44px] min-w-[120px] cursor-pointer border border-[#00F5FF] bg-[#00F5FF]/15 px-4 py-2 font-mono-tabular text-xs font-bold text-[#00F5FF] hover:bg-[#00F5FF] hover:text-[#080D18] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-transparent disabled:text-slate-500"
-              >
-                {health >= maxHealth ? '生命已满' : `急救 $${ECONOMY_CONFIG.CLINIC_HEAL_COST}`}
-              </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border border-[#38BDF8]/45 bg-[#111827] p-3.5">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
+                    <Shield className="h-4 w-4 text-[#38BDF8]" />
+                    <span>战术防弹护甲 (+{HORDE_GEAR_COSTS.ARMOR_PACK_AMOUNT})</span>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    护甲 {armor}/{maxArmor} · 吸收 75% 伤害。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={armor >= maxArmor || cash < HORDE_GEAR_COSTS.ARMOR_PACK_COST}
+                  onClick={() =>
+                    gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'buy_armor' })
+                  }
+                  className="min-h-[44px] min-w-[112px] cursor-pointer border border-[#38BDF8] bg-[#38BDF8]/15 px-3.5 py-2 font-mono-tabular text-xs font-bold text-[#38BDF8] hover:bg-[#38BDF8] hover:text-[#080D18] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-transparent disabled:text-slate-500"
+                >
+                  {armor >= maxArmor ? '护甲已满' : `补甲 $${HORDE_GEAR_COSTS.ARMOR_PACK_COST}`}
+                </button>
+              </div>
+            </div>
+
+            {/* Horde Mode Mechs & Heavy Tactical Support */}
+            <div className="border border-[#FFD166]/55 bg-[#111827] p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#FFD166]">
+                  <Zap className="h-4 w-4" />
+                  <span>无尽挑战 · 机甲空降与重装火力支援</span>
+                </div>
+                <span className="font-mono-tabular text-[11px] text-slate-400">
+                  {playMode === 'horde'
+                    ? `哨戒炮 ${horde.mech?.turretCount ?? 0}/${HORDE_GEAR_COSTS.MAX_TURRETS}`
+                    : '仅无尽杀怪模式可用'}
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-1 gap-2.5">
+                {(['titan', 'phantom'] as MechKind[]).map((mKind) => {
+                  const spec = MECH_SPECS[mKind];
+                  const isActiveThis = horde.mech?.active && horde.mech.kind === mKind;
+                  return (
+                    <div
+                      key={mKind}
+                      className="flex flex-wrap items-center justify-between gap-3 border border-slate-700/90 bg-[#0A101E] p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-bold" style={{ color: spec.accentHex }}>
+                            {spec.name}
+                          </span>
+                          <span className="border border-slate-700 bg-[#080D18] px-1.5 py-0.5 text-[10px] text-slate-300">
+                            {spec.tag}
+                          </span>
+                          {isActiveThis && (
+                            <span className="border border-[#00F5FF]/70 bg-[#00F5FF]/15 px-1.5 py-0.5 text-[10px] font-bold text-[#00F5FF]">
+                              驾驶中
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-slate-300">
+                          {spec.description}
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-x-3 font-mono-tabular text-[10px] text-slate-400">
+                          <span>护盾：{spec.maxHp}</span>
+                          <span>主武器：{spec.primaryWeaponName}</span>
+                          <span>技能：{spec.abilityName}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={playMode !== 'horde' || cash < spec.cost}
+                        onClick={() => {
+                          gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, {
+                            serviceType: 'deploy_mech',
+                            mechKind: mKind,
+                          });
+                          close();
+                        }}
+                        className="min-h-[44px] min-w-[116px] shrink-0 cursor-pointer border border-[#FFD166] bg-[#FFD166]/15 px-3.5 py-2 font-mono-tabular text-xs font-bold text-[#FFD166] transition-colors hover:bg-[#FFD166] hover:text-[#080D18] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-transparent disabled:text-slate-500"
+                      >
+                        {isActiveThis ? `补满护盾 $${spec.cost}` : `空降机甲 $${spec.cost}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                <button
+                  type="button"
+                  disabled={
+                    playMode !== 'horde' ||
+                    (horde.mech?.turretCount ?? 0) >= HORDE_GEAR_COSTS.MAX_TURRETS ||
+                    cash < HORDE_GEAR_COSTS.TURRET_COST
+                  }
+                  onClick={() =>
+                    gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'deploy_turret' })
+                  }
+                  className="flex min-h-[54px] cursor-pointer flex-col items-start justify-between border border-[#00F5FF]/70 bg-[#0A101E] p-2.5 text-left transition-colors hover:bg-[#00F5FF]/15 disabled:cursor-not-allowed disabled:border-slate-800 disabled:opacity-45"
+                >
+                  <span className="text-xs font-bold text-[#00F5FF]">部署自动哨戒炮</span>
+                  <span className="font-mono-tabular text-[11px] text-slate-300">
+                    ${HORDE_GEAR_COSTS.TURRET_COST} · 持续 {HORDE_GEAR_COSTS.TURRET_DURATION_SEC}s
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={playMode !== 'horde' || cash < HORDE_GEAR_COSTS.ORBITAL_STRIKE_COST}
+                  onClick={() => {
+                    gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'orbital_strike' });
+                    close();
+                  }}
+                  className="flex min-h-[54px] cursor-pointer flex-col items-start justify-between border border-[#FF2E88]/75 bg-[#0A101E] p-2.5 text-left transition-colors hover:bg-[#FF2E88]/15 disabled:cursor-not-allowed disabled:border-slate-800 disabled:opacity-45"
+                >
+                  <span className="text-xs font-bold text-[#FF2E88]">轨道离子轰炸</span>
+                  <span className="font-mono-tabular text-[11px] text-slate-300">
+                    ${HORDE_GEAR_COSTS.ORBITAL_STRIKE_COST} · {HORDE_GEAR_COSTS.ORBITAL_BEAM_COUNT} 道光束清场
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={playMode !== 'horde' || cash < HORDE_GEAR_COSTS.AIRDROP_TANK_COST}
+                  onClick={() => {
+                    gameEvents.emit(GAME_EVENT.PURCHASE_SERVICE, { serviceType: 'airdrop_tank' });
+                    close();
+                  }}
+                  className="flex min-h-[54px] cursor-pointer flex-col items-start justify-between border border-emerald-400/75 bg-[#0A101E] p-2.5 text-left transition-colors hover:bg-emerald-500/15 disabled:cursor-not-allowed disabled:border-slate-800 disabled:opacity-45"
+                >
+                  <span className="text-xs font-bold text-emerald-300">空投泰坦主战坦克</span>
+                  <span className="font-mono-tabular text-[11px] text-slate-300">
+                    ${HORDE_GEAR_COSTS.AIRDROP_TANK_COST} · 120mm 主炮碾压
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         )}

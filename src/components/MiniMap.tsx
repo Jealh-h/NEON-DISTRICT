@@ -22,6 +22,7 @@ export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
   const horde = useGameStore((s) => s.horde);
   const race = useGameStore((s) => s.race);
   const exploration = useGameStore((s) => s.exploration);
+  const randomEvents = useGameStore((s) => s.randomEvents);
 
   if (!districtData) return null;
 
@@ -78,9 +79,22 @@ export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
           />
         )}
 
-        {/* Police Units */}
+        {/* Police Units & Vigilante Bounty Target */}
         {playMode === 'sandbox' &&
           policeMarkers.map((pm) => {
+            if (pm.id === 'vigilante-target') {
+              return (
+                <g key={pm.id} transform={`translate(${pm.x}, ${pm.y})`}>
+                  <circle r={48} fill="#FFD166" fillOpacity={0.2} stroke="#FF4545" strokeWidth={8} />
+                  <polygon
+                    points="0,-28 28,0 0,28 -28,0"
+                    fill="#FFD166"
+                    stroke="#FF4545"
+                    strokeWidth={7}
+                  />
+                </g>
+              );
+            }
             const isHostile = pm.state !== 'PATROL';
             return (
               <g key={pm.id} transform={`translate(${pm.x}, ${pm.y})`}>
@@ -113,6 +127,26 @@ export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
               stroke="#080D18"
               strokeWidth={6}
             />
+          ))}
+
+        {/* Sandbox Random Events */}
+        {playMode === 'sandbox' &&
+          randomEvents.map((ev) => (
+            <g key={`minimap-ev-${ev.id}`} transform={`translate(${ev.x}, ${ev.y})`}>
+              <circle
+                r={58}
+                fill={ev.accentColor}
+                fillOpacity={0.18}
+                stroke={ev.accentColor}
+                strokeWidth={8}
+              />
+              <polygon
+                points="0,-28 28,0 0,28 -28,0"
+                fill={ev.accentColor}
+                stroke="#080D18"
+                strokeWidth={7}
+              />
+            </g>
           ))}
 
         {/* Active Mission Target Beacon */}

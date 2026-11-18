@@ -1,5 +1,8 @@
 import Phaser from 'phaser';
 import {
+  HORDE_GEAR_COSTS,
+  MECH_SPECS,
+  MechKind,
   PALETTE,
   WEAPON_ORDER,
   WEAPON_SPECS,
@@ -8,6 +11,7 @@ import {
   WeaponUpgradeTrack,
 } from '../config/BalanceConfig';
 import { Player } from '../entities/Player';
+import { Vehicle } from '../entities/Vehicle';
 import { GAME_EVENT, gameEvents, WeaponUpgradeLevels } from '../ui/GameEvents';
 import { CollisionManager } from '../world/CollisionManager';
 import { AudioManager } from './AudioManager';
@@ -15,6 +19,8 @@ import type { HordeManager } from './HordeManager';
 import type { InteractivePropManager } from './InteractivePropManager';
 import { NPCManager } from './NPCManager';
 import { PoliceManager } from './PoliceManager';
+import type { ProgressionManager } from './ProgressionManager';
+import type { RandomEventManager } from './RandomEventManager';
 import { TrafficManager } from './TrafficManager';
 import { VehicleManager } from './VehicleManager';
 import { CrimeType } from './WantedManager';
@@ -31,6 +37,8 @@ interface ActiveProjectile {
   weaponId: WeaponId;
   pierceLeft: number;
   blastRadius: number;
+  ignoreWalls?: boolean;
+  isCrit?: boolean;
   hitTargets: Set<object>;
 }
 
@@ -81,6 +89,9 @@ export class WeaponManager {
 
   private projectiles: ActiveProjectile[] = [];
   private lastFireAt = 0;
+  private lastMountedFireAt = 0;
+  private lastMechFireAt = 0;
+  private autocannonSide = 0;
   private lastEmptyClickAt = 0;
 
   private muzzleFlash: Phaser.GameObjects.Image;
@@ -88,6 +99,12 @@ export class WeaponManager {
   private hitSparkEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private shellEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private explosionEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+
+  private progressionManager?: ProgressionManager;
+  private hordeRef?: HordeManager;
+  private randomEventManager?: RandomEventManager;
+  private getPlayerHpRatio?: () => number;
+  private onCombatKillBonus?: (healHp: number, healArmor: number, exp: number) => void;
 
   constructor(
     scene: Phaser.Scene,
@@ -133,6 +150,20 @@ export class WeaponManager {
       emitting: false,
     });
     this.explosionEmitter.setDepth(27);
+  }
+
+  public configureIntegrations(opts: {
+    progressionManager?: ProgressionManager;
+    hordeManager?: HordeManager;
+    randomEventManager?: RandomEventManager;
+    getPlayerHpRatio?: () => number;
+    onCombatKillBonus?: (healHp: number, healArmor: number, exp: number) => void;
+  }): void {
+    this.progressionManager = opts.progressionManager;
+    this.hordeRef = opts.hordeManager;
+    this.randomEventManager = opts.randomEventManager;
+    this.getPlayerHpRatio = opts.getPlayerHpRatio;
+    this.onCombatKillBonus = opts.onCombatKillBonus;
   }
 
   public getEquippedId(): WeaponId {
@@ -239,9 +270,38 @@ export class WeaponManager {
     onCrime: (type: CrimeType, pos: { x: number; y: number }, hasWitness: boolean) => void,
     overdriveActive = false
   ): boolean {
+    const muzzle = player.getMuzzlePosition();
+    return this.firePlayerWeaponFromOrigin(
+      nowMs,
+      muzzle,
+      aimAngleRad,
+      npcManager,
+      policeManager,
+      onCrime,
+      overdriveActive,
+      player
+    );
+  }
+
+  private firePlayerWeaponFromOrigin(
+    nowMs: number,
+    muzzle: { x: number; y: number },
+    aimAngleRad: number,
+    npcManager: NPCManager,
+    policeManager: PoliceManager,
+    onCrime: (type: CrimeType, pos: { x: number; y: number }, hasWitness: boolean) => void,
+    overdriveActive: boolean,
+    player?: Player
+  ): boolean {
     const spec = WEAPON_SPECS[this.equippedId];
     const baseInterval = this.getEffectiveFireInterval(this.equippedId);
-    const fireInterval = overdriveActive ? baseInterval * 0.56 : baseInterval;
+    const progRateMult = this.progressionManager?.getFireRateMultiplier() ?? 1;
+    const hordeRateMult = this.hordeRef?.isActive() ? this.hordeRef.getFireRateMultiplier() : 1;
+    const totalRateMult = progRateMult * hordeRateMult;
+    const fireInterval = Math.max(
+      40,
+      Math.round((overdriveActive ? baseInterval * 0.56 : baseInterval) / totalRateMult)
+    );
     if (nowMs - this.lastFireAt < fireInterval) {
       return false;
     }
@@ -251,7 +311,7 @@ export class WeaponManager {
         this.lastEmptyClickAt = nowMs;
         this.audioManager.playEmptyClick();
         this.equippedId = 'pistol';
-        player.setWeaponVisual('pistol');
+        player?.setWeaponVisual('pistol');
         this.emitTelemetry();
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${spec.shortName} 弹药耗尽，已切回脉冲手枪！`);
       }
@@ -263,8 +323,6 @@ export class WeaponManager {
       this.ammoByWeapon[this.equippedId] = Math.max(0, this.ammoByWeapon[this.equippedId] - 1);
       this.emitTelemetry();
     }
-
-    const muzzle = player.getMuzzlePosition();
 
     // 1. Muzzle flash + additive pop
     this.muzzleFlash.setPosition(muzzle.x, muzzle.y);
@@ -293,7 +351,7 @@ export class WeaponManager {
     }
 
     // 3. Shooter recoil kick & camera shake punch
-    player.applyRecoilKick(spec.recoilPx);
+    player?.applyRecoilKick(spec.recoilPx);
     const shakeMs =
       spec.id === 'launcher'
         ? 145
@@ -305,13 +363,24 @@ export class WeaponManager {
     this.scene.cameras.main.shake(shakeMs, spec.cameraShake);
     this.audioManager.playGunshot(spec.id);
 
-    // 4. Spawn pellets with upgraded stats
+    // 4. Spawn pellets with upgraded stats + progression & horde roguelite bonuses
     const spreadRad = Phaser.Math.DegToRad(spec.spreadDeg);
     const baseDmg = this.getEffectiveDamage(spec.id);
-    const pelletDamage = overdriveActive ? Math.round(baseDmg * 1.45) : baseDmg;
-    const projSpeed = this.getEffectiveProjectileSpeed(spec.id);
+    const progDmgMult = this.progressionManager?.getWeaponDamageMultiplier() ?? 1;
+    const hordeDmgMult = this.hordeRef?.isActive()
+      ? this.hordeRef.getDamageMultiplier(this.getPlayerHpRatio ? this.getPlayerHpRatio() : 1)
+      : 1;
+    const critChance = this.progressionManager?.getCritChance() ?? 0;
+    const isCrit = critChance > 0 && Math.random() < critChance;
+    const critMult = isCrit ? 1.75 : 1;
+    const pelletDamage = Math.round(
+      baseDmg * (overdriveActive ? 1.45 : 1) * progDmgMult * hordeDmgMult * critMult
+    );
+    const hordeSpeedMult = this.hordeRef?.isActive() ? this.hordeRef.getProjectileSpeedMultiplier() : 1;
+    const projSpeed = Math.round(this.getEffectiveProjectileSpeed(spec.id) * hordeSpeedMult);
     const range = this.getEffectiveRange(spec.id);
-    const pierceCount = this.getEffectivePierceCount(spec.id);
+    const bonusPierce = this.hordeRef?.isActive() ? this.hordeRef.getBonusPierce() : 0;
+    const pierceCount = this.getEffectivePierceCount(spec.id) + bonusPierce;
     const blastRadius = this.getEffectiveBlastRadius(spec.id);
 
     for (let i = 0; i < spec.pellets; i++) {
@@ -351,10 +420,11 @@ export class WeaponManager {
         dirY,
         distanceLeft: range,
         damage: pelletDamage,
-        colorNum: overdriveActive ? PALETTE.GOLD : spec.colorNum,
+        colorNum: isCrit ? PALETTE.GOLD : overdriveActive ? PALETTE.GOLD : spec.colorNum,
         weaponId: spec.id,
         pierceLeft: pierceCount,
         blastRadius,
+        isCrit,
         hitTargets: new Set<object>(),
       });
     }
@@ -367,6 +437,394 @@ export class WeaponManager {
     }
 
     return true;
+  }
+
+  public tryFireVehicleWeapon(
+    nowMs: number,
+    vehicle: Vehicle,
+    aimAngleRad: number,
+    player: Player,
+    npcManager: NPCManager,
+    policeManager: PoliceManager,
+    onCrime: (type: CrimeType, pos: { x: number; y: number }, hasWitness: boolean) => void,
+    overdriveActive = false
+  ): boolean {
+    const kind = vehicle.spec.weaponKind;
+
+    if (kind === 'tank_cannon') {
+      const cd = overdriveActive ? 560 : 950;
+      if (nowMs - this.lastMountedFireAt < cd) return false;
+      this.lastMountedFireAt = nowMs;
+
+      const angle = vehicle.getTurretAngle();
+      const muzzle = vehicle.getTurretMuzzle();
+      const dirX = Math.cos(angle);
+      const dirY = Math.sin(angle);
+
+      this.muzzleFlash.setPosition(muzzle.x, muzzle.y);
+      this.muzzleFlash.setRotation(angle);
+      this.muzzleFlash.setTint(PALETTE.GOLD);
+      this.muzzleFlash.setScale(2.1);
+      this.muzzleFlash.setVisible(true);
+      this.muzzleTimer = 0.08;
+
+      this.scene.cameras.main.shake(175, 0.011);
+      this.audioManager.playTankCannon();
+
+      const sprite = this.scene.add.image(muzzle.x, muzzle.y, 'proj_tank_shell');
+      sprite.setDepth(26);
+      sprite.setRotation(angle);
+
+      this.projectiles.push({
+        sprite,
+        vx: dirX * 880,
+        vy: dirY * 880,
+        dirX,
+        dirY,
+        distanceLeft: 740,
+        damage: overdriveActive ? 300 : 220,
+        colorNum: PALETTE.GOLD,
+        weaponId: 'launcher',
+        pierceLeft: 1,
+        blastRadius: 135,
+        hitTargets: new Set<object>(),
+      });
+
+      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 290);
+      if (policeManager.isPoliceNearby(muzzle.x, muzzle.y, 520)) {
+        onCrime('weapon_discharge', muzzle, true);
+      }
+      return true;
+    }
+
+    if (kind === 'autocannon') {
+      const cd = overdriveActive ? 68 : 105;
+      if (nowMs - this.lastMountedFireAt < cd) return false;
+      this.lastMountedFireAt = nowMs;
+
+      const muzzles = vehicle.getAutocannonMuzzles();
+      this.autocannonSide = (this.autocannonSide + 1) % muzzles.length;
+      const muzzle = muzzles[this.autocannonSide];
+      const angle = vehicle.sprite.rotation + (Math.random() - 0.5) * 0.06;
+      const dirX = Math.cos(angle);
+      const dirY = Math.sin(angle);
+
+      this.muzzleFlash.setPosition(muzzle.x, muzzle.y);
+      this.muzzleFlash.setRotation(angle);
+      this.muzzleFlash.setTint(PALETTE.GOLD);
+      this.muzzleFlash.setScale(1.25);
+      this.muzzleFlash.setVisible(true);
+      this.muzzleTimer = 0.04;
+
+      this.scene.cameras.main.shake(45, 0.0025);
+      this.audioManager.playGunshot('rifle');
+
+      const sprite = this.scene.add.image(muzzle.x, muzzle.y, 'proj_heli_autocannon');
+      sprite.setDepth(35);
+      sprite.setRotation(angle);
+
+      this.projectiles.push({
+        sprite,
+        vx: dirX * 1120,
+        vy: dirY * 1120,
+        dirX,
+        dirY,
+        distanceLeft: 640,
+        damage: overdriveActive ? 54 : 38,
+        colorNum: PALETTE.GOLD,
+        weaponId: 'rifle',
+        pierceLeft: 1,
+        blastRadius: 0,
+        ignoreWalls: true,
+        hitTargets: new Set<object>(),
+      });
+
+      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 230);
+      if (policeManager.isPoliceNearby(muzzle.x, muzzle.y, 500)) {
+        onCrime('weapon_discharge', muzzle, true);
+      }
+      return true;
+    }
+
+    // Standard drive-by shooting from cars/motos/buggies/swat
+    const origin = {
+      x: vehicle.sprite.x + Math.cos(aimAngleRad) * 18,
+      y: vehicle.sprite.y + Math.sin(aimAngleRad) * 18,
+    };
+    return this.firePlayerWeaponFromOrigin(
+      nowMs,
+      origin,
+      aimAngleRad,
+      npcManager,
+      policeManager,
+      onCrime,
+      overdriveActive,
+      player
+    );
+  }
+
+  public tryFireMechPrimary(
+    nowMs: number,
+    mechKind: MechKind,
+    player: Player,
+    aimAngleRad: number,
+    overdriveActive = false
+  ): boolean {
+    const spec = MECH_SPECS[mechKind];
+    const cd = overdriveActive ? Math.round(spec.fireIntervalMs * 0.6) : spec.fireIntervalMs;
+    if (nowMs - this.lastMechFireAt < cd) return false;
+    this.lastMechFireAt = nowMs;
+
+    const muzzles = player.getMechDualMuzzles();
+    const isPhantom = mechKind === 'phantom';
+    const projTex = isPhantom ? 'proj_rail' : 'proj_mech_plasma';
+    const colorNum = isPhantom ? PALETTE.NEON_CYAN : PALETTE.GOLD;
+
+    this.muzzleFlash.setPosition(muzzles[0].x, muzzles[0].y);
+    this.muzzleFlash.setRotation(aimAngleRad);
+    this.muzzleFlash.setTint(colorNum);
+    this.muzzleFlash.setScale(1.45);
+    this.muzzleFlash.setVisible(true);
+    this.muzzleTimer = 0.045;
+
+    if (isPhantom) {
+      this.audioManager.playGunshot('railgun');
+      this.scene.cameras.main.shake(65, 0.0038);
+    } else {
+      this.audioManager.playMechPlasma();
+      this.scene.cameras.main.shake(50, 0.003);
+    }
+
+    const mechMult =
+      (this.progressionManager?.getMechAndTurretPowerMultiplier() ?? 1) *
+      (this.hordeRef?.isActive() ? this.hordeRef.getMechAndTurretPowerMultiplier() : 1) *
+      (this.hordeRef?.isActive() ? this.hordeRef.getDamageMultiplier(1) : 1);
+
+    for (const muzzle of muzzles) {
+      const spread = (Math.random() - 0.5) * (isPhantom ? 0.025 : 0.06);
+      const ang = aimAngleRad + spread;
+      const dirX = Math.cos(ang);
+      const dirY = Math.sin(ang);
+      const sprite = this.scene.add.image(muzzle.x, muzzle.y, projTex);
+      sprite.setDepth(25);
+      sprite.setRotation(ang);
+      if (isPhantom) {
+        sprite.setBlendMode(Phaser.BlendModes.ADD);
+      }
+
+      this.projectiles.push({
+        sprite,
+        vx: dirX * spec.projectileSpeed,
+        vy: dirY * spec.projectileSpeed,
+        dirX,
+        dirY,
+        distanceLeft: spec.range,
+        damage: Math.round((overdriveActive ? spec.damage * 1.4 : spec.damage) * mechMult),
+        colorNum,
+        weaponId: isPhantom ? 'railgun' : 'rifle',
+        pierceLeft: isPhantom ? 3 : 1,
+        blastRadius: 0,
+        hitTargets: new Set<object>(),
+      });
+    }
+
+    return true;
+  }
+
+  public triggerMechAbility(
+    mechKind: MechKind,
+    player: Player,
+    aimAngleRad: number,
+    hordeManager: HordeManager,
+    onCashBonus: (amount: number) => void,
+    onHitstop: (durationSec: number) => void
+  ): boolean {
+    if (!hordeManager.canUseMechAbility()) {
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, '机甲战术技能冷却中...');
+      return false;
+    }
+
+    hordeManager.markMechAbilityUsed();
+    const pos = player.getPosition();
+
+    if (mechKind === 'titan') {
+      const fanAngles = [-0.28, -0.14, 0, 0.14, 0.28];
+      this.audioManager.playGunshot('launcher');
+      this.scene.cameras.main.shake(180, 0.009);
+      for (const off of fanAngles) {
+        const ang = aimAngleRad + off;
+        const dirX = Math.cos(ang);
+        const dirY = Math.sin(ang);
+        const sx = pos.x + dirX * 22;
+        const sy = pos.y + dirY * 22;
+        const sprite = this.scene.add.image(sx, sy, 'proj_rocket').setDepth(26).setRotation(ang);
+        this.projectiles.push({
+          sprite,
+          vx: dirX * 590,
+          vy: dirY * 590,
+          dirX,
+          dirY,
+          distanceLeft: 560,
+          damage: 135,
+          colorNum: PALETTE.WARNING_RED,
+          weaponId: 'launcher',
+          pierceLeft: 1,
+          blastRadius: 120,
+          hitTargets: new Set<object>(),
+        });
+      }
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, '【泰坦机甲】发射 5 联肩部集束火箭齐射！');
+      return true;
+    }
+
+    // Phantom Mech: 220px EMP Shockwave Ring
+    const empRadius = 220;
+    this.audioManager.playOrbitalStrike();
+    this.scene.cameras.main.shake(210, 0.01);
+    onHitstop(0.05);
+
+    const ring = this.scene.add.circle(pos.x, pos.y, 18, PALETTE.NEON_CYAN, 0.28);
+    ring.setStrokeStyle(4, PALETTE.NEON_CYAN, 0.98);
+    ring.setDepth(28);
+    this.scene.tweens.add({
+      targets: ring,
+      radius: empRadius,
+      alpha: 0,
+      duration: 340,
+      ease: 'Quad.easeOut',
+      onComplete: () => ring.destroy(),
+    });
+
+    let hits = 0;
+    for (const enemy of [...hordeManager.getEnemies()]) {
+      const dist = Phaser.Math.Distance.Between(pos.x, pos.y, enemy.x, enemy.y);
+      if (dist <= empRadius + enemy.radius) {
+        hits += 1;
+        const ang = Math.atan2(enemy.y - pos.y, enemy.x - pos.x);
+        const res = hordeManager.damageEnemy(enemy, 145, Math.cos(ang), Math.sin(ang), true);
+        this.spawnDamageText(
+          enemy.x,
+          enemy.y - enemy.radius - 6,
+          res.killed ? '-145 EMP击破!' : '-145 EMP!',
+          PALETTE.NEON_CYAN_HEX
+        );
+        if (res.killed) onCashBonus(res.cashDrop);
+      }
+    }
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `【幻影机甲】EMP 震荡脉冲冲击命中 ${hits} 个目标！`);
+    return true;
+  }
+
+  public fireTurretBolt(sx: number, sy: number, angleRad: number): void {
+    const dirX = Math.cos(angleRad);
+    const dirY = Math.sin(angleRad);
+    const turretMult =
+      (this.progressionManager?.getMechAndTurretPowerMultiplier() ?? 1) *
+      (this.hordeRef?.isActive() ? this.hordeRef.getMechAndTurretPowerMultiplier() : 1);
+    const sprite = this.scene.add.image(sx, sy, 'proj_cyan').setDepth(24).setRotation(angleRad);
+    this.projectiles.push({
+      sprite,
+      vx: dirX * 1050,
+      vy: dirY * 1050,
+      dirX,
+      dirY,
+      distanceLeft: HORDE_GEAR_COSTS.TURRET_RANGE + 40,
+      damage: Math.round(HORDE_GEAR_COSTS.TURRET_DAMAGE * turretMult),
+      colorNum: PALETTE.NEON_CYAN,
+      weaponId: 'rifle',
+      pierceLeft: 1,
+      blastRadius: 0,
+      hitTargets: new Set<object>(),
+    });
+  }
+
+  public triggerOrbitalStrike(
+    centerPos: { x: number; y: number },
+    npcManager: NPCManager,
+    policeManager: PoliceManager,
+    vehicleManager: VehicleManager,
+    trafficManager: TrafficManager,
+    hordeManager: HordeManager | undefined,
+    interactivePropManager: InteractivePropManager | undefined,
+    onCrime: (type: CrimeType, pos: { x: number; y: number }, hasWitness: boolean) => void,
+    onCashBonus: (amount: number) => void,
+    onHitstop: (durationSec: number) => void,
+    onPlayerDamaged?: (amount: number) => void
+  ): void {
+    const targets: Array<{ x: number; y: number }> = [];
+    const enemies = hordeManager?.isActive() ? [...hordeManager.getEnemies()] : [];
+    enemies.sort((a, b) => (b.isBoss ? 1 : 0) - (a.isBoss ? 1 : 0));
+
+    for (const e of enemies) {
+      if (targets.length >= HORDE_GEAR_COSTS.ORBITAL_BEAM_COUNT) break;
+      if (!targets.some((t) => Phaser.Math.Distance.Between(t.x, t.y, e.x, e.y) < 95)) {
+        targets.push({ x: e.x, y: e.y });
+      }
+    }
+
+    let fallbackIdx = 0;
+    while (targets.length < HORDE_GEAR_COSTS.ORBITAL_BEAM_COUNT) {
+      const ang = (Math.PI * 2 * fallbackIdx) / HORDE_GEAR_COSTS.ORBITAL_BEAM_COUNT + 0.35;
+      fallbackIdx += 1;
+      targets.push({
+        x: centerPos.x + Math.cos(ang) * 165,
+        y: centerPos.y + Math.sin(ang) * 165,
+      });
+    }
+
+    this.audioManager.playOrbitalStrike();
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, '轨道离子支援已锁定！高能光束即将降临！');
+
+    targets.forEach((pt, idx) => {
+      const reticle = this.scene.add.circle(pt.x, pt.y, 46, PALETTE.WARNING_RED, 0.16);
+      reticle.setStrokeStyle(2, PALETTE.NEON_CYAN, 0.95);
+      reticle.setDepth(26);
+
+      this.scene.time.delayedCall(480 + idx * 140, () => {
+        if (reticle.active) reticle.destroy();
+        const beam = this.scene.add.rectangle(pt.x, pt.y - 180, 32, 380, PALETTE.NEON_CYAN, 0.85);
+        beam.setBlendMode(Phaser.BlendModes.ADD);
+        beam.setDepth(36);
+        this.scene.tweens.add({
+          targets: beam,
+          scaleX: 0.1,
+          alpha: 0,
+          duration: 280,
+          onComplete: () => beam.destroy(),
+        });
+
+        const blastProxy: ActiveProjectile = {
+          sprite: beam as unknown as Phaser.GameObjects.Image,
+          vx: 0,
+          vy: 0,
+          dirX: 0,
+          dirY: -1,
+          distanceLeft: 0,
+          damage: HORDE_GEAR_COSTS.ORBITAL_BEAM_DAMAGE,
+          colorNum: PALETTE.NEON_CYAN,
+          weaponId: 'launcher',
+          pierceLeft: 1,
+          blastRadius: HORDE_GEAR_COSTS.ORBITAL_BEAM_RADIUS,
+          hitTargets: new Set<object>(),
+        };
+
+        this.triggerRocketBlast(
+          pt.x,
+          pt.y,
+          blastProxy,
+          npcManager,
+          policeManager,
+          vehicleManager,
+          trafficManager,
+          hordeManager,
+          interactivePropManager,
+          onCrime,
+          onCashBonus,
+          onHitstop,
+          onPlayerDamaged
+        );
+      });
+    });
   }
 
   public update(
@@ -430,8 +888,8 @@ export class WeaponManager {
         removeProjectile = true;
       };
 
-      // 1. Walls, buildings & mountain cliffs stop projectiles
-      if (this.collisionManager.isPointBlockedByWall(p.sprite.x, p.sprite.y)) {
+      // 1. Walls, buildings & mountain cliffs stop ground projectiles (gunship autocannons fire from above)
+      if (!p.ignoreWalls && this.collisionManager.isPointBlockedByWall(p.sprite.x, p.sprite.y)) {
         if (p.blastRadius > 0) {
           detonateRocket();
         } else {
@@ -464,6 +922,45 @@ export class WeaponManager {
         }
       }
 
+      // 1.35 Hit Random Event Actors (Sandbox Dynamic World Events)
+      if (
+        !removeProjectile &&
+        this.randomEventManager &&
+        this.randomEventManager.checkProjectileHit(
+          p.sprite.x,
+          p.sprite.y,
+          p.damage,
+          p.hitTargets,
+          (tx, ty, killed, wasVehicle) => {
+            if (p.blastRadius > 0) return;
+            this.spawnImpactRing(tx, ty, wasVehicle ? PALETTE.GOLD : p.colorNum, wasVehicle ? 1.15 : 0.95);
+            this.hitSparkEmitter.emitParticleAt(tx, ty, 8);
+            this.audioManager.playImpactHit(wasVehicle || Boolean(p.isCrit));
+            this.spawnDamageText(
+              tx,
+              ty - 18,
+              killed ? `-${p.damage} 击破!` : p.isCrit ? `暴击 -${p.damage}!` : `-${p.damage}`,
+              killed || p.isCrit ? PALETTE.GOLD_HEX : PALETTE.NEON_CYAN_HEX
+            );
+            if (killed) {
+              this.onCombatKillBonus?.(
+                this.progressionManager?.getKillHealAmount() ?? 0,
+                0,
+                wasVehicle ? 35 : 18
+              );
+              onHitstop(wasVehicle ? 0.045 : 0.025);
+            }
+          }
+        )
+      ) {
+        if (p.blastRadius > 0) {
+          detonateRocket();
+        } else {
+          p.pierceLeft -= 1;
+          if (p.pierceLeft <= 0) removeProjectile = true;
+        }
+      }
+
       // 1.5 Hit Horde Enemies
       if (!removeProjectile && hordeManager && hordeEnemies.length > 0) {
         for (const enemy of hordeEnemies) {
@@ -491,22 +988,62 @@ export class WeaponManager {
             );
             this.hitSparkEmitter.emitParticleAt(p.sprite.x, p.sprite.y, enemy.isBoss ? 10 : 7);
             this.audioManager.playImpactHit(
-              p.weaponId === 'shotgun' || p.weaponId === 'railgun' || enemy.isBoss
+              p.weaponId === 'shotgun' || p.weaponId === 'railgun' || enemy.isBoss || Boolean(p.isCrit)
             );
             this.spawnDamageText(
               enemy.x,
               enemy.y - enemy.radius - 4,
-              res.killed ? `-${p.damage} 击破!` : `-${p.damage}`,
-              res.killed ? PALETTE.GOLD_HEX : PALETTE.NEON_PINK_HEX
+              res.killed
+                ? `-${p.damage} 击破!`
+                : p.isCrit
+                  ? `暴击 -${p.damage}`
+                  : `-${p.damage}`,
+              res.killed || p.isCrit ? PALETTE.GOLD_HEX : PALETTE.NEON_PINK_HEX
             );
+
+            // Roguelite Arc Chain Lightning
+            const arcStacks = hordeManager.getArcChainStacks();
+            if (arcStacks > 0) {
+              const arcDmg = Math.round(p.damage * (0.35 + arcStacks * 0.14));
+              let jumps = 0;
+              for (const other of [...hordeManager.getEnemies()]) {
+                if (other === enemy || jumps >= 2) continue;
+                const d = Phaser.Math.Distance.Between(enemy.x, enemy.y, other.x, other.y);
+                if (d <= 150) {
+                  jumps += 1;
+                  const arcLine = this.scene.add
+                    .line(0, 0, enemy.x, enemy.y, other.x, other.y, PALETTE.NEON_CYAN, 0.9)
+                    .setOrigin(0, 0)
+                    .setDepth(29);
+                  this.scene.tweens.add({
+                    targets: arcLine,
+                    alpha: 0,
+                    duration: 140,
+                    onComplete: () => arcLine.destroy(),
+                  });
+                  const arcRes = hordeManager.damageEnemy(other, arcDmg, 0, 0, false);
+                  this.spawnDamageText(other.x, other.y - 14, `⚡-${arcDmg}`, PALETTE.NEON_CYAN_HEX);
+                  if (arcRes.killed) {
+                    const cashGain = Math.round(arcRes.cashDrop * hordeManager.getCashDropMultiplier());
+                    onCashBonus(cashGain);
+                  }
+                }
+              }
+            }
+
             if (res.killed) {
-              onCashBonus(res.cashDrop);
+              const cashGain = Math.round(res.cashDrop * hordeManager.getCashDropMultiplier());
+              onCashBonus(cashGain);
+              const vamp = hordeManager.getVampiricStacks();
+              const killHeal = (this.progressionManager?.getKillHealAmount() ?? 0) + vamp * 4;
+              const killArmor = vamp * 2;
+              this.onCombatKillBonus?.(killHeal, killArmor, enemy.isBoss ? 55 : 10);
               if (enemy.isBoss) {
                 this.triggerExplosion(enemy.x, enemy.y);
                 onHitstop(0.055);
                 gameEvents.emit(
                   GAME_EVENT.STATUS_TOAST,
-                  `击毁【${enemy.name}】！赏金 +$${res.cashDrop} · 积分 +${res.scoreGained}`
+                  `击毁【${enemy.name}】！赏金 +$${cashGain} · 积分 +${res.scoreGained}`
                 );
               } else {
                 onHitstop(0.024);
@@ -588,18 +1125,19 @@ export class WeaponManager {
             onCrime('assault_police', { x: unit.sprite.x, y: unit.sprite.y }, true);
 
             if (res.destroyed) {
-              this.triggerExplosion(unit.sprite.x, unit.sprite.y);
+              this.triggerExplosion(unit.sprite.x, unit.sprite.y, unit.unitKind === 'tank' ? 85 : 55);
+              onCrime('destroy_police', { x: unit.sprite.x, y: unit.sprite.y }, true);
               onCashBonus(res.cashBonus);
               onHitstop(0.05);
               this.spawnDamageText(
                 unit.sprite.x,
                 unit.sprite.y - 32,
-                `瘫痪警车 +$${res.cashBonus}`,
+                `摧毁警备单位 +$${res.cashBonus}`,
                 PALETTE.GOLD_HEX
               );
               gameEvents.emit(
                 GAME_EVENT.STATUS_TOAST,
-                `已瘫痪特区巡逻警车！获得赏金 +$${res.cashBonus}`
+                `已瘫痪特区警备单位！获得赏金 +$${res.cashBonus}`
               );
             }
             p.pierceLeft -= 1;
@@ -611,21 +1149,55 @@ export class WeaponManager {
         }
       }
 
+      // 3.5 Hit Vigilante Fugitive Target
+      if (!removeProjectile) {
+        const vigilante = policeManager.getVigilanteSprite();
+        if (vigilante && vigilante.active && !p.hitTargets.has(vigilante)) {
+          const dist = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, vigilante.x, vigilante.y);
+          if (dist <= 24) {
+            p.hitTargets.add(vigilante);
+            if (p.blastRadius > 0) {
+              detonateRocket();
+            } else {
+              const killed = policeManager.damageVigilanteFugitive(p.damage, onCashBonus);
+              this.spawnImpactRing(p.sprite.x, p.sprite.y, PALETTE.GOLD, 1.15);
+              this.hitSparkEmitter.emitParticleAt(p.sprite.x, p.sprite.y, 9);
+              this.audioManager.playImpactHit(p.weaponId === 'shotgun' || p.weaponId === 'railgun');
+              this.spawnDamageText(
+                vigilante.x,
+                vigilante.y - 18,
+                killed ? '击毁通缉犯!' : `-${p.damage}`,
+                PALETTE.GOLD_HEX
+              );
+              if (killed) onHitstop(0.05);
+              p.pierceLeft -= 1;
+              if (p.pierceLeft <= 0) removeProjectile = true;
+            }
+          }
+        }
+      }
+
       // 4. Hit Parked/Drivable Vehicles or Traffic Cabs
       if (!removeProjectile) {
         for (const veh of vehicles) {
-          if (veh.isOccupied() || p.hitTargets.has(veh)) continue;
+          if (veh.isOccupied() || veh.isDestroyed() || p.hitTargets.has(veh)) continue;
           const dist = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, veh.sprite.x, veh.sprite.y);
-          if (dist <= 23) {
+          if (dist <= 24) {
             p.hitTargets.add(veh);
             if (p.blastRadius > 0) {
               detonateRocket();
               break;
             }
-            veh.applyBulletHit(p.damage);
+            const killed = veh.applyBulletHit(p.damage);
             this.spawnImpactRing(p.sprite.x, p.sprite.y, PALETTE.GOLD, 0.9);
             this.hitSparkEmitter.emitParticleAt(p.sprite.x, p.sprite.y, 6);
             this.audioManager.playWallPing();
+            if (killed) {
+              veh.forceCheckDestruction((dVeh) => {
+                this.triggerExplosion(dVeh.sprite.x, dVeh.sprite.y, 88);
+                onHitstop(0.05);
+              });
+            }
             p.pierceLeft -= 1;
             if (p.pierceLeft <= 0) {
               removeProjectile = true;
@@ -706,6 +1278,15 @@ export class WeaponManager {
       });
     }
 
+    if (this.randomEventManager) {
+      this.randomEventManager.applyBlastDamage(bx, by, radius, proj.damage, (tx, ty, killed) => {
+        this.spawnDamageText(tx, ty - 18, killed ? '爆破击破!' : `-${proj.damage}`, PALETTE.GOLD_HEX);
+        if (killed) {
+          this.onCombatKillBonus?.(this.progressionManager?.getKillHealAmount() ?? 0, 0, 22);
+        }
+      });
+    }
+
     if (hordeManager && hordeManager.isActive()) {
       for (const enemy of [...hordeManager.getEnemies()]) {
         const dist = Phaser.Math.Distance.Between(bx, by, enemy.x, enemy.y);
@@ -767,21 +1348,38 @@ export class WeaponManager {
         this.spawnDamageText(unit.sprite.x, unit.sprite.y - 18, `-${dmg}`, PALETTE.GOLD_HEX);
         onCrime('assault_police', { x: unit.sprite.x, y: unit.sprite.y }, true);
         if (res.destroyed) {
-          this.triggerExplosion(unit.sprite.x, unit.sprite.y);
+          this.triggerExplosion(unit.sprite.x, unit.sprite.y, unit.unitKind === 'tank' ? 85 : 55);
+          onCrime('destroy_police', { x: unit.sprite.x, y: unit.sprite.y }, true);
           onCashBonus(res.cashBonus);
           gameEvents.emit(
             GAME_EVENT.STATUS_TOAST,
-            `火箭爆破瘫痪警车！获得赏金 +$${res.cashBonus}`
+            `爆破瘫痪警备单位！获得赏金 +$${res.cashBonus}`
           );
         }
       }
     }
 
+    const vigilante = policeManager.getVigilanteSprite();
+    if (vigilante && vigilante.active) {
+      const dist = Phaser.Math.Distance.Between(bx, by, vigilante.x, vigilante.y);
+      if (dist <= radius + 18) {
+        const falloff = Math.max(0.5, 1 - (dist / (radius + 18)) * 0.45);
+        const dmg = Math.round(proj.damage * falloff);
+        policeManager.damageVigilanteFugitive(dmg, onCashBonus);
+        this.spawnDamageText(vigilante.x, vigilante.y - 18, `-${dmg}`, PALETTE.GOLD_HEX);
+      }
+    }
+
     for (const veh of vehicleManager.getVehicles()) {
-      if (veh.isOccupied()) continue;
+      if (veh.isOccupied() || veh.isDestroyed()) continue;
       const dist = Phaser.Math.Distance.Between(bx, by, veh.sprite.x, veh.sprite.y);
       if (dist <= radius + 16) {
-        veh.applyBulletHit(Math.round(proj.damage * 0.75));
+        const killed = veh.applyBulletHit(Math.round(proj.damage * 0.75));
+        if (killed) {
+          veh.forceCheckDestruction((dVeh) => {
+            this.triggerExplosion(dVeh.sprite.x, dVeh.sprite.y, 88);
+          });
+        }
       }
     }
   }

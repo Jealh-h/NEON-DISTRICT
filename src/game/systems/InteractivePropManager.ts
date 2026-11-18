@@ -70,8 +70,10 @@ export interface PropInteractContext {
   isHealthFull: () => boolean;
   tryDeduct: (cost: number) => boolean;
   onHeal: (amount: number) => void;
-  onCash: (amount: number) => void;
+  onCash: (amount: number, fromAtm?: boolean) => void;
   onAtmAlarm: (pos: { x: number; y: number }) => void;
+  atmCashMult?: number;
+  atmAlarmChance?: number;
 }
 
 export class InteractivePropManager {
@@ -508,11 +510,12 @@ export class InteractivePropManager {
         if (atm.glow.active) atm.glow.setTint(PALETTE.NEON_CYAN);
       });
 
-      const cashAmount = 75 + Math.floor(Math.random() * 76);
-      ctx.onCash(cashAmount);
+      const rawAmount = 75 + Math.floor(Math.random() * 76);
+      const cashAmount = Math.round(rawAmount * (ctx.atmCashMult ?? 1));
+      ctx.onCash(cashAmount, true);
       this.audioManager.playPurchase();
 
-      const alarmTriggered = Math.random() < 0.55;
+      const alarmTriggered = Math.random() < (ctx.atmAlarmChance ?? 0.55);
       if (alarmTriggered) {
         ctx.onAtmAlarm({ x: atm.x, y: atm.y });
         gameEvents.emit(

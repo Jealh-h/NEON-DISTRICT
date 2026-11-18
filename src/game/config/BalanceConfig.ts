@@ -72,6 +72,8 @@ export const PLAYER_CONFIG = {
   SPRITE_SIZE: 28,
   INITIAL_HEALTH: 100,
   MAX_HEALTH: 100,
+  MAX_ARMOR: 100,
+  ARMOR_ABSORB_RATIO: 0.75,
   INITIAL_CASH: 500,
   INTERACT_RADIUS: 68,
   VEHICLE_ENTER_RADIUS: 64,
@@ -382,22 +384,45 @@ export const TRAFFIC_CONFIG = {
 
 export const WANTED_CONFIG = {
   MAX_STARS: 5,
-  MVP_MAX_STARS: 2,
-  DETECT_RANGE: 270,
-  LOS_BREAK_RANGE: 325,
+  MVP_MAX_STARS: 5,
+  DETECT_RANGE: 280,
+  LOS_BREAK_RANGE: 350,
   ESCAPE_TIME_STAR_1: 6.5,
   ESCAPE_TIME_STAR_2: 9.5,
-  POLICE_PATROL_SPEED: 120,
-  POLICE_PURSUIT_FOOT_SPEED: 238,
-  POLICE_PURSUIT_VEH_SPEED: 380,
-  POLICE_SEARCH_SPEED: 175,
+  ESCAPE_TIME_STAR_3: 13.0,
+  ESCAPE_TIME_STAR_4: 17.5,
+  ESCAPE_TIME_STAR_5: 22.0,
+  POLICE_PATROL_SPEED: 110,
+  POLICE_PURSUIT_FOOT_SPEED: 205,
+  POLICE_PURSUIT_VEH_SPEED: 295,
+  POLICE_INTERCEPTOR_SPEED: 345,
+  POLICE_HELI_SPEED: 255,
+  POLICE_SWAT_SPEED: 280,
+  POLICE_TANK_SPEED: 200,
+  POLICE_SEARCH_SPEED: 155,
   POLICE_CONTACT_DAMAGE_FOOT: 12,
-  POLICE_CONTACT_DAMAGE_VEH: 7,
+  POLICE_CONTACT_DAMAGE_VEH: 8,
+  POLICE_HELI_BOUNTY: 280,
+  POLICE_TANK_BOUNTY: 450,
+  VIGILANTE_BASE_REWARD: 260,
   RESPAWN_PENALTY: 100,
   CLINIC_RESPAWN: { x: 248, y: 704 },
 } as const;
 
-export type VehicleType = 'compact' | 'racer' | 'cruiser' | 'supercar' | 'moto';
+export type VehicleType =
+  | 'compact'
+  | 'racer'
+  | 'cruiser'
+  | 'supercar'
+  | 'moto'
+  | 'superbike'
+  | 'buggy'
+  | 'swat'
+  | 'heli'
+  | 'tank';
+
+export type VehicleCategory = 'car' | 'moto' | 'armor' | 'air' | 'tank';
+export type VehicleWeaponKind = 'driveby' | 'autocannon' | 'tank_cannon';
 
 export interface VehicleSpec {
   type: VehicleType;
@@ -415,6 +440,11 @@ export interface VehicleSpec {
   maxHealth: number;
   accentHex: string;
   hasLightbar: boolean;
+  category: VehicleCategory;
+  weaponKind: VehicleWeaponKind;
+  isFlying?: boolean;
+  hasTurret?: boolean;
+  collisionDamageScale?: number;
 }
 
 export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
@@ -424,16 +454,18 @@ export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
     textureKey: 'veh_compact',
     width: 44,
     height: 24,
-    maxSpeed: 500,
-    maxReverseSpeed: 180,
-    acceleration: 660,
-    braking: 580,
+    maxSpeed: 340,
+    maxReverseSpeed: 150,
+    acceleration: 480,
+    braking: 520,
     turnSpeed: 3.4,
-    drag: 1.8,
-    lateralGrip: 7.4,
+    drag: 1.9,
+    lateralGrip: 7.6,
     maxHealth: 110,
     accentHex: PALETTE.NEON_CYAN_HEX,
     hasLightbar: false,
+    category: 'car',
+    weaponKind: 'driveby',
   },
   racer: {
     type: 'racer',
@@ -441,16 +473,18 @@ export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
     textureKey: 'veh_racer',
     width: 48,
     height: 24,
-    maxSpeed: 640,
-    maxReverseSpeed: 210,
-    acceleration: 820,
-    braking: 720,
+    maxSpeed: 425,
+    maxReverseSpeed: 175,
+    acceleration: 600,
+    braking: 640,
     turnSpeed: 3.8,
-    drag: 1.5,
-    lateralGrip: 6.6,
+    drag: 1.65,
+    lateralGrip: 7.0,
     maxHealth: 95,
     accentHex: PALETTE.NEON_PINK_HEX,
     hasLightbar: false,
+    category: 'car',
+    weaponKind: 'driveby',
   },
   cruiser: {
     type: 'cruiser',
@@ -458,16 +492,19 @@ export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
     textureKey: 'veh_cruiser',
     width: 48,
     height: 26,
-    maxSpeed: 540,
-    maxReverseSpeed: 190,
-    acceleration: 620,
-    braking: 640,
-    turnSpeed: 3.1,
-    drag: 1.7,
-    lateralGrip: 6.8,
+    maxSpeed: 365,
+    maxReverseSpeed: 160,
+    acceleration: 490,
+    braking: 580,
+    turnSpeed: 3.2,
+    drag: 1.8,
+    lateralGrip: 7.0,
     maxHealth: 150,
     accentHex: PALETTE.WARNING_RED_HEX,
     hasLightbar: true,
+    category: 'car',
+    weaponKind: 'driveby',
+    collisionDamageScale: 0.75,
   },
   supercar: {
     type: 'supercar',
@@ -475,16 +512,18 @@ export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
     textureKey: 'veh_super',
     width: 50,
     height: 24,
-    maxSpeed: 720,
-    maxReverseSpeed: 230,
-    acceleration: 960,
-    braking: 800,
+    maxSpeed: 470,
+    maxReverseSpeed: 185,
+    acceleration: 660,
+    braking: 700,
     turnSpeed: 3.9,
-    drag: 1.35,
-    lateralGrip: 7.2,
+    drag: 1.5,
+    lateralGrip: 7.5,
     maxHealth: 105,
     accentHex: PALETTE.GOLD_HEX,
     hasLightbar: false,
+    category: 'car',
+    weaponKind: 'driveby',
   },
   moto: {
     type: 'moto',
@@ -492,18 +531,209 @@ export const VEHICLE_SPECS: Record<VehicleType, VehicleSpec> = {
     textureKey: 'veh_moto',
     width: 30,
     height: 14,
-    maxSpeed: 600,
-    maxReverseSpeed: 140,
-    acceleration: 900,
-    braking: 760,
-    turnSpeed: 4.6,
-    drag: 1.5,
-    lateralGrip: 8.6,
+    maxSpeed: 400,
+    maxReverseSpeed: 120,
+    acceleration: 620,
+    braking: 660,
+    turnSpeed: 4.5,
+    drag: 1.65,
+    lateralGrip: 8.8,
     maxHealth: 75,
     accentHex: PALETTE.NEON_PURPLE_HEX,
     hasLightbar: false,
+    category: 'moto',
+    weaponKind: 'driveby',
+  },
+  superbike: {
+    type: 'superbike',
+    name: '幽灵重机超跑摩托',
+    textureKey: 'veh_superbike',
+    width: 34,
+    height: 16,
+    maxSpeed: 450,
+    maxReverseSpeed: 135,
+    acceleration: 700,
+    braking: 720,
+    turnSpeed: 4.7,
+    drag: 1.55,
+    lateralGrip: 9.2,
+    maxHealth: 85,
+    accentHex: PALETTE.NEON_CYAN_HEX,
+    hasLightbar: false,
+    category: 'moto',
+    weaponKind: 'driveby',
+  },
+  buggy: {
+    type: 'buggy',
+    name: '荒野越野突击车',
+    textureKey: 'veh_buggy',
+    width: 46,
+    height: 28,
+    maxSpeed: 385,
+    maxReverseSpeed: 165,
+    acceleration: 560,
+    braking: 600,
+    turnSpeed: 3.7,
+    drag: 1.7,
+    lateralGrip: 8.0,
+    maxHealth: 165,
+    accentHex: '#F97316',
+    hasLightbar: false,
+    category: 'car',
+    weaponKind: 'driveby',
+    collisionDamageScale: 0.65,
+  },
+  swat: {
+    type: 'swat',
+    name: '特警重装运兵车',
+    textureKey: 'veh_swat',
+    width: 58,
+    height: 30,
+    maxSpeed: 315,
+    maxReverseSpeed: 140,
+    acceleration: 400,
+    braking: 540,
+    turnSpeed: 2.7,
+    drag: 1.95,
+    lateralGrip: 7.2,
+    maxHealth: 320,
+    accentHex: '#38BDF8',
+    hasLightbar: true,
+    category: 'armor',
+    weaponKind: 'driveby',
+    collisionDamageScale: 0.35,
+  },
+  heli: {
+    type: 'heli',
+    name: '苍穹武装直升机',
+    textureKey: 'veh_heli',
+    width: 56,
+    height: 32,
+    maxSpeed: 380,
+    maxReverseSpeed: 180,
+    acceleration: 520,
+    braking: 600,
+    turnSpeed: 3.5,
+    drag: 2.2,
+    lateralGrip: 5.2,
+    maxHealth: 260,
+    accentHex: PALETTE.GOLD_HEX,
+    hasLightbar: false,
+    category: 'air',
+    weaponKind: 'autocannon',
+    isFlying: true,
+    collisionDamageScale: 0.3,
+  },
+  tank: {
+    type: 'tank',
+    name: '泰坦重装主战坦克',
+    textureKey: 'veh_tank',
+    width: 60,
+    height: 36,
+    maxSpeed: 245,
+    maxReverseSpeed: 130,
+    acceleration: 340,
+    braking: 520,
+    turnSpeed: 2.4,
+    drag: 2.4,
+    lateralGrip: 9.2,
+    maxHealth: 520,
+    accentHex: '#4ADE80',
+    hasLightbar: false,
+    category: 'tank',
+    weaponKind: 'tank_cannon',
+    hasTurret: true,
+    collisionDamageScale: 0.15,
   },
 };
+
+export type MechKind = 'titan' | 'phantom';
+
+export interface MechSpec {
+  kind: MechKind;
+  name: string;
+  shortName: string;
+  tag: string;
+  description: string;
+  textureKey: string;
+  cost: number;
+  maxHp: number;
+  speed: number;
+  radius: number;
+  primaryWeaponName: string;
+  fireIntervalMs: number;
+  damage: number;
+  projectileSpeed: number;
+  range: number;
+  abilityName: string;
+  abilityLabel: string;
+  abilityCooldownSec: number;
+  stompDamage: number;
+  accentHex: string;
+}
+
+export const MECH_SPECS: Record<MechKind, MechSpec> = {
+  titan: {
+    kind: 'titan',
+    name: '泰坦重装机甲 TITAN-X',
+    shortName: '泰坦机甲',
+    tag: '重装火力',
+    description: '450 装甲护盾，踏步碾压小型敌军，主炮双联等离子加农炮，[空格] 发射 5 枚肩部集束火箭！',
+    textureKey: 'mech_titan',
+    cost: 450,
+    maxHp: 450,
+    speed: 185,
+    radius: 20,
+    primaryWeaponName: '双联高频等离子炮',
+    fireIntervalMs: 135,
+    damage: 44,
+    projectileSpeed: 980,
+    range: 560,
+    abilityName: '肩部集束火箭齐射',
+    abilityLabel: '集束火箭',
+    abilityCooldownSec: 6,
+    stompDamage: 55,
+    accentHex: '#FFD166',
+  },
+  phantom: {
+    kind: 'phantom',
+    name: '幻影突击机甲 PHANTOM-Z',
+    shortName: '幻影机甲',
+    tag: '超导磁轨',
+    description: '高机动赛博外骨骼机甲，连射贯通型超导磁轨光束，[空格] 释放 220px EMP 电磁震荡冲击波！',
+    textureKey: 'mech_phantom',
+    cost: 650,
+    maxHp: 350,
+    speed: 275,
+    radius: 18,
+    primaryWeaponName: '超导重型磁轨连射',
+    fireIntervalMs: 165,
+    damage: 68,
+    projectileSpeed: 1480,
+    range: 740,
+    abilityName: 'EMP 电磁震荡冲击波',
+    abilityLabel: 'EMP 冲击',
+    abilityCooldownSec: 5,
+    stompDamage: 30,
+    accentHex: '#00F5FF',
+  },
+};
+
+export const HORDE_GEAR_COSTS = {
+  ARMOR_PACK_COST: 120,
+  ARMOR_PACK_AMOUNT: 50,
+  TURRET_COST: 280,
+  TURRET_DURATION_SEC: 45,
+  TURRET_FIRE_INTERVAL_MS: 240,
+  TURRET_RANGE: 420,
+  TURRET_DAMAGE: 26,
+  MAX_TURRETS: 2,
+  ORBITAL_STRIKE_COST: 360,
+  ORBITAL_BEAM_COUNT: 4,
+  ORBITAL_BEAM_DAMAGE: 280,
+  ORBITAL_BEAM_RADIUS: 140,
+  AIRDROP_TANK_COST: 550,
+} as const;
 
 export const VEHICLE_EXIT_MAX_SPEED = 240;
 

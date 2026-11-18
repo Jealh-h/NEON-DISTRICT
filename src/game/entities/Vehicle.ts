@@ -11,25 +11,44 @@ import { DrivingControlsState } from '../systems/InputManager';
 import { VehicleSummary, VehicleUpgradeLevels } from '../ui/GameEvents';
 import { CollisionManager } from '../world/CollisionManager';
 
+export interface VehicleInitOptions {
+  textureOverride?: string;
+  isTempHijacked?: boolean;
+}
+
 export class Vehicle {
   public readonly id: string;
   public readonly spec: VehicleSpec;
   public readonly sprite: Phaser.Physics.Arcade.Sprite;
+  public readonly isTempHijacked: boolean;
 
   private scene: Phaser.Scene;
+  private baseTextureKey: string;
+  private spawnOrigin: { x: number; y: number; angleDeg: number };
   private shadow: Phaser.GameObjects.Ellipse;
   private headlight: Phaser.GameObjects.Image;
   private lightbarGlow: Phaser.GameObjects.Image | null = null;
+  private rotorSprite: Phaser.GameObjects.Image | null = null;
+  private turretSprite: Phaser.GameObjects.Image | null = null;
   private sparkEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private nitroEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
+  private smokeEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
 
   private health: number;
+  private destroyed = false;
+  private respawnAtMs = 0;
+  private smokeTimer = 0;
   private upgrades: VehicleUpgradeLevels = { engine: 0, handling: 0, armor: 0 };
   private paintColor: number | null = null;
   private forwardSpeed = 0;
   private occupied = false;
   private lastImpactAt = 0;
   private lightbarTimer = 0;
+
+  private rotorAngle = 0;
+  private rotorSpinSpeed = 0;
+  private flightLift = 0;
+  private turretAngleRad: number;
 
   private nitro = 100;
   private isBoosting = false;
@@ -39,10 +58,21 @@ export class Vehicle {
   private airDuration = 0;
   private rampCooldown = 0;
 
-  constructor(scene: Phaser.Scene, id: string, type: VehicleType, x: number, y: number, angleDeg = 0) {
+  constructor(
+    scene: Phaser.Scene,
+    id: string,
+    type: VehicleType,
+    x: number,
+    y: number,
+    angleDeg = 0,
+    options?: VehicleInitOptions
+  ) {
     this.scene = scene;
     this.id = id;
     this.spec = VEHICLE_SPECS[type];
+    this.isTempHijacked = Boolean(options?.isTempHijacked);
+    this.baseTextureKey = options?.textureOverride ?? this.spec.textureKey;
+    this.spawnOrigin = { x, y, angleDeg };
     this.health = this.spec.maxHealth;
 
     this.shadow = scene.add.ellipse(x + 3, y + 4, this.spec.width + 4, this.spec.height + 2, 0x000000, 0.52);
@@ -54,11 +84,12 @@ export class Vehicle {
     this.headlight.setAlpha(0.18);
     this.headlight.setDepth(19);
 
-    this.sprite = scene.physics.add.sprite(x, y, this.spec.textureKey);
+    this.sprite = scene.physics.add.sprite(x, y, this.baseTextureKey);
     this.sprite.setDepth(21);
     this.sprite.setCollideWorldBounds(true);
 
     const angleRad = Phaser.Math.DegToRad(angleDeg);
+    this.turretAngleRad = angleRad;
     this.sprite.setRotation(angleRad);
     this.shadow.setRotation(angleRad);
     this.headlight.setRotation(angleRad);
@@ -67,8 +98,8 @@ export class Vehicle {
     const hitboxDiameter = Math.min(this.spec.width, this.spec.height) + 4;
     body.setCircle(
       hitboxDiameter / 2,
-      (this.spec.width - hitboxDiameter) / 2,
-      (this.spec.height - hitboxDiameter) / 2
+      (this.sprite.width - hitboxDiameter) / 2,
+      (this.sprite.height - hitboxDiameter) / 2
     );
     body.setBounce(0.25, 0.25);
     body.setDrag(180, 180);
@@ -81,6 +112,19 @@ export class Vehicle {
       this.lightbarGlow.setScale(1.1);
       this.lightbarGlow.setBlendMode(Phaser.BlendModes.ADD);
       this.lightbarGlow.setDepth(22);
+    }
+
+    if (this.spec.hasTurret) {
+      this.turretSprite = scene.add.image(x, y, 'veh_tank_turret');
+      this.turretSprite.setOrigin(18 / 58, 0.5);
+      this.turretSprite.setRotation(angleRad);
+      this.turretSprite.setDepth(22);
+    }
+
+    if (this.spec.isFlying) {
+      this.rotorSprite = scene.add.image(x, y, 'veh_heli_rotor');
+      this.rotorSprite.setDepth(35);
+      this.headlight.setAlpha(0.08);
     }
 
     this.sparkEmitter = scene.add.particles(0, 0, 'pixel_spark', {
@@ -103,6 +147,16 @@ export class Vehicle {
     });
     this.nitroEmitter.setDepth(20);
 
+    this.smokeEmitter = scene.add.particles(0, 0, 'fx_smoke', {
+      speed: { min: 14, max: 48 },
+      scale: { start: 1.5, end: 2.6 },
+      alpha: { start: 0.8, end: 0 },
+      lifespan: 520,
+      tint: [0x475569, 0x1e293b, 0xf97316],
+      emitting: false,
+    });
+    this.smokeEmitter.setDepth(36);
+
     this.syncAttachments();
   }
 
@@ -111,12 +165,12 @@ export class Vehicle {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
 
     if (occupied) {
-      this.headlight.setAlpha(0.84);
+      this.headlight.setAlpha(this.spec.isFlying ? 0.45 : 0.84);
       body.setDrag(0, 0);
       body.setImmovable(false);
     } else {
       this.isBoosting = false;
-      this.headlight.setAlpha(0.18);
+      this.headlight.setAlpha(this.spec.isFlying ? 0.08 : 0.18);
       body.setDrag(240, 240);
     }
   }
@@ -125,19 +179,90 @@ export class Vehicle {
     return this.occupied;
   }
 
+  public isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  public shouldRemoveTempWreck(nowMs: number): boolean {
+    return this.isTempHijacked && this.destroyed && this.respawnAtMs > 0 && nowMs >= this.respawnAtMs;
+  }
+
+  public setTurretAngle(angleRad: number): void {
+    if (!this.spec.hasTurret) return;
+    const diff = Phaser.Math.Angle.Wrap(angleRad - this.turretAngleRad);
+    this.turretAngleRad += diff * 0.25;
+  }
+
+  public getTurretAngle(): number {
+    return this.spec.hasTurret ? this.turretAngleRad : this.sprite.rotation;
+  }
+
+  public getTurretMuzzle(): { x: number; y: number } {
+    const angle = this.getTurretAngle();
+    const reach = this.spec.hasTurret ? 38 : this.spec.width * 0.55;
+    return {
+      x: this.sprite.x + Math.cos(angle) * reach,
+      y: this.sprite.y + Math.sin(angle) * reach,
+    };
+  }
+
+  public getAutocannonMuzzles(): Array<{ x: number; y: number }> {
+    const rot = this.sprite.rotation;
+    const cos = Math.cos(rot);
+    const sin = Math.sin(rot);
+    const fwd = 20;
+    const wing = 11;
+    return [
+      { x: this.sprite.x + cos * fwd - sin * wing, y: this.sprite.y + sin * fwd + cos * wing },
+      { x: this.sprite.x + cos * fwd + sin * wing, y: this.sprite.y + sin * fwd - cos * wing },
+    ];
+  }
+
   public update(
     dtSeconds: number,
     controls?: DrivingControlsState,
-    onStuntLanded?: (bonus: number) => void
+    onStuntLanded?: (bonus: number) => void,
+    onDestroyed?: (vehicle: Vehicle) => void,
+    modifiers?: { speedMult?: number; nitroRegenMult?: number; gripMult?: number }
   ): void {
+    const nowMs = this.scene.time.now;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+
+    if (this.destroyed) {
+      body.setVelocity(0, 0);
+      this.forwardSpeed = 0;
+      this.smokeTimer += dtSeconds;
+      if (this.smokeTimer >= 0.16) {
+        this.smokeTimer = 0;
+        this.smokeEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 1);
+      }
+      if (!this.isTempHijacked && this.respawnAtMs > 0 && nowMs >= this.respawnAtMs) {
+        this.respawnAtOrigin();
+      }
+      this.syncAttachments();
+      return;
+    }
 
     if (this.turboPadTimer > 0) this.turboPadTimer = Math.max(0, this.turboPadTimer - dtSeconds);
     if (this.turboPadCooldown > 0) this.turboPadCooldown = Math.max(0, this.turboPadCooldown - dtSeconds);
     if (this.rampCooldown > 0) this.rampCooldown = Math.max(0, this.rampCooldown - dtSeconds);
 
-    // Airtime stunt jump scale arc
-    if (this.airTimer > 0 && this.airDuration > 0) {
+    // Helicopter rotor spin + vertical takeoff lift
+    if (this.spec.isFlying) {
+      const targetSpin = this.occupied ? 20 : 0;
+      this.rotorSpinSpeed = Phaser.Math.Linear(this.rotorSpinSpeed, targetSpin, Math.min(1, dtSeconds * 3.5));
+      this.rotorAngle = Phaser.Math.Angle.Wrap(this.rotorAngle + this.rotorSpinSpeed * dtSeconds);
+      const targetLift = this.occupied ? 1 : 0;
+      this.flightLift = Phaser.Math.Linear(this.flightLift, targetLift, Math.min(1, dtSeconds * 2.6));
+      const scale = 1 + this.flightLift * 0.24;
+      this.sprite.setScale(scale);
+      this.sprite.setDepth(this.flightLift > 0.15 ? 34 : 21);
+      this.shadow.setScale(1 - this.flightLift * 0.14);
+      this.shadow.setAlpha(0.52 - this.flightLift * 0.2);
+    }
+
+    // Airtime stunt jump scale arc (ground vehicles)
+    if (!this.spec.isFlying && this.airTimer > 0 && this.airDuration > 0) {
       this.airTimer -= dtSeconds;
       const progress = 1 - Math.max(0, this.airTimer) / this.airDuration;
       const arc = Math.sin(progress * Math.PI);
@@ -168,7 +293,6 @@ export class Vehicle {
       const currentForward = body.velocity.x * headingX + body.velocity.y * headingY;
       const currentLateral = body.velocity.x * rightX + body.velocity.y * rightY;
 
-      // Only clamp internal speed downward if an external collision stopped the chassis
       if (Math.abs(currentForward) < Math.abs(this.forwardSpeed) * 0.72) {
         this.forwardSpeed = currentForward;
       }
@@ -178,19 +302,22 @@ export class Vehicle {
       const wantNitro = Boolean(nitro && hasDriveInput && this.nitro > 4);
       this.isBoosting = wantNitro || this.turboPadTimer > 0;
 
+      const nitroRegenMult = modifiers?.nitroRegenMult ?? 1;
       if (wantNitro) {
         this.nitro = Math.max(0, this.nitro - 26 * dtSeconds);
       } else {
-        this.nitro = Math.min(100, this.nitro + 14 * dtSeconds);
+        this.nitro = Math.min(100, this.nitro + 14 * nitroRegenMult * dtSeconds);
       }
 
-      const boostSpeedMult = this.turboPadTimer > 0 ? 1.42 : wantNitro ? 1.34 : 1;
-      const boostAccelMult = this.turboPadTimer > 0 ? 1.65 : wantNitro ? 1.55 : 1;
+      const speedMult = modifiers?.speedMult ?? 1;
+      const gripMult = modifiers?.gripMult ?? 1;
+      const boostSpeedMult = (this.turboPadTimer > 0 ? 1.32 : wantNitro ? 1.24 : 1) * speedMult;
+      const boostAccelMult = (this.turboPadTimer > 0 ? 1.45 : wantNitro ? 1.35 : 1) * speedMult;
 
       const maxSpeed = this.getEffectiveMaxSpeed() * boostSpeedMult;
       const accel = this.getEffectiveAcceleration() * boostAccelMult;
       const turnSpeed = this.getEffectiveTurnSpeed();
-      const lateralGrip = this.getEffectiveLateralGrip();
+      const lateralGrip = this.getEffectiveLateralGrip() * gripMult;
 
       body.setMaxVelocity(maxSpeed * 1.15, maxSpeed * 1.15);
 
@@ -205,7 +332,6 @@ export class Vehicle {
         const targetAngle = Math.atan2(driveY, driveX);
         const angleDiff = Phaser.Math.Angle.Wrap(targetAngle - this.sprite.rotation);
 
-        // Responsive arcade-style turning: pivots quickly from low speed and sweeps smoothly at high speed
         const lowSpeedAgility = Math.abs(this.forwardSpeed) < 90 ? 1.45 : 1.0;
         const maxTurnStep = turnSpeed * 2.65 * lowSpeedAgility * dtSeconds;
         if (Math.abs(angleDiff) <= maxTurnStep) {
@@ -227,7 +353,7 @@ export class Vehicle {
           );
         }
       } else {
-        const dragAmount = this.spec.drag * 125 * dtSeconds;
+        const dragAmount = this.spec.drag * 145 * dtSeconds;
         if (Math.abs(this.forwardSpeed) <= dragAmount) {
           this.forwardSpeed = 0;
         } else {
@@ -237,7 +363,6 @@ export class Vehicle {
 
       this.forwardSpeed = Phaser.Math.Clamp(this.forwardSpeed, 0, maxSpeed);
 
-      // Apply forward speed directly along heading while damping lateral slip naturally
       const nextHeadingX = Math.cos(this.sprite.rotation);
       const nextHeadingY = Math.sin(this.sprite.rotation);
       const nextRightX = -nextHeadingY;
@@ -250,7 +375,7 @@ export class Vehicle {
         nextHeadingY * this.forwardSpeed + nextRightY * nextLateral
       );
 
-      if (this.isBoosting && this.airTimer <= 0) {
+      if (this.isBoosting && this.airTimer <= 0 && !this.spec.isFlying) {
         const rearX = this.sprite.x - nextHeadingX * (this.spec.width * 0.5);
         const rearY = this.sprite.y - nextHeadingY * (this.spec.width * 0.5);
         this.nitroEmitter.emitParticleAt(rearX, rearY, 2);
@@ -261,6 +386,16 @@ export class Vehicle {
       if (this.forwardSpeed < 6) {
         body.setVelocity(0, 0);
         this.forwardSpeed = 0;
+      }
+    }
+
+    // Damage smoke warning below 35% HP
+    const hpRatio = this.health / Math.max(1, this.getEffectiveMaxHealth());
+    if (hpRatio <= 0.35) {
+      this.smokeTimer += dtSeconds;
+      if (this.smokeTimer >= (hpRatio <= 0.18 ? 0.09 : 0.22)) {
+        this.smokeTimer = 0;
+        this.smokeEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 1);
       }
     }
 
@@ -275,31 +410,90 @@ export class Vehicle {
       }
     }
 
+    if (this.health <= 0 && !this.destroyed) {
+      this.triggerDestruction(onDestroyed);
+    }
+
     this.syncAttachments();
   }
 
+  private triggerDestruction(onDestroyed?: (vehicle: Vehicle) => void): void {
+    this.destroyed = true;
+    this.health = 0;
+    this.forwardSpeed = 0;
+    this.isBoosting = false;
+    this.flightLift = 0;
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(0, 0);
+    body.enable = false;
+
+    this.sprite.setTint(0x334155).setTintMode(Phaser.TintModes.MULTIPLY);
+    this.sprite.setAlpha(0.72);
+    this.sprite.setScale(1);
+    this.sprite.setDepth(20);
+    this.headlight.setAlpha(0);
+    if (this.lightbarGlow) this.lightbarGlow.setAlpha(0);
+    if (this.turretSprite) this.turretSprite.setTint(0x334155);
+    if (this.rotorSprite) this.rotorSprite.setAlpha(0.35);
+
+    const scorch = this.scene.add.image(this.sprite.x, this.sprite.y, 'fx_scorch');
+    scorch.setDepth(6);
+    scorch.setScale(1.7);
+    this.scene.tweens.add({
+      targets: scorch,
+      alpha: 0,
+      duration: 6000,
+      onComplete: () => scorch.destroy(),
+    });
+
+    this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 20);
+    this.smokeEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 12);
+    this.respawnAtMs = this.scene.time.now + (this.isTempHijacked ? 4500 : 18000);
+    onDestroyed?.(this);
+  }
+
+  private respawnAtOrigin(): void {
+    this.destroyed = false;
+    this.respawnAtMs = 0;
+    this.sprite.setAlpha(1);
+    if (this.rotorSprite) this.rotorSprite.setAlpha(1);
+    if (this.turretSprite) this.turretSprite.clearTint();
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    this.restoreState(
+      this.spawnOrigin.x,
+      this.spawnOrigin.y,
+      this.spawnOrigin.angleDeg,
+      this.getEffectiveMaxHealth(),
+      this.upgrades,
+      this.paintColor
+    );
+  }
+
   public triggerTurboBoost(): boolean {
+    if (this.destroyed || this.spec.isFlying) return false;
     if (this.turboPadCooldown > 0) return false;
     this.turboPadCooldown = 0.7;
     this.turboPadTimer = 1.25;
     this.nitro = Math.min(100, this.nitro + 35);
-    const boostTarget = this.getEffectiveMaxSpeed() * 1.4;
+    const boostTarget = this.getEffectiveMaxSpeed() * 1.3;
     if (this.forwardSpeed < boostTarget) {
-      this.forwardSpeed = Math.max(this.forwardSpeed + 180, boostTarget * 0.92);
+      this.forwardSpeed = Math.max(this.forwardSpeed + 120, boostTarget * 0.9);
     }
     this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 10);
     return true;
   }
 
   public triggerStuntJump(): boolean {
-    if (this.airTimer > 0 || this.rampCooldown > 0 || Math.abs(this.forwardSpeed) < 230) {
+    if (this.destroyed || this.spec.isFlying) return false;
+    if (this.airTimer > 0 || this.rampCooldown > 0 || Math.abs(this.forwardSpeed) < 185) {
       return false;
     }
     this.airDuration = 0.85;
     this.airTimer = 0.85;
     this.rampCooldown = 1.8;
     this.nitro = Math.min(100, this.nitro + 25);
-    this.forwardSpeed = Math.max(this.forwardSpeed, this.getEffectiveMaxSpeed() * 1.12);
+    this.forwardSpeed = Math.max(this.forwardSpeed, this.getEffectiveMaxSpeed() * 1.1);
     this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 10);
     return true;
   }
@@ -321,41 +515,53 @@ export class Vehicle {
   }
 
   public handleCollision(nowMs: number): number {
-    if (this.airTimer > 0) return 0;
+    if (this.destroyed || this.airTimer > 0 || this.spec.isFlying) return 0;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     const impactSpeed = Math.max(Math.abs(this.forwardSpeed), body.speed);
 
     if (nowMs - this.lastImpactAt < 250) return 0;
     this.lastImpactAt = nowMs;
 
-    this.forwardSpeed *= 0.45;
+    const dmgScale = this.spec.collisionDamageScale ?? 1;
+    this.forwardSpeed *= dmgScale < 0.3 ? 0.72 : 0.45;
 
     if (impactSpeed > 150) {
-      const dmg = Math.max(2, Math.round((impactSpeed - 135) * 0.04));
-      this.health = Math.max(10, this.health - dmg);
+      const dmg = Math.max(1, Math.round((impactSpeed - 135) * 0.04 * dmgScale));
+      this.health = Math.max(0, this.health - dmg);
       this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 8);
       this.sprite.setTint(PALETTE.GOLD);
       this.scene.time.delayedCall(80, () => {
-        if (this.sprite.active) this.applyBaseTint();
+        if (this.sprite.active && !this.destroyed) this.applyBaseTint();
       });
       return Math.min(1, impactSpeed / this.spec.maxSpeed);
     }
     return 0;
   }
 
-  public applyBulletHit(damage: number): void {
-    if (this.occupied) return;
-    this.health = Math.max(10, this.health - Math.max(1, Math.round(damage * 0.35)));
+  public applyBulletHit(damage: number, allowOccupiedDamage = false): boolean {
+    if (this.destroyed) return false;
+    if (this.occupied && !allowOccupiedDamage) return false;
+    const scale = this.occupied ? 0.25 : 0.55;
+    this.health = Math.max(0, this.health - Math.max(2, Math.round(damage * scale)));
     this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 6);
     this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
     this.scene.time.delayedCall(55, () => {
-      if (this.sprite.active) this.applyBaseTint();
+      if (this.sprite.active && !this.destroyed) this.applyBaseTint();
     });
+    return this.health <= 0;
+  }
+
+  public forceCheckDestruction(onDestroyed?: (vehicle: Vehicle) => void): void {
+    if (this.health <= 0 && !this.destroyed) {
+      this.triggerDestruction(onDestroyed);
+    }
   }
 
   public setPaintColor(colorNum: number | null): void {
     this.paintColor = colorNum;
-    this.applyBaseTint();
+    if (!this.destroyed) {
+      this.applyBaseTint();
+    }
   }
 
   public getPaintColor(): number | null {
@@ -374,17 +580,26 @@ export class Vehicle {
     collisionManager: CollisionManager,
     otherVehicles: Vehicle[]
   ): { x: number; y: number } | null {
+    // Helicopters must be above solid dry ground to disembark safely
+    if (this.spec.isFlying) {
+      if (!collisionManager.isPointClearForEntity(this.sprite.x, this.sprite.y, 16)) {
+        return null;
+      }
+    }
+
     const angle = this.sprite.rotation;
     const perpX = -Math.sin(angle);
     const perpY = Math.cos(angle);
     const fwdX = Math.cos(angle);
     const fwdY = Math.sin(angle);
 
+    const sideDist = Math.max(34, this.spec.height * 0.72 + 16);
+    const fwdDist = Math.max(40, this.spec.width * 0.68 + 14);
     const candidates = [
-      { x: this.sprite.x - perpX * 34, y: this.sprite.y - perpY * 34 },
-      { x: this.sprite.x + perpX * 34, y: this.sprite.y + perpY * 34 },
-      { x: this.sprite.x - fwdX * 40, y: this.sprite.y - fwdY * 40 },
-      { x: this.sprite.x + fwdX * 40, y: this.sprite.y + fwdY * 40 },
+      { x: this.sprite.x - perpX * sideDist, y: this.sprite.y - perpY * sideDist },
+      { x: this.sprite.x + perpX * sideDist, y: this.sprite.y + perpY * sideDist },
+      { x: this.sprite.x - fwdX * fwdDist, y: this.sprite.y - fwdY * fwdDist },
+      { x: this.sprite.x + fwdX * fwdDist, y: this.sprite.y + fwdY * fwdDist },
     ];
 
     for (const c of candidates) {
@@ -392,7 +607,7 @@ export class Vehicle {
         continue;
       }
       const blockedByCar = otherVehicles.some((v) => {
-        if (v.id === this.id) return false;
+        if (v.id === this.id || v.isDestroyed() || v.spec.isFlying) return false;
         return Phaser.Math.Distance.Between(c.x, c.y, v.sprite.x, v.sprite.y) < 30;
       });
       if (!blockedByCar) {
@@ -409,7 +624,7 @@ export class Vehicle {
   }
 
   public getSpeedKmh(): number {
-    return Math.round(this.getSpeedPxPerSec() * 0.28);
+    return Math.round(this.getSpeedPxPerSec() * 0.38);
   }
 
   public getEffectiveMaxSpeed(): number {
@@ -441,6 +656,10 @@ export class Vehicle {
   }
 
   public repairFull(): boolean {
+    if (this.destroyed) {
+      this.respawnAtOrigin();
+      return true;
+    }
     const maxHp = this.getEffectiveMaxHealth();
     if (this.health >= maxHp) return false;
     this.health = maxHp;
@@ -483,26 +702,35 @@ export class Vehicle {
     upgrades: VehicleUpgradeLevels,
     paintColor: number | null = null
   ): void {
+    this.destroyed = false;
+    this.respawnAtMs = 0;
     this.upgrades = {
       engine: Phaser.Math.Clamp(upgrades?.engine ?? 0, 0, VEHICLE_UPGRADE_CONFIG.engine.maxLevel),
       handling: Phaser.Math.Clamp(upgrades?.handling ?? 0, 0, VEHICLE_UPGRADE_CONFIG.handling.maxLevel),
       armor: Phaser.Math.Clamp(upgrades?.armor ?? 0, 0, VEHICLE_UPGRADE_CONFIG.armor.maxLevel),
     };
     this.paintColor = paintColor ?? null;
+    this.sprite.setAlpha(1);
     this.applyBaseTint();
     const maxHp = this.getEffectiveMaxHealth();
-    this.health = Phaser.Math.Clamp(Math.round(health), 10, maxHp);
+    this.health = Phaser.Math.Clamp(Math.round(health), 20, maxHp);
     this.forwardSpeed = 0;
     this.nitro = 100;
     this.airTimer = 0;
     this.airDuration = 0;
+    this.flightLift = 0;
+    this.rotorSpinSpeed = 0;
     this.sprite.setScale(1);
     this.sprite.setDepth(21);
+    if (this.rotorSprite) this.rotorSprite.setAlpha(1);
+    if (this.turretSprite) this.turretSprite.clearTint();
 
     const angleRad = Phaser.Math.DegToRad(angleDeg);
+    this.turretAngleRad = angleRad;
     this.sprite.setPosition(x, y);
     this.sprite.setRotation(angleRad);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
     body.reset(x, y);
     body.setMaxVelocity(this.getEffectiveMaxSpeed() * 1.5, this.getEffectiveMaxSpeed() * 1.5);
     this.syncAttachments();
@@ -527,11 +755,13 @@ export class Vehicle {
     const x = this.sprite.x;
     const y = this.sprite.y;
     const rot = this.sprite.rotation;
-    const airOffset = this.airDuration > 0
-      ? Math.sin((1 - Math.max(0, this.airTimer) / this.airDuration) * Math.PI) * 14
-      : 0;
+    const airOffset = this.spec.isFlying
+      ? this.flightLift * 20
+      : this.airDuration > 0
+        ? Math.sin((1 - Math.max(0, this.airTimer) / this.airDuration) * Math.PI) * 14
+        : 0;
 
-    this.shadow.setPosition(x + 3 + airOffset, y + 4 + airOffset);
+    this.shadow.setPosition(x + 3 + airOffset, y + 5 + airOffset);
     this.shadow.setRotation(rot);
 
     const frontOffset = this.spec.width * 0.44;
@@ -544,15 +774,34 @@ export class Vehicle {
     if (this.lightbarGlow) {
       this.lightbarGlow.setPosition(x, y);
     }
+
+    if (this.turretSprite) {
+      this.turretSprite.setPosition(x, y);
+      this.turretSprite.setRotation(this.turretAngleRad);
+    }
+
+    if (this.rotorSprite) {
+      this.rotorSprite.setPosition(x, y);
+      this.rotorSprite.setRotation(this.rotorAngle);
+      this.rotorSprite.setScale(1 + this.flightLift * 0.24);
+      this.rotorSprite.setDepth(this.sprite.depth + 1);
+    }
   }
 
   public destroy(): void {
     this.sparkEmitter.destroy();
     this.nitroEmitter.destroy();
+    this.smokeEmitter.destroy();
     this.shadow.destroy();
     this.headlight.destroy();
     if (this.lightbarGlow) {
       this.lightbarGlow.destroy();
+    }
+    if (this.turretSprite) {
+      this.turretSprite.destroy();
+    }
+    if (this.rotorSprite) {
+      this.rotorSprite.destroy();
     }
     this.sprite.destroy();
   }

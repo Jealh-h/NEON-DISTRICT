@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PALETTE, PLAYER_CONFIG, WEAPON_SPECS, WeaponId } from '../config/BalanceConfig';
+import { MECH_SPECS, MechKind, PALETTE, PLAYER_CONFIG, WEAPON_SPECS, WeaponId } from '../config/BalanceConfig';
 import { MovementVector } from '../systems/InputManager';
 
 const WALK_SEQUENCE = ['player_walk_1', 'player_walk_3', 'player_walk_2', 'player_walk_3'] as const;
@@ -14,6 +14,7 @@ export class Player {
   private stepIndex = 0;
   private idleTimer = 0;
   private inVehicle = false;
+  private activeMechKind: MechKind | null = null;
   private dustEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
   private lastBumpFlashAt = 0;
   private recoilOffset = 0;
@@ -52,6 +53,36 @@ export class Player {
     this.syncWeaponBarrel();
   }
 
+  public setMechForm(mechKind: MechKind | null): void {
+    this.activeMechKind = mechKind;
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    if (mechKind) {
+      const spec = MECH_SPECS[mechKind];
+      this.sprite.setTexture(spec.textureKey);
+      this.sprite.setScale(1.06);
+      this.shadow.setSize(32, 22);
+      body.setSize(28, 28, true);
+      body.setMaxVelocity(spec.speed, spec.speed);
+      this.weaponBarrel.setVisible(false);
+    } else {
+      this.sprite.setTexture('player_idle');
+      this.sprite.setScale(1, 1);
+      this.shadow.setSize(20, 14);
+      body.setSize(PLAYER_CONFIG.BODY_WIDTH, PLAYER_CONFIG.BODY_HEIGHT, true);
+      body.setMaxVelocity(PLAYER_CONFIG.WALK_SPEED, PLAYER_CONFIG.WALK_SPEED);
+      this.weaponBarrel.setVisible(!this.inVehicle);
+      this.syncWeaponBarrel();
+    }
+  }
+
+  public getMechKind(): MechKind | null {
+    return this.activeMechKind;
+  }
+
+  public isInMech(): boolean {
+    return this.activeMechKind !== null;
+  }
+
   public setWeaponVisual(weaponId: WeaponId): void {
     this.activeWeaponId = weaponId;
     const spec = WEAPON_SPECS[weaponId];
@@ -69,20 +100,24 @@ export class Player {
     dtSeconds: number,
     moveVec: MovementVector,
     isMovingCallback?: () => void,
-    aimOverrideRad?: number
+    aimOverrideRad?: number,
+    speedMultiplier = 1
   ): boolean {
     if (this.inVehicle) return false;
 
     const isMoving = Math.abs(moveVec.x) > 0.05 || Math.abs(moveVec.y) > 0.05;
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    const baseSpeed = this.activeMechKind ? MECH_SPECS[this.activeMechKind].speed : PLAYER_CONFIG.WALK_SPEED;
+    const moveSpeed = Math.round(baseSpeed * speedMultiplier);
+    body.setMaxVelocity(moveSpeed, moveSpeed);
 
     if (this.recoilOffset > 0) {
       this.recoilOffset = Math.max(0, this.recoilOffset - dtSeconds * 36);
     }
 
     if (isMoving) {
-      const vx = moveVec.x * PLAYER_CONFIG.WALK_SPEED;
-      const vy = moveVec.y * PLAYER_CONFIG.WALK_SPEED;
+      const vx = moveVec.x * moveSpeed;
+      const vy = moveVec.y * moveSpeed;
       body.setVelocity(vx, vy);
 
       this.facingAngle = aimOverrideRad !== undefined ? aimOverrideRad : Math.atan2(moveVec.y, moveVec.x);
@@ -92,14 +127,16 @@ export class Player {
       if (this.walkTimer >= 0.095) {
         this.walkTimer = 0;
         this.stepIndex = (this.stepIndex + 1) % WALK_SEQUENCE.length;
-        this.sprite.setTexture(WALK_SEQUENCE[this.stepIndex]);
+        if (!this.activeMechKind) {
+          this.sprite.setTexture(WALK_SEQUENCE[this.stepIndex]);
+        }
         if (this.stepIndex === 0 || this.stepIndex === 2) {
-          this.dustEmitter.emitParticleAt(this.sprite.x, this.sprite.y + 4, 1);
+          this.dustEmitter.emitParticleAt(this.sprite.x, this.sprite.y + 4, this.activeMechKind ? 2 : 1);
         }
       }
 
-      const stridePulse = 1 + Math.sin(this.stepIndex * Math.PI * 0.5) * 0.04;
-      this.sprite.setScale(stridePulse, 1 / stridePulse);
+      const stridePulse = (this.activeMechKind ? 1.06 : 1) + Math.sin(this.stepIndex * Math.PI * 0.5) * 0.04;
+      this.sprite.setScale(stridePulse, (this.activeMechKind ? 1.12 : 1) / stridePulse);
 
       if (isMovingCallback) {
         isMovingCallback();
@@ -112,9 +149,10 @@ export class Player {
         this.facingAngle = aimOverrideRad;
         this.sprite.setRotation(this.facingAngle);
       }
-      const breath = 1 + Math.sin(this.idleTimer * 3.0) * 0.025;
+      const baseScale = this.activeMechKind ? 1.06 : 1;
+      const breath = baseScale + Math.sin(this.idleTimer * 3.0) * 0.025;
       this.sprite.setScale(breath, breath);
-      if (this.sprite.texture.key !== 'player_idle') {
+      if (!this.activeMechKind && this.sprite.texture.key !== 'player_idle') {
         this.sprite.setTexture('player_idle');
       }
     }
@@ -125,6 +163,14 @@ export class Player {
   }
 
   public getMuzzlePosition(): { x: number; y: number } {
+    if (this.activeMechKind) {
+      const cos = Math.cos(this.facingAngle);
+      const sin = Math.sin(this.facingAngle);
+      return {
+        x: this.sprite.x + cos * 22,
+        y: this.sprite.y + sin * 22,
+      };
+    }
     const spec = WEAPON_SPECS[this.activeWeaponId];
     const barrelReach = spec.barrelLength + 7;
     const rightSide = 4;
@@ -136,7 +182,28 @@ export class Player {
     };
   }
 
+  public getMechDualMuzzles(): Array<{ x: number; y: number }> {
+    const cos = Math.cos(this.facingAngle);
+    const sin = Math.sin(this.facingAngle);
+    const forward = 21;
+    const lateral = 10;
+    return [
+      {
+        x: this.sprite.x + cos * forward - sin * lateral,
+        y: this.sprite.y + sin * forward + cos * lateral,
+      },
+      {
+        x: this.sprite.x + cos * forward + sin * lateral,
+        y: this.sprite.y + sin * forward - cos * lateral,
+      },
+    ];
+  }
+
   private syncWeaponBarrel(): void {
+    if (this.activeMechKind) {
+      this.weaponBarrel.setVisible(false);
+      return;
+    }
     const cos = Math.cos(this.facingAngle);
     const sin = Math.sin(this.facingAngle);
     const forward = 11 - this.recoilOffset;
@@ -167,16 +234,23 @@ export class Player {
       body.enable = true;
       this.sprite.setVisible(true);
       this.shadow.setVisible(true);
-      this.weaponBarrel.setVisible(true);
-      this.sprite.setTexture('player_idle');
-      this.sprite.setScale(0.75);
-      this.scene.tweens.add({
-        targets: this.sprite,
-        scaleX: 1,
-        scaleY: 1,
-        duration: 140,
-        ease: 'Back.easeOut',
-      });
+      if (this.activeMechKind) {
+        const spec = MECH_SPECS[this.activeMechKind];
+        this.sprite.setTexture(spec.textureKey);
+        this.weaponBarrel.setVisible(false);
+        this.sprite.setScale(1.06);
+      } else {
+        this.weaponBarrel.setVisible(true);
+        this.sprite.setTexture('player_idle');
+        this.sprite.setScale(0.75);
+        this.scene.tweens.add({
+          targets: this.sprite,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 140,
+          ease: 'Back.easeOut',
+        });
+      }
       this.syncWeaponBarrel();
     }
   }
@@ -188,8 +262,13 @@ export class Player {
   public freeze(): void {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(0, 0);
-    this.sprite.setTexture('player_idle');
-    this.sprite.setScale(1, 1);
+    if (this.activeMechKind) {
+      this.sprite.setTexture(MECH_SPECS[this.activeMechKind].textureKey);
+      this.sprite.setScale(1.06, 1.06);
+    } else {
+      this.sprite.setTexture('player_idle');
+      this.sprite.setScale(1, 1);
+    }
     this.syncWeaponBarrel();
   }
 

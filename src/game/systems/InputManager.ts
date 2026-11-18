@@ -55,6 +55,7 @@ export class InputManager {
   private virtualInteractQueued = false;
   private virtualEnterExitQueued = false;
   private virtualSwitchWeaponQueued = false;
+  private virtualSpecialQueued = false;
 
   private canvasPointerDown = false;
   private blurHandler: () => void;
@@ -146,6 +147,10 @@ export class InputManager {
     this.virtualEnterExitQueued = true;
   }
 
+  public queueVirtualSpecial(): void {
+    this.virtualSpecialQueued = true;
+  }
+
   public getMovementVector(): MovementVector {
     let vx = 0;
     let vy = 0;
@@ -222,6 +227,24 @@ export class InputManager {
       aiming: false,
       aimAngleRad: currentFacingRad,
     };
+  }
+
+  public getAimAngleAlways(originPos: { x: number; y: number }, fallbackRad: number): number {
+    const stickMag = Math.hypot(this.aimFireStick.x, this.aimFireStick.y);
+    if (stickMag > 0.16) {
+      return Math.atan2(this.aimFireStick.y, this.aimFireStick.x);
+    }
+    const pointer = this.scene.input.activePointer;
+    if (pointer && !pointer.wasTouch && (pointer.x !== 0 || pointer.y !== 0)) {
+      const cam = this.scene.cameras.main;
+      const worldPt = cam.getWorldPoint(pointer.x, pointer.y);
+      const dx = worldPt.x - originPos.x;
+      const dy = worldPt.y - originPos.y;
+      if (Math.hypot(dx, dy) > 8) {
+        return Math.atan2(dy, dx);
+      }
+    }
+    return fallbackRad;
   }
 
   public consumeSwitchWeaponSlot(): 'next' | number | null {
@@ -322,6 +345,18 @@ export class InputManager {
     return Boolean(this.keys && Phaser.Input.Keyboard.JustDown(this.keys.pause));
   }
 
+  public consumeSpecialJustPressed(): boolean {
+    let pressed = false;
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.handbrake)) {
+      pressed = true;
+    }
+    if (this.virtualSpecialQueued) {
+      this.virtualSpecialQueued = false;
+      pressed = true;
+    }
+    return pressed;
+  }
+
   public resetAllHeldInputs(): void {
     this.joystickVector.x = 0;
     this.joystickVector.y = 0;
@@ -331,6 +366,7 @@ export class InputManager {
     this.virtualInteractQueued = false;
     this.virtualEnterExitQueued = false;
     this.virtualSwitchWeaponQueued = false;
+    this.virtualSpecialQueued = false;
 
     if (this.scene.input.keyboard) {
       this.scene.input.keyboard.resetKeys();

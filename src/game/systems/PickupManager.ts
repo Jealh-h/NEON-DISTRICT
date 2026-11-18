@@ -4,7 +4,7 @@ import { GAME_EVENT, gameEvents } from '../ui/GameEvents';
 import { AudioManager } from './AudioManager';
 import { WeaponManager } from './WeaponManager';
 
-export type PickupKind = 'cash' | 'medkit' | 'ammo' | 'chip' | 'overdrive';
+export type PickupKind = 'cash' | 'medkit' | 'ammo' | 'chip' | 'overdrive' | 'armor' | 'bribe';
 
 interface ChipDef {
   id: string;
@@ -15,7 +15,7 @@ interface ChipDef {
 
 interface StreetCrateDef {
   id: string;
-  kind: 'cash' | 'medkit' | 'ammo';
+  kind: 'cash' | 'medkit' | 'ammo' | 'armor' | 'bribe';
   x: number;
   y: number;
   amount: number;
@@ -59,11 +59,23 @@ const STREET_CRATES: StreetCrateDef[] = [
   { id: 'crate-harbor-ammo', kind: 'ammo', x: 960, y: 2010, amount: 60 },
   { id: 'crate-chrome-med', kind: 'medkit', x: 2280, y: 1840, amount: 50 },
   { id: 'crate-chrome-cash', kind: 'cash', x: 2860, y: 1560, amount: 110 },
+  { id: 'crate-plaza-armor', kind: 'armor', x: 640, y: 800, amount: 50 },
+  { id: 'crate-harbor-armor', kind: 'armor', x: 520, y: 2040, amount: 50 },
+  { id: 'crate-chrome-armor', kind: 'armor', x: 2560, y: 1620, amount: 50 },
+  { id: 'crate-highland-armor', kind: 'armor', x: 2140, y: 420, amount: 50 },
+  { id: 'bribe-alley-west', kind: 'bribe', x: 184, y: 640, amount: 1 },
+  { id: 'bribe-park-canal', kind: 'bribe', x: 960, y: 1520, amount: 1 },
+  { id: 'bribe-highland-pass', kind: 'bribe', x: 2560, y: 480, amount: 1 },
+  { id: 'bribe-harbor-pier', kind: 'bribe', x: 1160, y: 2220, amount: 1 },
+  { id: 'bribe-chrome-yard', kind: 'bribe', x: 2140, y: 1960, amount: 1 },
 ];
 
 export interface PickupCallbacks {
   onCash: (amount: number) => void;
   onHeal: (amount: number) => void;
+  onArmor?: (amount: number) => void;
+  onBribe?: () => void;
+  onChipCollected?: (allDone: boolean) => void;
   onOverdrive: (durationSec: number) => void;
   weaponManager: WeaponManager;
 }
@@ -111,10 +123,15 @@ export class PickupManager {
     });
   }
 
-  public spawnDrop(x: number, y: number, kind: 'cash' | 'medkit' | 'ammo' | 'overdrive', amount = 0): void {
+  public spawnDrop(
+    x: number,
+    y: number,
+    kind: 'cash' | 'medkit' | 'ammo' | 'overdrive' | 'armor',
+    amount = 0
+  ): void {
     this.dropCounter += 1;
     const defaultAmt =
-      kind === 'cash' ? 35 : kind === 'medkit' ? 32 : kind === 'ammo' ? 40 : 8;
+      kind === 'cash' ? 35 : kind === 'medkit' ? 32 : kind === 'ammo' ? 40 : kind === 'armor' ? 35 : 8;
     const node = this.createNode(
       `drop-${this.dropCounter}`,
       kind,
@@ -140,6 +157,8 @@ export class PickupManager {
       ammo: 'pickup_ammo',
       chip: 'pickup_chip',
       overdrive: 'pickup_overdrive',
+      armor: 'pickup_armor',
+      bribe: 'pickup_bribe',
     };
     const tintMap: Record<PickupKind, number> = {
       cash: PALETTE.GOLD,
@@ -147,6 +166,8 @@ export class PickupManager {
       ammo: PALETTE.NEON_PINK,
       chip: PALETTE.NEON_PURPLE,
       overdrive: PALETTE.NEON_PINK,
+      armor: 0x38bdf8,
+      bribe: 0xfacc15,
     };
 
     const glow = this.scene.add.image(x, y, 'fx_pixel_glow');
@@ -255,6 +276,7 @@ export class PickupManager {
       const allDone = this.collectedChipIds.size >= CHIP_LOCATIONS.length;
       const reward = node.amount + (allDone ? 1000 : 0);
       callbacks.onCash(reward);
+      callbacks.onChipCollected?.(allDone);
       if (allDone) {
         this.audioManager.playMissionComplete();
         gameEvents.emit(
@@ -303,6 +325,20 @@ export class PickupManager {
         callbacks.onCash(30);
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, '弹药模块折算现金 +$30');
       }
+      return;
+    }
+
+    if (node.kind === 'armor') {
+      callbacks.onArmor?.(node.amount || 50);
+      this.audioManager.playArmorPickup();
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, `防弹战术护甲 +${node.amount || 50}`);
+      return;
+    }
+
+    if (node.kind === 'bribe') {
+      callbacks.onBribe?.();
+      this.audioManager.playPurchase();
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, '获取警方通缉消除徽章：通缉等级 -1★！');
       return;
     }
 

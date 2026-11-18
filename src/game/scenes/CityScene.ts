@@ -3,6 +3,8 @@ import {
   CAMERA_CONFIG,
   ECONOMY_CONFIG,
   GamePlayMode,
+  HORDE_GEAR_COSTS,
+  MECH_SPECS,
   PLAYER_CONFIG,
   RADIO_STATIONS,
   VEHICLE_UPGRADE_CONFIG,
@@ -11,6 +13,7 @@ import {
   WEAPON_UPGRADE_CONFIG,
   WORLD_CONFIG,
 } from '../config/BalanceConfig';
+import { CyberwareSlotId, SkillTrackId } from '../config/ExpansionConfig';
 import { Player } from '../entities/Player';
 import { AudioManager } from '../systems/AudioManager';
 import { HordeManager } from '../systems/HordeManager';
@@ -20,7 +23,9 @@ import { MissionManager } from '../systems/MissionManager';
 import { NPCManager } from '../systems/NPCManager';
 import { PickupManager } from '../systems/PickupManager';
 import { PoliceManager } from '../systems/PoliceManager';
+import { ProgressionManager } from '../systems/ProgressionManager';
 import { RaceManager } from '../systems/RaceManager';
+import { RandomEventManager } from '../systems/RandomEventManager';
 import { SaveManager } from '../systems/SaveManager';
 import { TrafficManager } from '../systems/TrafficManager';
 import { VehicleManager } from '../systems/VehicleManager';
@@ -38,6 +43,7 @@ import {
 } from '../ui/GameEvents';
 import { CollisionManager } from '../world/CollisionManager';
 import { DistrictData, DistrictManager } from '../world/DistrictManager';
+import { EnvironmentManager } from '../world/EnvironmentManager';
 import { WorldManager } from '../world/WorldManager';
 
 const SERVICE_LANDMARK_IDS = new Set([
@@ -71,6 +77,9 @@ export class CityScene extends Phaser.Scene {
   private interactivePropManager!: InteractivePropManager;
   private hordeManager!: HordeManager;
   private raceManager!: RaceManager;
+  private progressionManager!: ProgressionManager;
+  private randomEventManager!: RandomEventManager;
+  private environmentManager!: EnvironmentManager;
   private saveManager!: SaveManager;
   private player!: Player;
   private districtData!: DistrictData;
@@ -90,6 +99,8 @@ export class CityScene extends Phaser.Scene {
   private clubOverdriveTimer = 0;
   private playerHealth: number = PLAYER_CONFIG.INITIAL_HEALTH;
   private playerMaxHealth: number = PLAYER_CONFIG.MAX_HEALTH;
+  private playerArmor = 0;
+  private playerMaxArmor: number = PLAYER_CONFIG.MAX_ARMOR;
   private playerCash: number = PLAYER_CONFIG.INITIAL_CASH;
   private lastDamageAt = 0;
   private unsubscribers: Array<() => void> = [];
@@ -146,7 +157,38 @@ export class CityScene extends Phaser.Scene {
       this.pickupManager
     );
     this.raceManager = new RaceManager(this, this.audioManager);
+    this.progressionManager = new ProgressionManager(this.audioManager);
+    this.randomEventManager = new RandomEventManager(
+      this,
+      this.collisionManager,
+      this.districtManager,
+      this.districtData,
+      this.audioManager,
+      this.pickupManager
+    );
+    this.environmentManager = new EnvironmentManager(this);
     this.saveManager = new SaveManager();
+
+    this.weaponManager.configureIntegrations({
+      progressionManager: this.progressionManager,
+      hordeManager: this.hordeManager,
+      randomEventManager: this.randomEventManager,
+      getPlayerHpRatio: () => this.playerHealth / Math.max(1, this.playerMaxHealth),
+      onCombatKillBonus: (healHp, healArmor, exp) => {
+        if (healHp > 0) {
+          this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + healHp);
+        }
+        if (healArmor > 0) {
+          this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor + healArmor);
+        }
+        if (healHp > 0 || healArmor > 0) {
+          this.emitPlayerStats();
+        }
+        if (exp > 0) {
+          this.progressionManager.addExp(exp);
+        }
+      },
+    });
 
     this.npcManager = new NPCManager(this, this.collisionManager, this.audioManager);
     this.npcManager.spawnInitialNpcs(this.player);
@@ -186,6 +228,7 @@ export class CityScene extends Phaser.Scene {
     this.setMode('TITLE');
     gameEvents.emit(GAME_EVENT.SCENE_READY, { district: this.districtData });
     gameEvents.emit(GAME_EVENT.PLAY_MODE_CHANGED, this.playMode);
+    this.syncProgressionCaps(false);
     this.emitPlayerStats();
     this.emitRadioStation();
     gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, this.ownsSafehouse);
@@ -194,10 +237,27 @@ export class CityScene extends Phaser.Scene {
     this.hordeManager.emitTelemetry(true);
     this.raceManager.emitTelemetry(true);
     this.pickupManager.emitExploration();
+    this.progressionManager.emitTelemetry(true);
+    this.environmentManager.emitTelemetry(true);
+    this.randomEventManager.emitTelemetry(true);
     this.emitSaveStatus();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.cleanup());
+  }
+
+  private syncProgressionCaps(healAddedDelta = true): void {
+    const nextMaxHp = PLAYER_CONFIG.MAX_HEALTH + this.progressionManager.getBonusMaxHealth();
+    const nextMaxArmor = PLAYER_CONFIG.MAX_ARMOR + this.progressionManager.getBonusMaxArmor();
+    const hpDelta = Math.max(0, nextMaxHp - this.playerMaxHealth);
+    this.playerMaxHealth = nextMaxHp;
+    this.playerMaxArmor = nextMaxArmor;
+    if (healAddedDelta && hpDelta > 0) {
+      this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + hpDelta);
+    } else {
+      this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth);
+    }
+    this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor);
   }
 
   private getTargetZoom(isDriving: boolean): number {
@@ -218,6 +278,7 @@ export class CityScene extends Phaser.Scene {
       if (!this.cameras || !this.cameras.main) return;
       const isDriving = Boolean(this.vehicleManager?.getActiveVehicle());
       this.cameras.main.setZoom(this.getTargetZoom(isDriving));
+      this.environmentManager?.onResize();
     };
     this.scale.on('resize', onResize);
     this.unsubscribers.push(() => {
@@ -273,7 +334,7 @@ export class CityScene extends Phaser.Scene {
       if (this.playMode === 'sandbox') {
         this.performSave(true);
       }
-      this.hordeManager.stop();
+      this.hordeManager.stop(this.player);
       this.raceManager.stop();
       this.pickupManager.clearTemporaryDrops();
       this.setMode('TITLE');
@@ -304,13 +365,43 @@ export class CityScene extends Phaser.Scene {
       this.inputManager.setVirtualAimFire(payload);
     };
     const onSwitchWeapon = (slot?: 'next' | number) => {
-      if (this.mode === 'PLAYING' && !this.modalPaused && !this.player.isInVehicle()) {
+      if (this.mode !== 'PLAYING' || this.modalPaused) return;
+      const activeVeh = this.vehicleManager.getActiveVehicle();
+      if (!activeVeh || activeVeh.spec.weaponKind === 'driveby') {
         this.weaponManager.switchWeapon(slot ?? 'next', this.player);
       }
     };
     const onOpenQuickArmory = () => {
       if (this.mode === 'PLAYING') {
         this.openQuickArmoryModal();
+      }
+    };
+    const onTriggerMechAbility = () => {
+      if (this.mode !== 'PLAYING' || this.modalPaused) return;
+      if (this.playMode === 'horde' && this.hordeManager.isMechActive()) {
+        const mechKind = this.hordeManager.getMechKind();
+        if (mechKind) {
+          const aimAngle = this.inputManager.getAimAngleAlways(
+            this.player.getPosition(),
+            this.player.getFacingRadians()
+          );
+          this.weaponManager.triggerMechAbility(
+            mechKind,
+            this.player,
+            aimAngle,
+            this.hordeManager,
+            (bonus) => {
+              this.playerCash += bonus;
+              this.emitPlayerStats();
+            },
+            (durationSec) => {
+              if (this.hitstopTimer <= 0) {
+                this.hitstopTimer = Math.max(this.hitstopTimer, durationSec);
+                this.physics.world.pause();
+              }
+            }
+          );
+        }
       }
     };
     const onDrivingInput = (payload: DrivingInputPayload) => {
@@ -353,6 +444,45 @@ export class CityScene extends Phaser.Scene {
       }
     };
 
+    const onUpgradeSkill = (track: SkillTrackId) => {
+      if (this.progressionManager.upgradeSkill(track)) {
+        this.syncProgressionCaps(true);
+        this.emitPlayerStats();
+        this.performSave(true);
+      }
+    };
+    const onBuyCyberware = (slot: CyberwareSlotId) => {
+      const ok = this.progressionManager.buyCyberware(slot, (cost) => {
+        if (this.playerCash < cost) {
+          this.audioManager.playBump(this.time.now);
+          gameEvents.emit(GAME_EVENT.STATUS_TOAST, `现金不足，需要 $${cost}！`);
+          return false;
+        }
+        this.playerCash -= cost;
+        this.emitPlayerStats();
+        return true;
+      });
+      if (ok) {
+        this.performSave(true);
+      }
+    };
+    const onTriggerHackJam = () => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      this.progressionManager.tryTriggerJammer(this.wantedManager.getWantedLevel());
+    };
+    const onSelectHordePerk = (perkId: string) => {
+      this.hordeManager.selectPerk(perkId, {
+        onArmorBonus: (amt) => {
+          this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor + amt);
+          this.emitPlayerStats();
+        },
+        onCashBonus: (amt) => {
+          this.playerCash += amt;
+          this.emitPlayerStats();
+        },
+      });
+    };
+
     gameEvents.on(GAME_EVENT.START_GAME, onStart);
     gameEvents.on(GAME_EVENT.START_PLAY_MODE, onStartPlayMode);
     gameEvents.on(GAME_EVENT.CONTINUE_GAME, onContinueGame);
@@ -372,10 +502,15 @@ export class CityScene extends Phaser.Scene {
     gameEvents.on(GAME_EVENT.DRIVING_INPUT, onDrivingInput);
     gameEvents.on(GAME_EVENT.TRIGGER_INTERACT, onVirtualInteract);
     gameEvents.on(GAME_EVENT.TRIGGER_ENTER_EXIT, onVirtualEnterExit);
+    gameEvents.on(GAME_EVENT.TRIGGER_MECH_ABILITY, onTriggerMechAbility);
     gameEvents.on(GAME_EVENT.ACCEPT_MISSION, onAcceptMission);
     gameEvents.on(GAME_EVENT.ABANDON_MISSION, onAbandonMission);
     gameEvents.on(GAME_EVENT.PURCHASE_SERVICE, onPurchaseService);
     gameEvents.on(GAME_EVENT.SET_MODAL_PAUSED, onSetModalPaused);
+    gameEvents.on(GAME_EVENT.UPGRADE_SKILL, onUpgradeSkill);
+    gameEvents.on(GAME_EVENT.BUY_CYBERWARE, onBuyCyberware);
+    gameEvents.on(GAME_EVENT.TRIGGER_HACK_JAM, onTriggerHackJam);
+    gameEvents.on(GAME_EVENT.SELECT_HORDE_PERK, onSelectHordePerk);
 
     this.unsubscribers.push(() => {
       gameEvents.off(GAME_EVENT.START_GAME, onStart);
@@ -397,10 +532,15 @@ export class CityScene extends Phaser.Scene {
       gameEvents.off(GAME_EVENT.DRIVING_INPUT, onDrivingInput);
       gameEvents.off(GAME_EVENT.TRIGGER_INTERACT, onVirtualInteract);
       gameEvents.off(GAME_EVENT.TRIGGER_ENTER_EXIT, onVirtualEnterExit);
+      gameEvents.off(GAME_EVENT.TRIGGER_MECH_ABILITY, onTriggerMechAbility);
       gameEvents.off(GAME_EVENT.ACCEPT_MISSION, onAcceptMission);
       gameEvents.off(GAME_EVENT.ABANDON_MISSION, onAbandonMission);
       gameEvents.off(GAME_EVENT.PURCHASE_SERVICE, onPurchaseService);
       gameEvents.off(GAME_EVENT.SET_MODAL_PAUSED, onSetModalPaused);
+      gameEvents.off(GAME_EVENT.UPGRADE_SKILL, onUpgradeSkill);
+      gameEvents.off(GAME_EVENT.BUY_CYBERWARE, onBuyCyberware);
+      gameEvents.off(GAME_EVENT.TRIGGER_HACK_JAM, onTriggerHackJam);
+      gameEvents.off(GAME_EVENT.SELECT_HORDE_PERK, onSelectHordePerk);
     });
   }
 
@@ -421,10 +561,11 @@ export class CityScene extends Phaser.Scene {
     this.pickupManager.clearTemporaryDrops();
 
     if (nextPlayMode === 'sandbox') {
-      this.hordeManager.stop();
+      this.hordeManager.stop(this.player);
       this.raceManager.stop();
       this.policeManager.setPursuitEnabled(true);
       this.pickupManager.setChipsVisible(true);
+      this.randomEventManager.setEnabled(true);
       if (useSave) {
         this.loadFromSave();
       } else {
@@ -434,25 +575,32 @@ export class CityScene extends Phaser.Scene {
       this.raceManager.stop();
       this.policeManager.setPursuitEnabled(false);
       this.pickupManager.setChipsVisible(false);
+      this.randomEventManager.setEnabled(false);
       this.missionManager.abandonMission(true);
       this.vehicleManager.resetAllToInitial(this.player);
       this.weaponManager.resetToDefault(this.player);
+      this.player.setMechForm(null);
       this.player.resetPosition(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
+      this.syncProgressionCaps(false);
       this.playerHealth = this.playerMaxHealth;
+      this.playerArmor = 50;
       this.playerCash = 800;
       this.cameras.main.centerOn(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
       this.emitVehicleTelemetry(null);
       this.emitPlayerStats();
       this.hordeManager.start();
     } else if (nextPlayMode === 'race') {
-      this.hordeManager.stop();
+      this.hordeManager.stop(this.player);
       this.policeManager.setPursuitEnabled(false);
       this.pickupManager.setChipsVisible(false);
+      this.randomEventManager.setEnabled(false);
       this.missionManager.abandonMission(true);
       this.vehicleManager.resetAllToInitial(this.player);
       this.weaponManager.resetToDefault(this.player);
       const raceVeh = this.vehicleManager.enterRaceVehicle(this.player);
+      this.syncProgressionCaps(false);
       this.playerHealth = this.playerMaxHealth;
+      this.playerArmor = 0;
       this.playerCash = PLAYER_CONFIG.INITIAL_CASH;
       this.emitPlayerStats();
       this.emitVehicleTelemetry(raceVeh);
@@ -565,10 +713,19 @@ export class CityScene extends Phaser.Scene {
     }
 
     if (this.inputManager.consumeEnterExitJustPressed()) {
-      const result = this.vehicleManager.tryToggleEnterExit(this.player);
+      const result = this.vehicleManager.tryToggleEnterExit(
+        this.player,
+        this.trafficManager,
+        (hijackPos) => {
+          this.npcManager.triggerAreaPanic(hijackPos.x, hijackPos.y, 180);
+          if (this.playMode === 'sandbox' && this.policeManager.isPoliceNearby(hijackPos.x, hijackPos.y, 440)) {
+            this.wantedManager.reportCrime('steal_police_car', hijackPos, true);
+          }
+        }
+      );
       const cam = this.cameras.main;
 
-      if (result.action === 'entered' && result.vehicle) {
+      if ((result.action === 'entered' || result.action === 'hijacked') && result.vehicle) {
         cam.startFollow(result.vehicle.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
         cam.zoomTo(this.getTargetZoom(true), 260, 'Sine.easeOut');
         if (this.activeLandmark) {
@@ -582,8 +739,26 @@ export class CityScene extends Phaser.Scene {
         this.emitVehicleTelemetry(result.vehicle);
         this.audioManager.setRadioPlaying(true);
 
-        if (this.playMode === 'sandbox' && result.vehicle.spec.type === 'cruiser') {
-          this.wantedManager.reportCrime('steal_police_car', result.vehicle.getPosition(), true);
+        if (result.action === 'hijacked') {
+          gameEvents.emit(GAME_EVENT.STATUS_TOAST, '街头强行截停！已夺取过往车辆！');
+        } else if (result.vehicle.spec.type === 'cruiser' || result.vehicle.spec.type === 'swat') {
+          if (this.playMode === 'sandbox') {
+            this.wantedManager.reportCrime('steal_police_car', result.vehicle.getPosition(), true);
+            gameEvents.emit(
+              GAME_EVENT.STATUS_TOAST,
+              `已征用【${result.vehicle.spec.name}】！按 E 可开启「治安追缉」悬赏任务！`
+            );
+          }
+        } else if (result.vehicle.spec.isFlying) {
+          gameEvents.emit(
+            GAME_EVENT.STATUS_TOAST,
+            `已起飞【${result.vehicle.spec.name}】！可无视水域/高山/建筑飞行，左键/J 机炮扫射！`
+          );
+        } else if (result.vehicle.spec.hasTurret) {
+          gameEvents.emit(
+            GAME_EVENT.STATUS_TOAST,
+            `已驾驶【${result.vehicle.spec.name}】！鼠标瞄准旋转炮塔，左键/J 发射 120mm 主炮！`
+          );
         }
       } else if (result.action === 'exited') {
         cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
@@ -607,10 +782,46 @@ export class CityScene extends Phaser.Scene {
         ? { driveX: 0, driveY: 0, handbrake: true, nitro: false }
         : rawDrivingControls;
 
-    this.vehicleManager.update(dt, drivingControls, this.districtData, (bonus) => {
-      this.playerCash += bonus;
-      this.emitPlayerStats();
-    });
+    const envTargetPos = activeVehicle ? activeVehicle.getPosition() : this.player.getPosition();
+    const curDistrictName = this.districtManager.getDistrictNameAt(
+      envTargetPos.x,
+      envTargetPos.y,
+      this.districtData
+    );
+    this.environmentManager.update(dt, time, curDistrictName, true);
+    this.progressionManager.update(dt, time);
+
+    this.vehicleManager.update(
+      dt,
+      drivingControls,
+      this.districtData,
+      (bonus) => {
+        this.playerCash += bonus;
+        this.progressionManager.addExp(30);
+        this.emitPlayerStats();
+      },
+      (destroyedVeh, wasOccupied) => {
+        if (wasOccupied) {
+          const dPos = destroyedVeh.getPosition();
+          const ejectPos = this.collisionManager.isPointClearForEntity(dPos.x + 30, dPos.y, 12)
+            ? { x: dPos.x + 30, y: dPos.y }
+            : WORLD_CONFIG.PLAYER_SPAWN;
+          this.vehicleManager.forceEject(this.player, ejectPos);
+          const cam = this.cameras.main;
+          cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+          cam.zoomTo(this.getTargetZoom(false), 260, 'Sine.easeOut');
+          this.audioManager.setRadioPlaying(false);
+          this.emitVehicleTelemetry(null);
+          this.applyPlayerDamage(32);
+          gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${destroyedVeh.spec.name} 装甲摧毁爆炸！已紧急跳车！`);
+        }
+      },
+      {
+        speedMult: this.progressionManager.getVehicleSpeedMultiplier(),
+        nitroRegenMult: this.progressionManager.getNitroRegenMultiplier(),
+        gripMult: this.environmentManager.getVehicleGripMultiplier(),
+      }
+    );
 
     this.interactivePropManager.update(dt, time);
 
@@ -625,7 +836,15 @@ export class CityScene extends Phaser.Scene {
     this.trafficManager.update(dt, timeSec, trafficObstacles);
 
     const targetPos = currentVehicle ? currentVehicle.getPosition() : this.player.getPosition();
-    this.policeManager.update(dt, time, targetPos, Boolean(currentVehicle));
+    this.policeManager.update(
+      dt,
+      time,
+      targetPos,
+      Boolean(currentVehicle),
+      (dmg) => this.applyPlayerDamage(dmg),
+      this.environmentManager.getPoliceSightMultiplier(),
+      this.progressionManager.isJammerActive()
+    );
 
     this.pickupManager.update(dt, time, targetPos, {
       onCash: (amount) => {
@@ -633,8 +852,25 @@ export class CityScene extends Phaser.Scene {
         this.emitPlayerStats();
       },
       onHeal: (amount) => {
-        this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + amount);
+        const scaled = Math.round(amount * this.progressionManager.getHealMultiplier());
+        this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + scaled);
         this.emitPlayerStats();
+      },
+      onArmor: (amount) => {
+        this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor + amount);
+        this.emitPlayerStats();
+      },
+      onBribe: () => {
+        if (this.wantedManager.getWantedLevel() > 0) {
+          this.wantedManager.reduceWanted(1);
+        } else {
+          this.playerCash += 100;
+          this.emitPlayerStats();
+        }
+      },
+      onChipCollected: (allDone) => {
+        this.progressionManager.addReputation({ hacker: allDone ? 80 : 25 });
+        this.progressionManager.addExp(allDone ? 160 : 55, '霓虹数据芯片解析');
       },
       onOverdrive: (durationSec) => {
         this.hordeManager.activateOverdrive(durationSec);
@@ -644,10 +880,35 @@ export class CityScene extends Phaser.Scene {
 
     if (this.playMode === 'sandbox') {
       this.missionManager.update(dt, time, targetPos, Boolean(currentVehicle), (reward) => {
-        this.playerCash += reward;
+        const scaled = Math.round(reward * this.progressionManager.getRewardCashMultiplier());
+        this.playerCash += scaled;
+        this.progressionManager.addReputation({ street: 35 });
+        this.progressionManager.addExp(95, '城市委托完成');
         this.emitPlayerStats();
         this.performSave(true);
       });
+
+      this.randomEventManager.update(
+        dt,
+        time,
+        targetPos,
+        (dmg) => this.applyPlayerDamage(dmg),
+        (reward) => {
+          const scaledCash = Math.round(reward.cash * this.progressionManager.getRewardCashMultiplier());
+          this.playerCash += scaledCash;
+          this.emitPlayerStats();
+          this.progressionManager.addReputation(reward.repRewards);
+          this.progressionManager.addExp(reward.exp);
+          if (reward.type === 'armored_van' || reward.type === 'military_convoy') {
+            this.wantedManager.reportCrime('assault_police', reward.pos, true);
+          }
+          this.performSave(true);
+          gameEvents.emit(
+            GAME_EVENT.STATUS_TOAST,
+            `完成动态事件【${reward.title}】！赏金 +$${scaledCash} · 经验 +${reward.exp}`
+          );
+        }
+      );
 
       this.autoSaveTimer += dt;
       if (this.autoSaveTimer >= 20) {
@@ -661,13 +922,23 @@ export class CityScene extends Phaser.Scene {
         targetPos,
         (damage) => this.applyPlayerDamage(damage),
         (healAmount) => {
-          this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + healAmount);
+          const scaled = Math.round(healAmount * this.progressionManager.getHealMultiplier());
+          this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + scaled);
+          this.emitPlayerStats();
+        },
+        (sx, sy, angleRad) => {
+          this.weaponManager.fireTurretBolt(sx, sy, angleRad);
+        },
+        (cashDrop) => {
+          const scaled = Math.round(cashDrop * this.hordeManager.getCashDropMultiplier());
+          this.playerCash += scaled;
           this.emitPlayerStats();
         }
       );
     } else if (this.playMode === 'race') {
       this.raceManager.update(dt, time, targetPos, currentVehicle, (reward) => {
         this.playerCash += reward;
+        this.progressionManager.addExp(70, '环城极速赛事');
         this.emitPlayerStats();
       });
     }
@@ -688,6 +959,11 @@ export class CityScene extends Phaser.Scene {
       }
 
       if (!currentVehicle.isAirborne()) {
+        this.randomEventManager.checkVehicleRam(
+          currentVehicle.sprite.x,
+          currentVehicle.sprite.y,
+          currentVehicle.getSpeedPxPerSec()
+        );
         this.interactivePropManager.checkVehicleRam(
           currentVehicle.sprite.x,
           currentVehicle.sprite.y,
@@ -710,18 +986,66 @@ export class CityScene extends Phaser.Scene {
         );
       }
 
-      // Drive-in garage bay detection across both garages
+      if (currentVehicle.spec.weaponKind === 'driveby') {
+        const switchSlot = this.inputManager.consumeSwitchWeaponSlot();
+        if (switchSlot !== null) {
+          this.weaponManager.switchWeapon(switchSlot, this.player);
+        }
+      }
+
+      if (currentVehicle.spec.hasTurret) {
+        const aimAngle = this.inputManager.getAimAngleAlways(
+          currentVehicle.getPosition(),
+          currentVehicle.sprite.rotation
+        );
+        currentVehicle.setTurretAngle(aimAngle);
+      }
+
+      const vehFireInput = this.inputManager.getFireInput(
+        currentVehicle.getPosition(),
+        currentVehicle.spec.hasTurret
+          ? currentVehicle.getTurretAngle()
+          : currentVehicle.sprite.rotation
+      );
+      if (vehFireInput.firing) {
+        this.weaponManager.tryFireVehicleWeapon(
+          time,
+          currentVehicle,
+          vehFireInput.aimAngleRad,
+          this.player,
+          this.npcManager,
+          this.policeManager,
+          (crimeType, cPos, hasWitness) => {
+            if (this.playMode === 'sandbox') {
+              this.wantedManager.reportCrime(crimeType, cPos, hasWitness);
+            }
+          },
+          this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
+        );
+      }
+
+      // Drive-in garage bay detection across both garages or Vigilante trigger in police vehicles
       this.checkNearbyLandmarks(currentVehicle.getPosition(), 112, ['plaza-garage', 'chrome-workshop']);
-      if (
-        this.inputManager.consumeInteractJustPressed() &&
-        (this.activeLandmark?.id === 'plaza-garage' || this.activeLandmark?.id === 'chrome-workshop')
-      ) {
-        this.openLandmarkService(this.activeLandmark);
+      if (this.inputManager.consumeInteractJustPressed()) {
+        if (
+          this.activeLandmark?.id === 'plaza-garage' ||
+          this.activeLandmark?.id === 'chrome-workshop'
+        ) {
+          this.openLandmarkService(this.activeLandmark);
+        } else if (
+          this.playMode === 'sandbox' &&
+          (currentVehicle.spec.type === 'cruiser' || currentVehicle.spec.type === 'swat')
+        ) {
+          this.policeManager.startVigilanteMission(currentVehicle.getPosition());
+        }
       }
     } else {
-      const switchSlot = this.inputManager.consumeSwitchWeaponSlot();
-      if (switchSlot !== null) {
-        this.weaponManager.switchWeapon(switchSlot, this.player);
+      const mechKind = this.hordeManager.isActive() ? this.hordeManager.getMechKind() : null;
+      if (!mechKind) {
+        const switchSlot = this.inputManager.consumeSwitchWeaponSlot();
+        if (switchSlot !== null) {
+          this.weaponManager.switchWeapon(switchSlot, this.player);
+        }
       }
 
       const fireInput = this.inputManager.getFireInput(
@@ -735,23 +1059,55 @@ export class CityScene extends Phaser.Scene {
         () => {
           this.audioManager.playFootstep(time);
         },
-        fireInput.aiming ? fireInput.aimAngleRad : undefined
+        fireInput.aiming ? fireInput.aimAngleRad : undefined,
+        this.progressionManager.getMoveSpeedMultiplier()
       );
 
-      if (fireInput.firing) {
-        this.weaponManager.tryFire(
-          time,
-          this.player,
-          fireInput.aimAngleRad,
-          this.npcManager,
-          this.policeManager,
-          (crimeType, cPos, hasWitness) => {
-            if (this.playMode === 'sandbox') {
-              this.wantedManager.reportCrime(crimeType, cPos, hasWitness);
+      if (mechKind) {
+        if (fireInput.firing) {
+          this.weaponManager.tryFireMechPrimary(
+            time,
+            mechKind,
+            this.player,
+            fireInput.aimAngleRad,
+            this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
+          );
+        }
+        if (this.inputManager.consumeSpecialJustPressed()) {
+          this.weaponManager.triggerMechAbility(
+            mechKind,
+            this.player,
+            fireInput.aimAngleRad,
+            this.hordeManager,
+            (bonus) => {
+              this.playerCash += bonus;
+              this.emitPlayerStats();
+            },
+            (durationSec) => {
+              if (this.hitstopTimer <= 0) {
+                this.hitstopTimer = Math.max(this.hitstopTimer, durationSec);
+                this.physics.world.pause();
+              }
             }
-          },
-          this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
-        );
+          );
+        }
+      } else {
+        this.inputManager.consumeSpecialJustPressed();
+        if (fireInput.firing) {
+          this.weaponManager.tryFire(
+            time,
+            this.player,
+            fireInput.aimAngleRad,
+            this.npcManager,
+            this.policeManager,
+            (crimeType, cPos, hasWitness) => {
+              if (this.playMode === 'sandbox') {
+                this.wantedManager.reportCrime(crimeType, cPos, hasWitness);
+              }
+            },
+            this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
+          );
+        }
       }
 
       const pos = this.player.getPosition();
@@ -787,6 +1143,8 @@ export class CityScene extends Phaser.Scene {
           this.interactivePropManager.interactNearest(pos.x, pos.y, {
             nowMs: time,
             isHealthFull: () => this.playerHealth >= this.playerMaxHealth,
+            atmCashMult: this.progressionManager.getAtmCashMultiplier(),
+            atmAlarmChance: this.progressionManager.getAtmAlarmChance(),
             tryDeduct: (cost) => {
               if (this.playerCash < cost) {
                 this.audioManager.playBump(time);
@@ -798,11 +1156,16 @@ export class CityScene extends Phaser.Scene {
               return true;
             },
             onHeal: (amount) => {
-              this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + amount);
+              const scaled = Math.round(amount * this.progressionManager.getHealMultiplier());
+              this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + scaled);
               this.emitPlayerStats();
             },
-            onCash: (amount) => {
+            onCash: (amount, fromAtm) => {
               this.playerCash += amount;
+              if (fromAtm) {
+                this.progressionManager.addReputation({ hacker: 18 });
+                this.progressionManager.addExp(22);
+              }
               this.emitPlayerStats();
             },
             onAtmAlarm: (atmPos) => {
@@ -1287,6 +1650,130 @@ export class CityScene extends Phaser.Scene {
         GAME_EVENT.STATUS_TOAST,
         `【${spec.shortName}】完成 ${trackCfg.label} Lv.${result.newLevel} 强化！`
       );
+      return;
+    }
+
+    if (payload.serviceType === 'buy_armor') {
+      if (this.playerArmor >= this.playerMaxArmor) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '防弹战术护甲已满，无需补充！');
+        return;
+      }
+      if (!deduct(HORDE_GEAR_COSTS.ARMOR_PACK_COST)) return;
+      this.playerArmor = Math.min(
+        this.playerMaxArmor,
+        this.playerArmor + HORDE_GEAR_COSTS.ARMOR_PACK_AMOUNT
+      );
+      this.audioManager.playArmorPickup();
+      this.emitPlayerStats();
+      this.performSave(true);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        `已装备防弹战术护甲 +${HORDE_GEAR_COSTS.ARMOR_PACK_AMOUNT}（可抵消 75% 伤害）！`
+      );
+      return;
+    }
+
+    if (payload.serviceType === 'deploy_mech') {
+      if (this.playMode !== 'horde') {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '仅无尽杀怪挑战模式可空降呼叫战斗机甲！');
+        return;
+      }
+      const mechSpec = MECH_SPECS[payload.mechKind];
+      if (!mechSpec || !deduct(mechSpec.cost)) return;
+      if (this.vehicleManager.getActiveVehicle()) {
+        this.vehicleManager.forceEject(this.player, this.player.getPosition());
+        const cam = this.cameras.main;
+        cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+        cam.setZoom(this.getTargetZoom(false));
+        this.emitVehicleTelemetry(null);
+      }
+      this.emitPlayerStats();
+      this.hordeManager.deployMech(payload.mechKind, this.player, (cash) => {
+        this.playerCash += cash;
+        this.emitPlayerStats();
+      });
+      return;
+    }
+
+    if (payload.serviceType === 'deploy_turret') {
+      if (this.playMode !== 'horde') {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '仅无尽杀怪挑战模式可部署自动激光哨戒炮！');
+        return;
+      }
+      if (this.hordeManager.getTurretCount() >= HORDE_GEAR_COSTS.MAX_TURRETS) {
+        gameEvents.emit(
+          GAME_EVENT.STATUS_TOAST,
+          `场上自动激光哨戒炮已达上限（最多 ${HORDE_GEAR_COSTS.MAX_TURRETS} 座）！`
+        );
+        return;
+      }
+      if (!deduct(HORDE_GEAR_COSTS.TURRET_COST)) return;
+      const pos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
+      const ang = this.player.getFacingRadians();
+      const tx = pos.x + Math.cos(ang) * 26;
+      const ty = pos.y + Math.sin(ang) * 26;
+      const placed = this.collisionManager.isPointClearForEntity(tx, ty, 12) ? { x: tx, y: ty } : pos;
+      this.hordeManager.deploySentryTurret(placed.x, placed.y);
+      this.emitPlayerStats();
+      return;
+    }
+
+    if (payload.serviceType === 'orbital_strike') {
+      if (this.playMode !== 'horde') {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '仅无尽杀怪挑战模式可呼叫轨道离子轰炸！');
+        return;
+      }
+      if (!deduct(HORDE_GEAR_COSTS.ORBITAL_STRIKE_COST)) return;
+      const pos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
+      this.emitPlayerStats();
+      this.weaponManager.triggerOrbitalStrike(
+        pos,
+        this.npcManager,
+        this.policeManager,
+        this.vehicleManager,
+        this.trafficManager,
+        this.hordeManager,
+        this.interactivePropManager,
+        () => {},
+        (cash) => {
+          this.playerCash += cash;
+          this.emitPlayerStats();
+        },
+        (dur) => {
+          if (this.hitstopTimer <= 0) {
+            this.hitstopTimer = Math.max(this.hitstopTimer, dur);
+            this.physics.world.pause();
+          }
+        },
+        (dmg) => this.applyPlayerDamage(dmg)
+      );
+      return;
+    }
+
+    if (payload.serviceType === 'airdrop_tank') {
+      if (this.playMode !== 'horde') {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '仅无尽杀怪挑战模式可呼叫空投重装主战坦克！');
+        return;
+      }
+      if (!deduct(HORDE_GEAR_COSTS.AIRDROP_TANK_COST)) return;
+      const pos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
+      let dropPos = pos;
+      for (let i = 0; i < 12; i++) {
+        const ang = (Math.PI * 2 * i) / 12;
+        const cx = pos.x + Math.cos(ang) * 62;
+        const cy = pos.y + Math.sin(ang) * 62;
+        if (this.collisionManager.isPointClearForEntity(cx, cy, 18)) {
+          dropPos = { x: cx, y: cy };
+          break;
+        }
+      }
+      this.vehicleManager.spawnDynamicVehicle('tank', dropPos.x, dropPos.y, 0);
+      this.audioManager.playOrbitalStrike();
+      this.emitPlayerStats();
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        '【泰坦重装主战坦克】已空投降落至你身旁！按 F 上车发射 120mm 主炮！'
+      );
     }
   }
 
@@ -1332,6 +1819,9 @@ export class CityScene extends Phaser.Scene {
       maxHealth: vehicle.getEffectiveMaxHealth(),
       nitro: vehicle.getNitro(),
       isBoosting: vehicle.isNitroBoosting(),
+      isFlying: Boolean(vehicle.spec.isFlying),
+      hasTurret: Boolean(vehicle.spec.hasTurret),
+      weaponKind: vehicle.spec.weaponKind,
       upgrades: vehicle.getUpgrades(),
     });
   }
@@ -1361,7 +1851,29 @@ export class CityScene extends Phaser.Scene {
     if (now - this.lastDamageAt < invulnMs || this.mode !== 'PLAYING') return;
     this.lastDamageAt = now;
 
-    this.playerHealth = Math.max(0, this.playerHealth - amount);
+    const progDr = this.progressionManager.getDamageReduction();
+    const hordeDr = this.playMode === 'horde' ? this.hordeManager.getDamageReduction() : 0;
+    const totalDr = Math.min(0.7, progDr + hordeDr);
+    const reducedAmount = Math.max(1, Math.round(amount * (1 - totalDr)));
+
+    if (this.hordeManager.isActive() && this.hordeManager.isMechActive()) {
+      this.hordeManager.absorbDamageByMech(reducedAmount, this.player, (cash) => {
+        this.playerCash += cash;
+        this.emitPlayerStats();
+      });
+      this.audioManager.playCrash(now, 0.55);
+      this.cameras.main.shake(95, 0.003);
+      return;
+    }
+
+    const absorbed = Math.min(
+      this.playerArmor,
+      Math.round(reducedAmount * PLAYER_CONFIG.ARMOR_ABSORB_RATIO)
+    );
+    this.playerArmor = Math.max(0, this.playerArmor - absorbed);
+    const hpDamage = Math.max(1, reducedAmount - absorbed);
+
+    this.playerHealth = Math.max(0, this.playerHealth - hpDamage);
     this.audioManager.playCrash(now, 0.75);
     this.cameras.main.shake(130, 0.0045);
     this.cameras.main.flash(180, 255, 69, 69, false);
@@ -1380,11 +1892,17 @@ export class CityScene extends Phaser.Scene {
 
     if (this.playMode === 'horde') {
       this.audioManager.playMissionFail();
+      this.hordeManager.stop(this.player);
       this.pickupManager.clearTemporaryDrops();
+      this.vehicleManager.resetAllToInitial(this.player);
       this.player.resetPosition(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
       this.playerHealth = this.playerMaxHealth;
+      this.playerArmor = 50;
       this.playerCash = Math.max(800, this.playerCash);
+      this.cameras.main.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+      this.cameras.main.setZoom(this.getTargetZoom(false));
       this.cameras.main.centerOn(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
+      this.emitVehicleTelemetry(null);
       this.emitPlayerStats();
       this.emitTelemetry(true);
       this.hordeManager.start();
@@ -1428,13 +1946,14 @@ export class CityScene extends Phaser.Scene {
     const progress = this.missionManager.getProgress();
 
     const ok = this.saveManager.writeSave({
-      version: 1,
+      version: 2,
       savedAt: Date.now(),
       district: this.districtManager.getDistrictNameAt(playerPos.x, playerPos.y, this.districtData),
       player: {
         x: playerPos.x,
         y: playerPos.y,
         health: this.playerHealth,
+        armor: this.playerArmor,
         cash: this.playerCash,
       },
       ownsSafehouse: this.ownsSafehouse,
@@ -1443,6 +1962,7 @@ export class CityScene extends Phaser.Scene {
       vehicles: this.vehicleManager.serializeAll(),
       weapons: this.weaponManager.serialize(),
       collectedChipIds: this.pickupManager.serializeCollectedChips(),
+      progression: this.progressionManager.serialize(),
       settings: {
         muted: this.audioManager.isMuted(),
       },
@@ -1466,6 +1986,8 @@ export class CityScene extends Phaser.Scene {
     this.vehicleManager.restoreAll(save.vehicles, this.player);
     this.weaponManager.restore(save.weapons, this.player);
     this.pickupManager.restoreCollectedChips(save.collectedChipIds);
+    this.progressionManager.restore(save.progression);
+    this.syncProgressionCaps(false);
 
     const spawnPos = this.collisionManager.isPointClearForEntity(save.player.x, save.player.y, 12)
       ? { x: save.player.x, y: save.player.y }
@@ -1475,6 +1997,7 @@ export class CityScene extends Phaser.Scene {
     this.ownsSafehouse = Boolean(save.ownsSafehouse);
     gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, this.ownsSafehouse);
     this.playerHealth = Phaser.Math.Clamp(Math.round(save.player.health), 20, this.playerMaxHealth);
+    this.playerArmor = Phaser.Math.Clamp(Math.round(save.player.armor ?? 0), 0, this.playerMaxArmor);
     this.playerCash = Math.max(0, Math.round(save.player.cash));
     this.missionManager.restoreProgress(save.completedMissionIds, save.totalMissionEarnings);
 
@@ -1491,10 +2014,14 @@ export class CityScene extends Phaser.Scene {
     this.vehicleManager.resetAllToInitial(this.player);
     this.weaponManager.resetToDefault(this.player);
     this.pickupManager.resetAllChips();
+    this.progressionManager.reset();
+    this.playerMaxHealth = PLAYER_CONFIG.MAX_HEALTH;
+    this.playerMaxArmor = PLAYER_CONFIG.MAX_ARMOR;
     this.player.resetPosition(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
     this.ownsSafehouse = false;
     gameEvents.emit(GAME_EVENT.SAFEHOUSE_STATUS, false);
     this.playerHealth = PLAYER_CONFIG.INITIAL_HEALTH;
+    this.playerArmor = 0;
     this.playerCash = PLAYER_CONFIG.INITIAL_CASH;
     this.missionManager.resetProgress();
     this.autoSaveTimer = 0;
@@ -1513,6 +2040,8 @@ export class CityScene extends Phaser.Scene {
     gameEvents.emit(GAME_EVENT.PLAYER_STATS, {
       health: this.playerHealth,
       maxHealth: this.playerMaxHealth,
+      armor: this.playerArmor,
+      maxArmor: this.playerMaxArmor,
       cash: this.playerCash,
     });
   }
@@ -1522,6 +2051,8 @@ export class CityScene extends Phaser.Scene {
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
     this.inputManager.destroy();
+    this.environmentManager.destroy();
+    this.randomEventManager.destroy();
     this.interactivePropManager.destroy();
     this.weaponManager.destroy();
     this.pickupManager.destroy();

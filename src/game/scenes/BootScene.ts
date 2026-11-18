@@ -1241,6 +1241,260 @@ export class BootScene extends Phaser.Scene {
         tex.refresh();
       }
     }
+
+    // 7. Phantom Superbike (34x16 facing RIGHT +X)
+    {
+      const tex = this.textures.createCanvas('veh_superbike', 34, 16);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = '#070B14';
+        ctx.fillRect(2, 5, 8, 6);
+        ctx.fillRect(24, 5, 8, 6);
+        // Twin cyber exhausts & sleek nose fairing
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(5, 3, 24, 10);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(7, 4, 20, 8);
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(8, 3, 18, 2);
+        ctx.fillRect(8, 11, 18, 2);
+        ctx.fillRect(5, 7, 4, 2);
+        ctx.fillRect(26, 7, 4, 2);
+        // Rider cockpit & cyan visor aero screen
+        ctx.fillStyle = '#0B1120';
+        ctx.fillRect(11, 5, 8, 6);
+        ctx.fillStyle = '#FFD166';
+        ctx.fillRect(21, 5, 5, 6);
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(30, 6, 2, 4);
+        ctx.fillStyle = '#FF2E88';
+        ctx.fillRect(2, 6, 2, 4);
+        tex.refresh();
+      }
+    }
+
+    // 8. Off-road Assault Buggy (46x28 facing RIGHT +X)
+    {
+      const tex = this.textures.createCanvas('veh_buggy', 46, 28);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Exposed rugged knobby off-road wheels
+        ctx.fillStyle = '#070B14';
+        ctx.fillRect(5, 0, 11, 5);
+        ctx.fillRect(29, 0, 11, 5);
+        ctx.fillRect(5, 23, 11, 5);
+        ctx.fillRect(29, 23, 11, 5);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(7, 1, 7, 3);
+        ctx.fillRect(31, 1, 7, 3);
+        ctx.fillRect(7, 24, 7, 3);
+        ctx.fillRect(31, 24, 7, 3);
+        // Roll-cage chassis
+        ctx.fillStyle = '#1E1B18';
+        ctx.fillRect(4, 5, 38, 18);
+        ctx.fillStyle = '#EA580C';
+        ctx.fillRect(6, 6, 33, 16);
+        // Tubular steel roll bars
+        ctx.fillStyle = '#94A3B8';
+        ctx.fillRect(9, 7, 20, 2);
+        ctx.fillRect(9, 19, 20, 2);
+        ctx.fillRect(17, 7, 3, 14);
+        // Open cockpit & hood intake
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(11, 9, 14, 10);
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(30, 10, 6, 8);
+        // Bull bar & roof spotlights
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(41, 7, 3, 14);
+        ctx.fillStyle = '#FEF08A';
+        ctx.fillRect(40, 8, 2, 4);
+        ctx.fillRect(40, 16, 2, 4);
+        ctx.fillStyle = '#FF4545';
+        ctx.fillRect(4, 8, 2, 4);
+        ctx.fillRect(4, 16, 2, 4);
+        tex.refresh();
+      }
+    }
+
+    // 9. SWAT Heavy APC (58x30 facing RIGHT +X)
+    {
+      const tex = this.textures.createCanvas('veh_swat', 58, 30);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // 6 heavy armored wheels
+        ctx.fillStyle = '#070B14';
+        ctx.fillRect(7, 1, 10, 3);
+        ctx.fillRect(23, 1, 10, 3);
+        ctx.fillRect(40, 1, 10, 3);
+        ctx.fillRect(7, 26, 10, 3);
+        ctx.fillRect(23, 26, 10, 3);
+        ctx.fillRect(40, 26, 10, 3);
+        // Heavy tactical hull
+        ctx.fillStyle = '#0B1120';
+        ctx.fillRect(3, 4, 52, 22);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(5, 5, 48, 20);
+        // Reinforced armor plating & roof hatch
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(8, 7, 28, 16);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(15, 10, 10, 10);
+        ctx.fillStyle = '#38BDF8';
+        ctx.fillRect(10, 6, 20, 1);
+        ctx.fillRect(10, 23, 20, 1);
+        // Armored slit windshield & ramming bumper
+        ctx.fillStyle = '#38BDF8';
+        ctx.fillRect(40, 8, 4, 14);
+        ctx.fillStyle = '#94A3B8';
+        ctx.fillRect(53, 6, 3, 18);
+        // Dual lightbar
+        ctx.fillStyle = '#FF4545';
+        ctx.fillRect(35, 7, 3, 7);
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(35, 16, 3, 7);
+        // Lights
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(51, 6, 2, 4);
+        ctx.fillRect(51, 20, 2, 4);
+        ctx.fillStyle = '#FF4545';
+        ctx.fillRect(3, 6, 2, 4);
+        ctx.fillRect(3, 20, 2, 4);
+        tex.refresh();
+      }
+    }
+
+    // 10. Armed Attack Helicopter Hull (56x32 facing RIGHT +X)
+    {
+      const tex = this.textures.createCanvas('veh_heli', 56, 32);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Landing skids
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(20, 3, 22, 2);
+        ctx.fillRect(20, 27, 22, 2);
+        ctx.fillRect(25, 5, 2, 4);
+        ctx.fillRect(35, 5, 2, 4);
+        ctx.fillRect(25, 23, 2, 4);
+        ctx.fillRect(35, 23, 2, 4);
+        // Tail boom & rear stabilizer
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(2, 13, 22, 6);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(3, 14, 20, 4);
+        ctx.fillStyle = '#FFD166';
+        ctx.fillRect(3, 9, 3, 14);
+        // Stub weapon wings + missile pods
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(26, 4, 9, 24);
+        ctx.fillStyle = '#FF4545';
+        ctx.fillRect(33, 5, 4, 4);
+        ctx.fillRect(33, 23, 4, 4);
+        // Fuselage & armored canopy
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(20, 9, 28, 14);
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(23, 10, 21, 12);
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(38, 11, 10, 10);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(39, 12, 7, 8);
+        // Nose autocannon barrel
+        ctx.fillStyle = '#94A3B8';
+        ctx.fillRect(48, 15, 7, 2);
+        // Rotor hub
+        ctx.fillStyle = '#FFD166';
+        ctx.fillRect(29, 14, 4, 4);
+        tex.refresh();
+      }
+    }
+
+    // 10b. Helicopter Spinning Rotor Overlay (64x64)
+    {
+      const tex = this.textures.createCanvas('veh_heli_rotor', 64, 64);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.22)';
+        ctx.beginPath();
+        ctx.arc(32, 32, 29, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#94A3B8';
+        ctx.fillRect(2, 30, 60, 4);
+        ctx.fillRect(30, 2, 4, 60);
+        ctx.fillStyle = '#FFD166';
+        ctx.fillRect(2, 30, 5, 4);
+        ctx.fillRect(57, 30, 5, 4);
+        ctx.fillRect(30, 2, 4, 5);
+        ctx.fillRect(30, 57, 4, 5);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(29, 29, 6, 6);
+        tex.refresh();
+      }
+    }
+
+    // 11. Heavy Battle Tank Hull (60x36 facing RIGHT +X)
+    {
+      const tex = this.textures.createCanvas('veh_tank', 60, 36);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Heavy armored caterpillar treads
+        ctx.fillStyle = '#090D16';
+        ctx.fillRect(3, 1, 54, 7);
+        ctx.fillRect(3, 28, 54, 7);
+        ctx.fillStyle = '#334155';
+        for (let tx = 5; tx < 54; tx += 5) {
+          ctx.fillRect(tx, 2, 3, 5);
+          ctx.fillRect(tx, 29, 3, 5);
+        }
+        // Main hull armor
+        ctx.fillStyle = '#14261E';
+        ctx.fillRect(6, 7, 48, 22);
+        ctx.fillStyle = '#1F3A2E';
+        ctx.fillRect(9, 9, 42, 18);
+        // Neon tactical trim + rear engine louvers
+        ctx.fillStyle = '#4ADE80';
+        ctx.fillRect(10, 8, 36, 1);
+        ctx.fillRect(10, 27, 36, 1);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(10, 11, 8, 14);
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(52, 9, 2, 4);
+        ctx.fillRect(52, 23, 2, 4);
+        tex.refresh();
+      }
+    }
+
+    // 11b. Tank Rotating Turret + Main Cannon (58x26, pivot at x=18, y=13)
+    {
+      const tex = this.textures.createCanvas('veh_tank_turret', 58, 26);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Long 120mm cannon barrel facing +X
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(26, 10, 28, 6);
+        ctx.fillStyle = '#64748B';
+        ctx.fillRect(26, 11, 26, 4);
+        ctx.fillStyle = '#4ADE80';
+        ctx.fillRect(51, 10, 4, 6);
+        // Turret body
+        ctx.fillStyle = '#0F291E';
+        ctx.fillRect(6, 3, 24, 20);
+        ctx.fillStyle = '#264D3B';
+        ctx.fillRect(8, 5, 20, 16);
+        ctx.fillStyle = '#4ADE80';
+        ctx.fillRect(12, 8, 8, 10);
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(14, 10, 4, 6);
+        tex.refresh();
+      }
+    }
   }
 
   private createEnemyAndPickupTextures(): void {
@@ -1369,6 +1623,72 @@ export class BootScene extends Phaser.Scene {
     makePickup('pickup_ammo', '#2D1A2B', '#FF2E88', '#FFD166');
     makePickup('pickup_chip', '#1A1038', '#C000FF', '#00F5FF');
     makePickup('pickup_overdrive', '#36131E', '#FF2E88', '#FFFFFF');
+    makePickup('pickup_armor', '#0F2537', '#38BDF8', '#E0F2FE');
+    makePickup('pickup_bribe', '#2E230B', '#FACC15', '#FEF08A');
+
+    // Player Titan Heavy Mech (38x38)
+    {
+      const tex = this.textures.createCanvas('mech_titan', 38, 38);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Heavy shoulder missile pods
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(5, 2, 16, 7);
+        ctx.fillRect(5, 29, 16, 7);
+        ctx.fillStyle = '#FF4545';
+        ctx.fillRect(19, 3, 3, 5);
+        ctx.fillRect(19, 30, 3, 5);
+        // Twin plasma arm cannons
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(16, 7, 19, 5);
+        ctx.fillRect(16, 26, 19, 5);
+        ctx.fillStyle = '#FFD166';
+        ctx.fillRect(32, 8, 5, 3);
+        ctx.fillRect(32, 27, 5, 3);
+        // Armored torso
+        ctx.fillStyle = '#0F172A';
+        ctx.fillRect(7, 9, 18, 20);
+        ctx.fillStyle = '#D97706';
+        ctx.fillRect(9, 11, 14, 16);
+        // Glowing visor
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(19, 14, 6, 10);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(21, 16, 3, 6);
+        tex.refresh();
+      }
+    }
+
+    // Player Phantom Assault Mech (36x36)
+    {
+      const tex = this.textures.createCanvas('mech_phantom', 36, 36);
+      if (tex) {
+        const ctx = tex.getContext();
+        ctx.imageSmoothingEnabled = false;
+        // Sleek cyber thrusters
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(2, 10, 4, 5);
+        ctx.fillRect(2, 21, 4, 5);
+        // Dual rail arms
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(14, 5, 19, 4);
+        ctx.fillRect(14, 27, 19, 4);
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(29, 6, 6, 2);
+        ctx.fillRect(29, 28, 6, 2);
+        // Agile exo-chassis
+        ctx.fillStyle = '#1E1B4B';
+        ctx.fillRect(6, 9, 17, 18);
+        ctx.fillStyle = '#4338CA';
+        ctx.fillRect(8, 11, 13, 14);
+        ctx.fillStyle = '#FF2E88';
+        ctx.fillRect(10, 12, 3, 12);
+        ctx.fillStyle = '#00F5FF';
+        ctx.fillRect(18, 13, 6, 10);
+        tex.refresh();
+      }
+    }
   }
 
   private createNpcTextures(): void {
@@ -1904,6 +2224,36 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(6, 13, 14, 2);
       boat.refresh();
     }
+
+    // Horde Auto-Sentry Tripod Base (24x24)
+    const turretBase = this.textures.createCanvas('prop_turret', 24, 24);
+    if (turretBase) {
+      const ctx = turretBase.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(3, 3, 18, 18);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(5, 5, 14, 14);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(9, 9, 6, 6);
+      turretBase.refresh();
+    }
+
+    // Horde Auto-Sentry Rotating Laser Gun (26x14)
+    const turretGun = this.textures.createCanvas('prop_turret_gun', 26, 14);
+    if (turretGun) {
+      const ctx = turretGun.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(4, 2, 12, 10);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(14, 5, 11, 4);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(22, 5, 4, 4);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(7, 4, 5, 6);
+      turretGun.refresh();
+    }
   }
 
   private createFxTextures(): void {
@@ -2028,6 +2378,46 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(12, 1, 3, 6);
       ctx.fillRect(14, 2, 2, 4);
       rocketTex.refresh();
+    }
+
+    // Heavy Tank 120mm Shell (18x8)
+    const tankShell = this.textures.createCanvas('proj_tank_shell', 18, 8);
+    if (tankShell) {
+      const ctx = tankShell.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(0, 2, 6, 4);
+      ctx.fillStyle = '#F97316';
+      ctx.fillRect(5, 1, 9, 6);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(12, 2, 6, 4);
+      tankShell.refresh();
+    }
+
+    // Mech High-Energy Plasma Bolt (16x8)
+    const mechPlasma = this.textures.createCanvas('proj_mech_plasma', 16, 8);
+    if (mechPlasma) {
+      const ctx = mechPlasma.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(1, 1, 14, 6);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(4, 2, 10, 4);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(7, 3, 7, 2);
+      mechPlasma.refresh();
+    }
+
+    // Helicopter Autocannon Tracer (16x6)
+    const heliTracer = this.textures.createCanvas('proj_heli_autocannon', 16, 6);
+    if (heliTracer) {
+      const ctx = heliTracer.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#F59E0B';
+      ctx.fillRect(0, 1, 14, 4);
+      ctx.fillStyle = '#FEF08A';
+      ctx.fillRect(6, 2, 10, 2);
+      heliTracer.refresh();
     }
 
     // Muzzle flash (18x16 facing RIGHT +X)

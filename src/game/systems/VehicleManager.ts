@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { PLAYER_CONFIG, VEHICLE_EXIT_MAX_SPEED, VehicleType } from '../config/BalanceConfig';
 import { Player } from '../entities/Player';
-import { Vehicle } from '../entities/Vehicle';
+import { Vehicle, VehicleInitOptions } from '../entities/Vehicle';
 import { GAME_EVENT, gameEvents, NearbyVehicleInfo } from '../ui/GameEvents';
 import { CollisionManager } from '../world/CollisionManager';
 import { DistrictData } from '../world/DistrictManager';
 import { AudioManager } from './AudioManager';
 import { DrivingControlsState } from './InputManager';
+import { TrafficManager } from './TrafficManager';
 
 interface VehicleSpawnDef {
   id: string;
@@ -22,18 +23,25 @@ const INITIAL_VEHICLE_SPAWNS: VehicleSpawnDef[] = [
   { id: 'veh-racer-lot2', type: 'racer', x: 1488, y: 560, angleDeg: 180 },
   { id: 'veh-super-plaza', type: 'supercar', x: 800, y: 344, angleDeg: 0 },
   { id: 'veh-moto-plaza', type: 'moto', x: 640, y: 354, angleDeg: 0 },
+  { id: 'veh-superbike-plaza', type: 'superbike', x: 1080, y: 344, angleDeg: 180 },
   { id: 'veh-racer-synth', type: 'racer', x: 960, y: 862, angleDeg: 180 },
-  // Police Cruiser parked by Cyber Corp / Plaza West Ave
+  // NCPD Cruisers & Heavy SWAT APC
   { id: 'veh-cruiser-corp', type: 'cruiser', x: 382, y: 204, angleDeg: 90 },
+  { id: 'veh-swat-ncpd', type: 'swat', x: 800, y: 944, angleDeg: 0 },
   // Extra City Compact near Plaza Garage
   { id: 'veh-compact-garage', type: 'compact', x: 1326, y: 1020, angleDeg: -90 },
-  // Near Riverside Park & Highland Overlook
+  // Riverside Park, Highland Overlook & Buggy Trails
   { id: 'veh-compact-park', type: 'compact', x: 420, y: 1600, angleDeg: 0 },
   { id: 'veh-racer-mountain', type: 'racer', x: 2212, y: 468, angleDeg: 90 },
-  // Dark Harbor Docks & Chrome Town Industrial
+  { id: 'veh-buggy-highland', type: 'buggy', x: 1940, y: 740, angleDeg: 90 },
+  { id: 'veh-heli-highland', type: 'heli', x: 2216, y: 660, angleDeg: 0 },
+  // Dark Harbor Docks, Helipad & Chrome Town Tank/Foundry
   { id: 'veh-moto-harbor', type: 'moto', x: 440, y: 1840, angleDeg: 0 },
+  { id: 'veh-buggy-harbor', type: 'buggy', x: 620, y: 1860, angleDeg: 0 },
+  { id: 'veh-heli-harbor', type: 'heli', x: 200, y: 1810, angleDeg: 0 },
   { id: 'veh-compact-harbor', type: 'compact', x: 1220, y: 2060, angleDeg: 180 },
   { id: 'veh-super-chrome', type: 'supercar', x: 2288, y: 1720, angleDeg: 0 },
+  { id: 'veh-tank-chrome', type: 'tank', x: 2400, y: 1840, angleDeg: 180 },
 ];
 
 export class VehicleManager {
@@ -41,9 +49,12 @@ export class VehicleManager {
   private collisionManager: CollisionManager;
   private audioManager: AudioManager;
   private vehicles: Vehicle[] = [];
+  private groundGroup!: Phaser.Physics.Arcade.Group;
+  private playerRef: Player | null = null;
   private activeVehicle: Vehicle | null = null;
   private lastDrivenVehicleId: string | null = null;
   private lastNearbyId: string | null = null;
+  private dynamicCounter = 0;
 
   constructor(scene: Phaser.Scene, collisionManager: CollisionManager, audioManager: AudioManager) {
     this.scene = scene;
@@ -52,29 +63,18 @@ export class VehicleManager {
   }
 
   public spawnInitialVehicles(player: Player): void {
-    const group = this.scene.physics.add.group();
+    this.playerRef = player;
+    this.groundGroup = this.scene.physics.add.group();
 
     for (const def of INITIAL_VEHICLE_SPAWNS) {
-      const vehicle = new Vehicle(this.scene, def.id, def.type, def.x, def.y, def.angleDeg);
-      this.vehicles.push(vehicle);
-      group.add(vehicle.sprite);
-
-      this.collisionManager.registerVehicleWorldCollider(vehicle.sprite, () => {
-        const intensity = vehicle.handleCollision(this.scene.time.now);
-        if (intensity > 0 && vehicle.isOccupied()) {
-          this.audioManager.playCrash(this.scene.time.now, intensity);
-          this.scene.cameras.main.shake(110, 0.004 * intensity);
-        }
-      });
-
-      this.scene.physics.add.collider(player.sprite, vehicle.sprite);
+      this.createAndRegisterVehicle(def.id, def.type, def.x, def.y, def.angleDeg);
     }
 
-    // Vehicle-to-vehicle collisions
-    this.scene.physics.add.collider(group, group, (objA, objB) => {
+    // Ground vehicle-to-vehicle collisions (flying choppers pass cleanly overhead)
+    this.scene.physics.add.collider(this.groundGroup, this.groundGroup, (objA, objB) => {
       const vA = this.vehicles.find((v) => v.sprite === objA);
       const vB = this.vehicles.find((v) => v.sprite === objB);
-      if (vA && vB) {
+      if (vA && vB && !vA.isDestroyed() && !vB.isDestroyed()) {
         const iA = vA.handleCollision(this.scene.time.now);
         const iB = vB.handleCollision(this.scene.time.now);
         const maxI = Math.max(iA, iB);
@@ -84,6 +84,45 @@ export class VehicleManager {
         }
       }
     });
+  }
+
+  private createAndRegisterVehicle(
+    id: string,
+    type: VehicleType,
+    x: number,
+    y: number,
+    angleDeg: number,
+    options?: VehicleInitOptions
+  ): Vehicle {
+    const vehicle = new Vehicle(this.scene, id, type, x, y, angleDeg, options);
+    this.vehicles.push(vehicle);
+
+    if (!vehicle.spec.isFlying) {
+      this.groundGroup.add(vehicle.sprite);
+      this.collisionManager.registerVehicleWorldCollider(vehicle.sprite, () => {
+        const intensity = vehicle.handleCollision(this.scene.time.now);
+        if (intensity > 0 && vehicle.isOccupied()) {
+          this.audioManager.playCrash(this.scene.time.now, intensity);
+          this.scene.cameras.main.shake(110, 0.004 * intensity);
+        }
+      });
+    }
+
+    if (this.playerRef) {
+      this.scene.physics.add.collider(this.playerRef.sprite, vehicle.sprite);
+    }
+    return vehicle;
+  }
+
+  public spawnDynamicVehicle(
+    type: VehicleType,
+    x: number,
+    y: number,
+    angleDeg: number,
+    options?: VehicleInitOptions
+  ): Vehicle {
+    this.dynamicCounter += 1;
+    return this.createAndRegisterVehicle(`dyn-${type}-${this.dynamicCounter}`, type, x, y, angleDeg, options);
   }
 
   public getActiveVehicle(): Vehicle | null {
@@ -97,6 +136,7 @@ export class VehicleManager {
     let bestDist: number = PLAYER_CONFIG.VEHICLE_ENTER_RADIUS;
 
     for (const v of this.vehicles) {
+      if (v.isDestroyed()) continue;
       const dist = Phaser.Math.Distance.Between(x, y, v.sprite.x, v.sprite.y);
       if (dist <= bestDist) {
         bestDist = dist;
@@ -126,8 +166,12 @@ export class VehicleManager {
     return { changed: false, vehicle: info };
   }
 
-  public tryToggleEnterExit(player: Player): {
-    action: 'entered' | 'exited' | 'blocked' | 'none';
+  public tryToggleEnterExit(
+    player: Player,
+    trafficManager?: TrafficManager,
+    onTrafficHijacked?: (pos: { x: number; y: number }) => void
+  ): {
+    action: 'entered' | 'exited' | 'blocked' | 'hijacked' | 'none';
     vehicle?: Vehicle;
     reason?: string;
   } {
@@ -137,12 +181,17 @@ export class VehicleManager {
         return { action: 'blocked', reason: '车辆正在空中飞跃，落地后再下车！' };
       }
       if (current.getSpeedPxPerSec() > VEHICLE_EXIT_MAX_SPEED) {
-        return { action: 'blocked', reason: '下车前请先减速。' };
+        return { action: 'blocked', reason: current.spec.isFlying ? '请先悬停减速后再降落离机！' : '下车前请先减速。' };
       }
 
       const exitPos = current.findSafeExitPosition(this.collisionManager, this.vehicles);
       if (!exitPos) {
-        return { action: 'blocked', reason: '车门被阻挡，请移动到空旷处再下车。' };
+        return {
+          action: 'blocked',
+          reason: current.spec.isFlying
+            ? '下方为水域或建筑，请飞至空旷地面后再降落！'
+            : '车门被阻挡，请移动到空旷处再下车。',
+        };
       }
 
       current.setOccupied(false);
@@ -156,18 +205,42 @@ export class VehicleManager {
 
     const pos = player.getPosition();
     const nearby = this.findClosestVehicle(pos.x, pos.y);
-    if (!nearby) return { action: 'none' };
+    if (nearby) {
+      const target = this.vehicles.find((v) => v.id === nearby.id);
+      if (target && !target.isDestroyed()) {
+        this.activeVehicle = target;
+        this.lastDrivenVehicleId = target.id;
+        this.lastNearbyId = null;
+        target.setOccupied(true);
+        player.setInVehicle(true);
+        this.audioManager.playVehicleEnter();
+        return { action: 'entered', vehicle: target };
+      }
+    }
 
-    const target = this.vehicles.find((v) => v.id === nearby.id);
-    if (!target) return { action: 'none' };
+    // GTA-style moving traffic carjacking!
+    if (trafficManager) {
+      const hijacked = trafficManager.hijackNearestCar(pos.x, pos.y, PLAYER_CONFIG.VEHICLE_ENTER_RADIUS + 14);
+      if (hijacked) {
+        const veh = this.spawnDynamicVehicle(
+          'compact',
+          hijacked.x,
+          hijacked.y,
+          Phaser.Math.RadToDeg(hijacked.rotation),
+          { textureOverride: hijacked.textureKey, isTempHijacked: true }
+        );
+        this.activeVehicle = veh;
+        this.lastDrivenVehicleId = veh.id;
+        this.lastNearbyId = null;
+        veh.setOccupied(true);
+        player.setInVehicle(true);
+        this.audioManager.playVehicleEnter();
+        onTrafficHijacked?.({ x: hijacked.x, y: hijacked.y });
+        return { action: 'hijacked', vehicle: veh };
+      }
+    }
 
-    this.activeVehicle = target;
-    this.lastDrivenVehicleId = target.id;
-    this.lastNearbyId = null;
-    target.setOccupied(true);
-    player.setInVehicle(true);
-    this.audioManager.playVehicleEnter();
-    return { action: 'entered', vehicle: target };
+    return { action: 'none' };
   }
 
   public enterRaceVehicle(player: Player): Vehicle | null {
@@ -209,22 +282,51 @@ export class VehicleManager {
     dtSeconds: number,
     controls: DrivingControlsState,
     district?: DistrictData,
-    onStuntLanded?: (bonus: number) => void
+    onStuntLanded?: (bonus: number) => void,
+    onVehicleDestroyed?: (vehicle: Vehicle, wasOccupied: boolean) => void,
+    modifiers?: { speedMult?: number; nitroRegenMult?: number; gripMult?: number }
   ): void {
-    for (const v of this.vehicles) {
+    const nowMs = this.scene.time.now;
+
+    for (let i = this.vehicles.length - 1; i >= 0; i--) {
+      const v = this.vehicles[i];
+      if (v.shouldRemoveTempWreck(nowMs)) {
+        if (this.activeVehicle === v) this.activeVehicle = null;
+        v.destroy();
+        this.vehicles.splice(i, 1);
+        continue;
+      }
+
+      const handleDestroyed = (destroyedVeh: Vehicle) => {
+        const wasOccupied = this.activeVehicle === destroyedVeh;
+        this.audioManager.playExplosion();
+        this.scene.cameras.main.shake(260, 0.011);
+        if (wasOccupied) {
+          this.activeVehicle = null;
+          this.audioManager.stopEngineSound();
+        }
+        onVehicleDestroyed?.(destroyedVeh, wasOccupied);
+      };
+
       if (v === this.activeVehicle) {
-        v.update(dtSeconds, controls, (bonus) => {
-          this.audioManager.playPurchase();
-          gameEvents.emit(GAME_EVENT.STATUS_TOAST, `极限飞跃着陆！特技奖励 +$${bonus}`);
-          onStuntLanded?.(bonus);
-        });
+        v.update(
+          dtSeconds,
+          controls,
+          (bonus) => {
+            this.audioManager.playPurchase();
+            gameEvents.emit(GAME_EVENT.STATUS_TOAST, `极限飞跃着陆！特技奖励 +$${bonus}`);
+            onStuntLanded?.(bonus);
+          },
+          handleDestroyed,
+          modifiers
+        );
       } else {
-        v.update(dtSeconds);
+        v.update(dtSeconds, undefined, undefined, handleDestroyed);
       }
     }
 
     if (this.activeVehicle) {
-      if (district) {
+      if (district && !this.activeVehicle.spec.isFlying) {
         const vx = this.activeVehicle.sprite.x;
         const vy = this.activeVehicle.sprite.y;
 
@@ -278,6 +380,7 @@ export class VehicleManager {
     let closest: Vehicle | null = null;
     let bestDist = 260;
     for (const v of this.vehicles) {
+      if (v.isDestroyed()) continue;
       const dist = Phaser.Math.Distance.Between(x, y, v.sprite.x, v.sprite.y);
       if (dist <= bestDist) {
         bestDist = dist;
@@ -288,32 +391,36 @@ export class VehicleManager {
 
     if (this.lastDrivenVehicleId) {
       const last = this.getVehicleById(this.lastDrivenVehicleId);
-      if (last) return last;
+      if (last && !last.isDestroyed()) return last;
     }
 
     return this.vehicles[0] ?? null;
   }
 
   public getVehicleSprites(): Phaser.Physics.Arcade.Sprite[] {
-    return this.vehicles.map((v) => v.sprite);
+    return this.vehicles.filter((v) => !v.isDestroyed()).map((v) => v.sprite);
   }
 
   public getFastVehicleData(): Array<{ x: number; y: number; speedPx: number }> {
-    return this.vehicles.map((v) => ({
-      x: v.sprite.x,
-      y: v.sprite.y,
-      speedPx: v.getSpeedPxPerSec(),
-    }));
+    return this.vehicles
+      .filter((v) => !v.isDestroyed() && !v.spec.isFlying)
+      .map((v) => ({
+        x: v.sprite.x,
+        y: v.sprite.y,
+        speedPx: v.getSpeedPxPerSec(),
+      }));
   }
 
   public getVehiclePositions(): Array<{ id: string; x: number; y: number; color: string; occupied: boolean }> {
-    return this.vehicles.map((v) => ({
-      id: v.id,
-      x: Math.round(v.sprite.x),
-      y: Math.round(v.sprite.y),
-      color: v.spec.accentHex,
-      occupied: v.isOccupied(),
-    }));
+    return this.vehicles
+      .filter((v) => !v.isDestroyed())
+      .map((v) => ({
+        id: v.id,
+        x: Math.round(v.sprite.x),
+        y: Math.round(v.sprite.y),
+        color: v.spec.accentHex,
+        occupied: v.isOccupied(),
+      }));
   }
 
   public serializeAll(): Record<
@@ -339,12 +446,13 @@ export class VehicleManager {
       }
     > = {};
     for (const v of this.vehicles) {
+      if (v.isTempHijacked) continue;
       const pos = v.getPosition();
       out[v.id] = {
         x: pos.x,
         y: pos.y,
         angleDeg: v.getRotationDeg(),
-        health: v.getHealth(),
+        health: Math.max(10, v.getHealth()),
         upgrades: v.getUpgrades(),
         paintColor: v.getPaintColor(),
       };
@@ -375,11 +483,20 @@ export class VehicleManager {
     this.audioManager.stopEngineSound();
     player.setInVehicle(false);
 
+    // Clean out dynamic hijacked or airdropped vehicles
+    for (let i = this.vehicles.length - 1; i >= 0; i--) {
+      const v = this.vehicles[i];
+      if (!INITIAL_VEHICLE_SPAWNS.some((d) => d.id === v.id)) {
+        v.destroy();
+        this.vehicles.splice(i, 1);
+      }
+    }
+
     for (const def of INITIAL_VEHICLE_SPAWNS) {
       const v = this.getVehicleById(def.id);
       if (!v) continue;
       const saved = savedVehicles[def.id];
-      if (saved && this.collisionManager.isPointClearForEntity(saved.x, saved.y, 14)) {
+      if (saved && (v.spec.isFlying || this.collisionManager.isPointClearForEntity(saved.x, saved.y, 14))) {
         v.restoreState(
           saved.x,
           saved.y,

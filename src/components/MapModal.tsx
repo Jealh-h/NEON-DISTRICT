@@ -21,6 +21,8 @@ export function MapModal() {
   const horde = useGameStore((s) => s.horde);
   const race = useGameStore((s) => s.race);
   const exploration = useGameStore((s) => s.exploration);
+  const environment = useGameStore((s) => s.environment);
+  const randomEvents = useGameStore((s) => s.randomEvents);
 
   if (!showMap || !districtData) return null;
 
@@ -30,7 +32,7 @@ export function MapModal() {
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div>
             <p className="font-mono-tabular text-xs tracking-widest text-[#00F5FF]">
-              全特区开放沙盒 · {WORLD_CONFIG.WIDTH} × {WORLD_CONFIG.HEIGHT} · 当前所在：{districtName}
+              全特区开放沙盒 · {WORLD_CONFIG.WIDTH} × {WORLD_CONFIG.HEIGHT} · 当前所在：{districtName} · {environment.clockText} {environment.timeLabel} · {environment.weatherLabel}
             </p>
             <h2 className="mt-0.5 text-xl font-bold tracking-wider text-slate-100">
               霓虹特区 战术全图
@@ -87,6 +89,19 @@ export function MapModal() {
 
               {playMode === 'sandbox' &&
                 policeMarkers.map((pm) => {
+                  if (pm.id === 'vigilante-target') {
+                    return (
+                      <g key={pm.id} transform={`translate(${pm.x}, ${pm.y})`}>
+                        <circle r={42} fill="#FFD166" fillOpacity={0.22} stroke="#FF4545" strokeWidth={6} />
+                        <polygon
+                          points="0,-24 24,0 0,24 -24,0"
+                          fill="#FFD166"
+                          stroke="#FF4545"
+                          strokeWidth={5}
+                        />
+                      </g>
+                    );
+                  }
                   const isHostile = pm.state !== 'PATROL';
                   return (
                     <g key={pm.id} transform={`translate(${pm.x}, ${pm.y})`}>
@@ -118,6 +133,25 @@ export function MapModal() {
                     stroke="#080D18"
                     strokeWidth={4}
                   />
+                ))}
+
+              {playMode === 'sandbox' &&
+                randomEvents.map((ev) => (
+                  <g key={`map-ev-${ev.id}`} transform={`translate(${ev.x}, ${ev.y})`}>
+                    <circle
+                      r={52}
+                      fill={ev.accentColor}
+                      fillOpacity={0.2}
+                      stroke={ev.accentColor}
+                      strokeWidth={6}
+                    />
+                    <polygon
+                      points="0,-26 26,0 0,26 -26,0"
+                      fill={ev.accentColor}
+                      stroke="#080D18"
+                      strokeWidth={5}
+                    />
+                  </g>
                 ))}
 
               {playMode === 'sandbox' && activeMission?.targetPos && (
@@ -181,6 +215,38 @@ export function MapModal() {
                   <p className="mt-1 text-[11px] text-slate-400">
                     地图紫色菱形标记未拾取的数据芯片，集齐 10 枚额外奖 $1,000。
                   </p>
+                </div>
+              )}
+
+              {playMode === 'sandbox' && randomEvents.length > 0 && (
+                <div className="border border-slate-700 bg-[#080D18] p-2.5 text-xs">
+                  <div className="mb-1.5 font-bold text-[#00F5FF]">
+                    进行中城市动态事件（{randomEvents.length}）
+                  </div>
+                  <div className="space-y-1.5">
+                    {randomEvents.map((ev) => (
+                      <div
+                        key={`sidebar-ev-${ev.id}`}
+                        className="border-l-2 bg-[#111827] px-2 py-1"
+                        style={{ borderColor: ev.accentColor }}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="font-bold" style={{ color: ev.accentColor }}>
+                            {ev.title}
+                          </span>
+                          <span className="font-mono-tabular text-[10px] text-slate-400">
+                            {ev.timeRemainingSec}s
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-300">
+                          <span>{ev.district}</span>
+                          <span className="font-mono-tabular">
+                            目标 {ev.remainingTargets}/{ev.totalTargets}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

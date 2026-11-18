@@ -1,11 +1,21 @@
 import Phaser from 'phaser';
 import {
   GamePlayMode,
+  MechKind,
   VehicleType,
   VehicleUpgradeTrack,
+  VehicleWeaponKind,
   WeaponId,
   WeaponUpgradeTrack,
 } from '../config/BalanceConfig';
+import type {
+  CyberwareSlotId,
+  RandomEventType,
+  ReputationFactionId,
+  SkillTrackId,
+  TimePhaseId,
+  WeatherId,
+} from '../config/ExpansionConfig';
 
 export type GameMode = 'TITLE' | 'PLAYING' | 'PAUSED';
 
@@ -52,6 +62,8 @@ export interface WantedTelemetryPayload {
 export interface PlayerStatsPayload {
   health: number;
   maxHealth: number;
+  armor: number;
+  maxArmor: number;
   cash: number;
 }
 
@@ -103,7 +115,45 @@ export interface VehicleTelemetryPayload {
   maxHealth: number;
   nitro?: number;
   isBoosting?: boolean;
+  isFlying?: boolean;
+  hasTurret?: boolean;
+  weaponKind?: VehicleWeaponKind;
   upgrades?: VehicleUpgradeLevels;
+}
+
+export interface MechTelemetryPayload {
+  active: boolean;
+  kind: MechKind | null;
+  name: string | null;
+  hp: number;
+  maxHp: number;
+  abilityLabel: string | null;
+  abilityCooldownSec: number;
+  abilityMaxCooldownSec: number;
+  turretCount: number;
+  maxTurrets: number;
+}
+
+export interface ActiveHordePerkSummary {
+  id: string;
+  name: string;
+  stacks: number;
+  accentColor: string;
+}
+
+export interface HordePerkChoice {
+  id: string;
+  name: string;
+  tagline: string;
+  description: string;
+  accentColor: string;
+  currentStacks: number;
+  maxStacks: number;
+}
+
+export interface HordePerkOfferPayload {
+  waveCleared: number;
+  choices: HordePerkChoice[];
 }
 
 export interface HordeTelemetryPayload {
@@ -121,6 +171,51 @@ export interface HordeTelemetryPayload {
   bestWave: number;
   bestScore: number;
   enemyMarkers: Array<{ x: number; y: number; isBoss: boolean }>;
+  mech?: MechTelemetryPayload;
+  activePerks?: ActiveHordePerkSummary[];
+}
+
+export interface EnvironmentTelemetryPayload {
+  timePhase: TimePhaseId;
+  timeLabel: string;
+  clockText: string;
+  weather: WeatherId;
+  weatherLabel: string;
+  weatherEffectHint: string;
+  darknessAlpha: number;
+}
+
+export interface RandomEventMarker {
+  id: string;
+  type: RandomEventType;
+  title: string;
+  description: string;
+  district: string;
+  x: number;
+  y: number;
+  remainingTargets: number;
+  totalTargets: number;
+  timeRemainingSec: number;
+  accentColor: string;
+}
+
+export interface ProgressionTelemetryPayload {
+  level: number;
+  exp: number;
+  nextLevelExp: number;
+  skillPoints: number;
+  skills: Record<SkillTrackId, number>;
+  cyberware: Record<CyberwareSlotId, number>;
+  reputation: Record<ReputationFactionId, number>;
+  jammerUnlocked: boolean;
+  jammerCooldownSec: number;
+  jammerActiveSec: number;
+  damageBonusPct: number;
+  critChancePct: number;
+  fireRateBonusPct: number;
+  moveSpeedBonusPct: number;
+  vehicleSpeedBonusPct: number;
+  damageReductionPct: number;
 }
 
 export interface RaceTelemetryPayload {
@@ -187,6 +282,11 @@ export type PurchaseServicePayload =
   | { serviceType: 'heal' }
   | { serviceType: 'snack' }
   | { serviceType: 'ramen' }
+  | { serviceType: 'buy_armor' }
+  | { serviceType: 'deploy_mech'; mechKind: MechKind }
+  | { serviceType: 'deploy_turret' }
+  | { serviceType: 'orbital_strike' }
+  | { serviceType: 'airdrop_tank' }
   | { serviceType: 'buy_weapon'; weaponId: WeaponId }
   | { serviceType: 'equip_weapon'; weaponId: WeaponId }
   | { serviceType: 'buy_ammo'; weaponId: WeaponId }
@@ -273,13 +373,23 @@ export const GAME_EVENT = {
   DRIVING_INPUT: 'input:driving_input',
   TRIGGER_INTERACT: 'input:trigger_interact',
   TRIGGER_ENTER_EXIT: 'input:trigger_enter_exit',
+  TRIGGER_MECH_ABILITY: 'input:trigger_mech_ability',
   OPEN_QUICK_ARMORY: 'ui:open_quick_armory',
+  TOGGLE_CHARACTER_MODAL: 'ui:toggle_character_modal',
   TOGGLE_MAP: 'ui:toggle_map',
   SERVICE_MODAL_OPEN: 'ui:service_modal_open',
   ACCEPT_MISSION: 'mission:accept',
   ABANDON_MISSION: 'mission:abandon',
   MISSION_UPDATED: 'mission:updated',
   PURCHASE_SERVICE: 'economy:purchase_service',
+  UPGRADE_SKILL: 'progression:upgrade_skill',
+  BUY_CYBERWARE: 'progression:buy_cyberware',
+  TRIGGER_HACK_JAM: 'progression:trigger_hack_jam',
+  SELECT_HORDE_PERK: 'horde:select_perk',
+  HORDE_PERK_OFFER: 'horde:perk_offer',
+  ENVIRONMENT_UPDATED: 'world:environment_updated',
+  RANDOM_EVENTS_UPDATED: 'world:random_events_updated',
+  PROGRESSION_UPDATED: 'progression:updated',
   SCENE_READY: 'scene:ready',
   PLAYER_MOVED: 'player:moved',
   PLAYER_STATS: 'player:stats',
