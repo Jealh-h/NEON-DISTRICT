@@ -1,6 +1,10 @@
-import { VehicleUpgradeLevels } from '../ui/GameEvents';
+import { CustomWaypoint, VehicleUpgradeLevels } from '../ui/GameEvents';
 import type { SavedProgressionState } from './ProgressionManager';
+import type { SavedSandboxState } from './SandboxExplorationManager';
+import type { SavedTerrariaState } from './TerrariaSandboxManager';
 import type { SavedWeaponState } from './WeaponManager';
+
+export const CURRENT_MAP_LAYOUT_VERSION = 2;
 
 export interface SavedVehicleState {
   x: number;
@@ -13,6 +17,7 @@ export interface SavedVehicleState {
 
 export interface SaveData {
   version: 1 | 2;
+  mapLayoutVersion?: number;
   savedAt: number;
   district: string;
   player: {
@@ -29,6 +34,9 @@ export interface SaveData {
   weapons?: SavedWeaponState;
   collectedChipIds?: string[];
   progression?: SavedProgressionState;
+  sandbox?: SavedSandboxState;
+  terraria?: SavedTerrariaState;
+  customWaypoint?: CustomWaypoint | null;
   settings: {
     muted: boolean;
   };
@@ -64,6 +72,8 @@ export class SaveManager {
 
       return {
         version: 2,
+        mapLayoutVersion:
+          typeof parsed.mapLayoutVersion === 'number' ? parsed.mapLayoutVersion : 1,
         savedAt: parsed.savedAt,
         district: typeof parsed.district === 'string' ? parsed.district : '霓虹广场',
         player: {
@@ -85,6 +95,9 @@ export class SaveManager {
           ? parsed.collectedChipIds.filter((id): id is string => typeof id === 'string')
           : [],
         progression: parsed.progression,
+        sandbox: parsed.sandbox,
+        terraria: parsed.terraria,
+        customWaypoint: parsed.customWaypoint ?? null,
         settings: {
           muted: Boolean(parsed.settings?.muted),
         },

@@ -8,32 +8,32 @@ import { CollisionManager } from '../world/CollisionManager';
 import { AudioManager } from './AudioManager';
 import { WantedManager } from './WantedManager';
 
-const PATROL_LOOP_NORTH = [
-  { x: 352, y: 288 },
-  { x: 1248, y: 288 },
-  { x: 1248, y: 896 },
-  { x: 352, y: 896 },
+const PATROL_LOOP_PLAZA = [
+  { x: 896, y: 192 },
+  { x: 1728, y: 192 },
+  { x: 1728, y: 1344 },
+  { x: 896, y: 1344 },
 ];
 
-const PATROL_LOOP_SOUTH = [
-  { x: 1248, y: 896 },
-  { x: 352, y: 896 },
-  { x: 352, y: 320 },
-  { x: 1248, y: 320 },
-];
-
-const PATROL_LOOP_HIGHLAND = [
-  { x: 1248, y: 320 },
-  { x: 1952, y: 320 },
-  { x: 1952, y: 896 },
-  { x: 1248, y: 896 },
+const PATROL_LOOP_TECH = [
+  { x: 1728, y: 192 },
+  { x: 3392, y: 192 },
+  { x: 3392, y: 1344 },
+  { x: 1728, y: 1344 },
 ];
 
 const PATROL_LOOP_HARBOR_CHROME = [
-  { x: 1248, y: 1632 },
-  { x: 2400, y: 1632 },
-  { x: 2400, y: 2144 },
-  { x: 1248, y: 2144 },
+  { x: 896, y: 2112 },
+  { x: 2560, y: 2112 },
+  { x: 2560, y: 2880 },
+  { x: 896, y: 2880 },
+];
+
+const PATROL_LOOP_SKYPORT_RING = [
+  { x: 2560, y: 1344 },
+  { x: 4608, y: 1344 },
+  { x: 4608, y: 2880 },
+  { x: 2560, y: 2880 },
 ];
 
 interface PoliceProjectile {
@@ -68,6 +68,7 @@ export class PoliceManager {
 
   private fugitive: VigilanteFugitive | null = null;
   private vigilanteStreak = 0;
+  private lastRamReportAt = 0;
 
   constructor(
     scene: Phaser.Scene,
@@ -109,21 +110,30 @@ export class PoliceManager {
       startIdx: number;
       kind: PoliceUnitKind;
       minStars: number;
+      flankSign: number;
     }> = [
-      { id: 'police-1', loop: PATROL_LOOP_NORTH, startIdx: 0, kind: 'cruiser', minStars: 0 },
-      { id: 'police-2', loop: PATROL_LOOP_SOUTH, startIdx: 1, kind: 'cruiser', minStars: 0 },
-      { id: 'police-3', loop: PATROL_LOOP_HIGHLAND, startIdx: 1, kind: 'cruiser', minStars: 0 },
-      { id: 'police-4', loop: PATROL_LOOP_HARBOR_CHROME, startIdx: 0, kind: 'cruiser', minStars: 0 },
-      { id: 'police-interceptor', loop: PATROL_LOOP_NORTH, startIdx: 2, kind: 'interceptor', minStars: 3 },
-      { id: 'police-heli', loop: PATROL_LOOP_HIGHLAND, startIdx: 0, kind: 'heli', minStars: 4 },
-      { id: 'police-swat', loop: PATROL_LOOP_SOUTH, startIdx: 0, kind: 'swat', minStars: 5 },
-      { id: 'police-tank', loop: PATROL_LOOP_HARBOR_CHROME, startIdx: 1, kind: 'tank', minStars: 5 },
+      { id: 'police-1', loop: PATROL_LOOP_PLAZA, startIdx: 0, kind: 'cruiser', minStars: 0, flankSign: 0 },
+      { id: 'police-2', loop: PATROL_LOOP_TECH, startIdx: 1, kind: 'cruiser', minStars: 0, flankSign: 1 },
+      { id: 'police-3', loop: PATROL_LOOP_HARBOR_CHROME, startIdx: 0, kind: 'cruiser', minStars: 0, flankSign: -1 },
+      { id: 'police-4', loop: PATROL_LOOP_SKYPORT_RING, startIdx: 2, kind: 'cruiser', minStars: 0, flankSign: 1 },
+      { id: 'police-interceptor', loop: PATROL_LOOP_PLAZA, startIdx: 2, kind: 'interceptor', minStars: 3, flankSign: -1 },
+      { id: 'police-heli', loop: PATROL_LOOP_TECH, startIdx: 0, kind: 'heli', minStars: 4, flankSign: 0 },
+      { id: 'police-swat', loop: PATROL_LOOP_SKYPORT_RING, startIdx: 0, kind: 'swat', minStars: 5, flankSign: 1 },
+      { id: 'police-tank', loop: PATROL_LOOP_HARBOR_CHROME, startIdx: 1, kind: 'tank', minStars: 5, flankSign: 0 },
     ];
 
     const groundGroup = this.scene.physics.add.group();
 
     for (const def of unitDefs) {
-      const unit = new Police(this.scene, def.id, def.loop, def.startIdx, def.kind, def.minStars);
+      const unit = new Police(
+        this.scene,
+        def.id,
+        def.loop,
+        def.startIdx,
+        def.kind,
+        def.minStars,
+        def.flankSign
+      );
       this.units.push(unit);
 
       if (def.minStars > 0) {
@@ -157,15 +167,19 @@ export class PoliceManager {
             const vBody = v.sprite.body as Phaser.Physics.Arcade.Body;
             const pBody = unit.sprite.body as Phaser.Physics.Arcade.Body;
             const relSpeed = Math.max(vBody?.speed ?? 0, pBody?.speed ?? 0);
+            const nowMs = this.scene.time.now;
 
-            if (v.isOccupied() && relSpeed > 105) {
+            if (v.isOccupied() && relSpeed > 185 && nowMs - this.lastRamReportAt > 2000) {
+              this.lastRamReportAt = nowMs;
               unit.triggerRamRecovery();
               this.wantedManager.reportCrime('ram_police', { x: v.sprite.x, y: v.sprite.y }, true);
-              this.audioManager.playCrash(this.scene.time.now, Math.min(1, relSpeed / 360));
+              this.audioManager.playCrash(nowMs, Math.min(1, relSpeed / 360));
               this.scene.cameras.main.shake(100, 0.0035);
               if (this.wantedManager.getWantedLevel() > 0 && v.spec.type !== 'tank') {
                 onPlayerDamaged(WANTED_CONFIG.POLICE_CONTACT_DAMAGE_VEH, unit.sprite.x, unit.sprite.y);
               }
+            } else if (v.isOccupied() && relSpeed > 65) {
+              this.audioManager.playBump(nowMs);
             }
           });
         }
@@ -277,20 +291,23 @@ export class PoliceManager {
     playerInVehicle: boolean,
     onProjectileHitPlayer?: (damage: number, srcX: number, srcY: number) => void,
     sightMultiplier = 1,
-    signalJamActive = false
+    signalJamActive = false,
+    playerVel?: { vx: number; vy: number }
   ): void {
     if (!this.pursuitEnabled) {
       return;
     }
 
     const wantedLevel = this.wantedManager.getWantedLevel();
+    const speedMag = playerVel ? Math.hypot(playerVel.vx, playerVel.vy) : 0;
+    const aheadBiasAngle = speedMag > 90 && playerVel ? Math.atan2(playerVel.vy, playerVel.vx) : undefined;
 
     // Activate or deactivate star-tiered reinforcements (3★ Interceptor, 4★ Heli, 5★ SWAT & Tank)
     for (const unit of this.units) {
       if (unit.minWantedStars === 0) continue;
       if (wantedLevel >= unit.minWantedStars) {
         if (!unit.isActiveOnMap() && unit.getState() !== 'DISABLED') {
-          const spawn = this.findSpawnPointAround(playerPos, 540, unit.isFlying());
+          const spawn = this.findSpawnPointAround(playerPos, 560, unit.isFlying(), aheadBiasAngle);
           unit.deployNear(spawn.x, spawn.y);
         }
       } else if (unit.isActiveOnMap()) {
@@ -358,7 +375,15 @@ export class PoliceManager {
     };
 
     for (const unit of this.units) {
-      unit.update(dtSeconds, playerPos, playerInVehicle, lastKnown, this.collisionManager, spawnProj);
+      unit.update(
+        dtSeconds,
+        playerPos,
+        playerInVehicle,
+        lastKnown,
+        this.collisionManager,
+        spawnProj,
+        playerVel
+      );
     }
 
     // Update Vigilante fugitive target
@@ -429,17 +454,19 @@ export class PoliceManager {
   private findSpawnPointAround(
     center: { x: number; y: number },
     radius: number,
-    allowWaterAndRoofs: boolean
+    allowWaterAndRoofs: boolean,
+    biasAngle?: number
   ): { x: number; y: number } {
     for (let i = 0; i < 16; i++) {
-      const ang = (Math.PI * 2 * i) / 16 + Math.random() * 0.25;
+      const spread = (i % 2 === 0 ? 1 : -1) * Math.floor((i + 1) / 2) * (Math.PI / 8);
+      const ang = biasAngle !== undefined ? biasAngle + spread : (Math.PI * 2 * i) / 16 + Math.random() * 0.25;
       const tx = Phaser.Math.Clamp(center.x + Math.cos(ang) * radius, 80, WORLD_CONFIG.WIDTH - 80);
       const ty = Phaser.Math.Clamp(center.y + Math.sin(ang) * radius, 80, WORLD_CONFIG.HEIGHT - 80);
       if (allowWaterAndRoofs || this.collisionManager.isPointClearForEntity(tx, ty, 18)) {
         return { x: Math.round(tx), y: Math.round(ty) };
       }
     }
-    return { x: 800, y: 320 };
+    return { x: 1312, y: 1344 };
   }
 
   private evaluateLineOfSight(

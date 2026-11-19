@@ -32,3 +32,72 @@ canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+
+@keyframes cyber-marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-cyber-marquee {
+  display: inline-flex;
+  width: max-content;
+  animation: cyber-marquee 11s linear infinite;
+}
+
+.animate-cyber-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes pixel-rail-scroll {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 24px 0;
+  }
+}
+
+.pixel-scroll-rail {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.42) 0px,
+    rgba(255, 255, 255, 0.42) 4px,
+    transparent 4px,
+    transparent 12px
+  );
+  background-size: 24px 100%;
+  animation: pixel-rail-scroll 0.85s linear infinite;
+}
+
+@keyframes mission-step-slide {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-mission-step {
+  animation: mission-step-slide 0.24s steps(4, end) forwards;
+}
+
+@keyframes pixel-pointer-bob {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.animate-pixel-bob {
+  animation: pixel-pointer-bob 0.72s steps(2, end) infinite;
+}

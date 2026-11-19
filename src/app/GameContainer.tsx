@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { createPhaserConfig } from '../game/config/GameConfig';
 import {
   ArcadeResultPayload,
+  CustomWaypoint,
   EnvironmentTelemetryPayload,
   ExplorationPayload,
   GAME_EVENT,
@@ -23,8 +24,11 @@ import {
   RaceTelemetryPayload,
   RadioStationPayload,
   RandomEventMarker,
+  SandboxInteractableHint,
+  SandboxSummaryPayload,
   SaveStatusPayload,
   ServiceModalPayload,
+  TerrariaTelemetryPayload,
   VehicleTelemetryPayload,
   WantedTelemetryPayload,
   WeaponTelemetryPayload,
@@ -65,8 +69,10 @@ export function GameContainer() {
     };
 
     const handleSceneReady = (payload: { district: DistrictData }) => {
-      useGameStore.getState().setDistrictData(payload.district);
+      const store = useGameStore.getState();
+      store.setDistrictData(payload.district);
       lastDistrictRef.current = payload.district.name;
+      gameEvents.emit(GAME_EVENT.APPLY_SETTINGS, store.settings);
     };
 
     const handleModeChanged = (mode: GameMode) => {
@@ -194,6 +200,34 @@ export function GameContainer() {
       useGameStore.getState().toggleCharacterModal();
     };
 
+    const handleSandboxHint = (hint: SandboxInteractableHint | null) => {
+      useGameStore.getState().setSandboxHint(hint);
+    };
+
+    const handleSandboxUpdated = (summary: SandboxSummaryPayload) => {
+      useGameStore.getState().setSandboxSummary(summary);
+    };
+
+    const handleSetCustomWaypoint = (wp: CustomWaypoint | null) => {
+      useGameStore.getState().setCustomWaypoint(wp);
+    };
+
+    const handleTerrariaUpdated = (payload: TerrariaTelemetryPayload) => {
+      useGameStore.getState().setTerraria(payload);
+    };
+
+    const handleToggleCraftModal = () => {
+      useGameStore.getState().toggleCraftModal();
+    };
+
+    const handleOpenQuickArmory = () => {
+      useGameStore.getState().toggleHubTab('armory');
+    };
+
+    const handleSandboxComboChanged = (combo: number) => {
+      useGameStore.getState().setSandboxCombo(combo);
+    };
+
     gameEvents.on(GAME_EVENT.SCENE_READY, handleSceneReady);
     gameEvents.on(GAME_EVENT.MODE_CHANGED, handleModeChanged);
     gameEvents.on(GAME_EVENT.PLAY_MODE_CHANGED, handlePlayModeChanged);
@@ -213,6 +247,10 @@ export function GameContainer() {
     gameEvents.on(GAME_EVENT.HORDE_PERK_OFFER, handleHordePerkOffer);
     gameEvents.on(GAME_EVENT.RACE_UPDATED, handleRaceUpdated);
     gameEvents.on(GAME_EVENT.EXPLORATION_UPDATED, handleExplorationUpdated);
+    gameEvents.on(GAME_EVENT.SANDBOX_HINT, handleSandboxHint);
+    gameEvents.on(GAME_EVENT.SANDBOX_UPDATED, handleSandboxUpdated);
+    gameEvents.on(GAME_EVENT.SANDBOX_COMBO_CHANGED, handleSandboxComboChanged);
+    gameEvents.on(GAME_EVENT.SET_CUSTOM_WAYPOINT, handleSetCustomWaypoint);
     gameEvents.on(GAME_EVENT.ENVIRONMENT_UPDATED, handleEnvironmentUpdated);
     gameEvents.on(GAME_EVENT.RANDOM_EVENTS_UPDATED, handleRandomEventsUpdated);
     gameEvents.on(GAME_EVENT.PROGRESSION_UPDATED, handleProgressionUpdated);
@@ -223,6 +261,9 @@ export function GameContainer() {
     gameEvents.on(GAME_EVENT.STATUS_TOAST, handleStatusToast);
     gameEvents.on(GAME_EVENT.TOGGLE_MAP, handleToggleMap);
     gameEvents.on(GAME_EVENT.TOGGLE_CHARACTER_MODAL, handleToggleCharacterModal);
+    gameEvents.on(GAME_EVENT.TERRARIA_UPDATED, handleTerrariaUpdated);
+    gameEvents.on(GAME_EVENT.TOGGLE_CRAFT_MODAL, handleToggleCraftModal);
+    gameEvents.on(GAME_EVENT.OPEN_QUICK_ARMORY, handleOpenQuickArmory);
 
     return () => {
       if (toastTimerRef.current !== null) {
@@ -250,6 +291,10 @@ export function GameContainer() {
       gameEvents.off(GAME_EVENT.HORDE_PERK_OFFER, handleHordePerkOffer);
       gameEvents.off(GAME_EVENT.RACE_UPDATED, handleRaceUpdated);
       gameEvents.off(GAME_EVENT.EXPLORATION_UPDATED, handleExplorationUpdated);
+      gameEvents.off(GAME_EVENT.SANDBOX_HINT, handleSandboxHint);
+      gameEvents.off(GAME_EVENT.SANDBOX_UPDATED, handleSandboxUpdated);
+      gameEvents.off(GAME_EVENT.SANDBOX_COMBO_CHANGED, handleSandboxComboChanged);
+      gameEvents.off(GAME_EVENT.SET_CUSTOM_WAYPOINT, handleSetCustomWaypoint);
       gameEvents.off(GAME_EVENT.ENVIRONMENT_UPDATED, handleEnvironmentUpdated);
       gameEvents.off(GAME_EVENT.RANDOM_EVENTS_UPDATED, handleRandomEventsUpdated);
       gameEvents.off(GAME_EVENT.PROGRESSION_UPDATED, handleProgressionUpdated);
@@ -260,6 +305,9 @@ export function GameContainer() {
       gameEvents.off(GAME_EVENT.STATUS_TOAST, handleStatusToast);
       gameEvents.off(GAME_EVENT.TOGGLE_MAP, handleToggleMap);
       gameEvents.off(GAME_EVENT.TOGGLE_CHARACTER_MODAL, handleToggleCharacterModal);
+      gameEvents.off(GAME_EVENT.TERRARIA_UPDATED, handleTerrariaUpdated);
+      gameEvents.off(GAME_EVENT.TOGGLE_CRAFT_MODAL, handleToggleCraftModal);
+      gameEvents.off(GAME_EVENT.OPEN_QUICK_ARMORY, handleOpenQuickArmory);
       game.destroy(true);
     };
   }, []);

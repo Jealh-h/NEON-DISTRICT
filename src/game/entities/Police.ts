@@ -40,6 +40,8 @@ export class Police {
   private desiredAngle = 0;
   private currentSpeed = 0;
   private rotorAngle = 0;
+  private flankSign = 0;
+  private searchRadius = 115;
 
   constructor(
     scene: Phaser.Scene,
@@ -47,12 +49,14 @@ export class Police {
     patrolLoop: Array<{ x: number; y: number }>,
     startIdx = 0,
     unitKind: PoliceUnitKind = 'cruiser',
-    minWantedStars = 0
+    minWantedStars = 0,
+    flankSign = 0
   ) {
     this.scene = scene;
     this.id = id;
     this.unitKind = unitKind;
     this.minWantedStars = minWantedStars;
+    this.flankSign = flankSign;
     this.patrolLoop = patrolLoop;
     this.patrolIdx = startIdx % patrolLoop.length;
     this.aiTimer = Math.random() * 0.15;
@@ -173,6 +177,7 @@ export class Police {
       this.stuckTimer = 0;
       if (next === 'SEARCH') {
         this.searchOrbitAngle = Math.random() * Math.PI * 2;
+        this.searchRadius = 110;
       }
     }
   }
@@ -239,7 +244,8 @@ export class Police {
     playerInVehicle: boolean,
     lastKnownPos: { x: number; y: number } | null,
     collisionManager: CollisionManager,
-    onShoot?: (x: number, y: number, angleRad: number, damage: number, speed: number) => void
+    onShoot?: (x: number, y: number, angleRad: number, damage: number, speed: number) => void,
+    playerVel?: { vx: number; vy: number }
   ): void {
     if (!this.unitVisible) return;
 
@@ -306,28 +312,61 @@ export class Police {
     let targetSpeed: number = WANTED_CONFIG.POLICE_PATROL_SPEED;
 
     if (this.state === 'PURSUE') {
-      targetPos = playerPos;
+      const distRaw = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, playerPos.x, playerPos.y);
+      // Predictive velocity lead interception for fast units & helicopters
+      const leadScale =
+        this.unitKind === 'interceptor' || this.unitKind === 'heli' ? 0.55 : 0.35;
+      const leadSec = Math.min(leadScale, distRaw / 760);
+      const leadX = playerPos.x + (playerVel?.vx ?? 0) * leadSec;
+      const leadY = playerPos.y + (playerVel?.vy ?? 0) * leadSec;
+
       if (this.unitKind === 'heli') {
+        // Helicopter maintains an orbital tactical firing ring rather than hovering directly over player
+        const ringRadius = 205;
+        const orbitAngle = Math.atan2(this.sprite.y - playerPos.y, this.sprite.x - playerPos.x) + dtSeconds * 0.9;
+        targetPos = distRaw > 280
+          ? { x: leadX, y: leadY }
+          : { x: playerPos.x + Math.cos(orbitAngle) * ringRadius, y: playerPos.y + Math.sin(orbitAngle) * ringRadius };
         targetSpeed = WANTED_CONFIG.POLICE_HELI_SPEED;
-      } else if (this.unitKind === 'tank') {
-        targetSpeed = WANTED_CONFIG.POLICE_TANK_SPEED;
-      } else if (this.unitKind === 'swat') {
-        targetSpeed = WANTED_CONFIG.POLICE_SWAT_SPEED;
-      } else if (this.unitKind === 'interceptor') {
-        targetSpeed = playerInVehicle ? WANTED_CONFIG.POLICE_INTERCEPTOR_SPEED : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED + 25;
+      } else if (this.flankSign !== 0 && distRaw > 140 && distRaw < 480) {
+        // Pincer flanking maneuver so pursuit units box the player in instead of tailgating
+        const baseAng = Math.atan2(leadY - this.sprite.y, leadX - this.sprite.x);
+        const flankAng = baseAng + this.flankSign * 0.42;
+        targetPos = {
+          x: this.sprite.x + Math.cos(flankAng) * Math.min(distRaw, 220),
+          y: this.sprite.y + Math.sin(flankAng) * Math.min(distRaw, 220),
+        };
+        targetSpeed =
+          this.unitKind === 'interceptor'
+            ? playerInVehicle
+              ? WANTED_CONFIG.POLICE_INTERCEPTOR_SPEED
+              : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED + 25
+            : playerInVehicle
+              ? WANTED_CONFIG.POLICE_PURSUIT_VEH_SPEED
+              : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED;
       } else {
-        targetSpeed = playerInVehicle
-          ? WANTED_CONFIG.POLICE_PURSUIT_VEH_SPEED
-          : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED;
+        targetPos = { x: leadX, y: leadY };
+        if (this.unitKind === 'tank') {
+          targetSpeed = WANTED_CONFIG.POLICE_TANK_SPEED;
+        } else if (this.unitKind === 'swat') {
+          targetSpeed = WANTED_CONFIG.POLICE_SWAT_SPEED;
+        } else if (this.unitKind === 'interceptor') {
+          targetSpeed = playerInVehicle ? WANTED_CONFIG.POLICE_INTERCEPTOR_SPEED : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED + 25;
+        } else {
+          targetSpeed = playerInVehicle
+            ? WANTED_CONFIG.POLICE_PURSUIT_VEH_SPEED
+            : WANTED_CONFIG.POLICE_PURSUIT_FOOT_SPEED;
+        }
       }
     } else if (this.state === 'SEARCH') {
       const anchor = lastKnownPos ?? playerPos;
       const distToAnchor = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, anchor.x, anchor.y);
-      if (distToAnchor < 95) {
-        this.searchOrbitAngle += dtSeconds * 1.15;
+      if (distToAnchor < this.searchRadius + 25) {
+        this.searchOrbitAngle += dtSeconds * 1.1;
+        this.searchRadius = Math.min(260, this.searchRadius + dtSeconds * 16);
         targetPos = {
-          x: anchor.x + Math.cos(this.searchOrbitAngle) * 115,
-          y: anchor.y + Math.sin(this.searchOrbitAngle) * 115,
+          x: anchor.x + Math.cos(this.searchOrbitAngle) * this.searchRadius,
+          y: anchor.y + Math.sin(this.searchOrbitAngle) * this.searchRadius,
         };
       } else {
         targetPos = anchor;
@@ -439,25 +478,30 @@ export class Police {
   }
 
   private computeAvoidanceAngle(rawAngle: number, collisionManager: CollisionManager): number {
-    const probeDist = 56;
-    const aheadX = this.sprite.x + Math.cos(rawAngle) * probeDist;
-    const aheadY = this.sprite.y + Math.sin(rawAngle) * probeDist;
+    const isClearAt = (angle: number) => {
+      for (const dist of [42, 76]) {
+        const tx = this.sprite.x + Math.cos(angle) * dist;
+        const ty = this.sprite.y + Math.sin(angle) * dist;
+        if (!collisionManager.isPointClearForEntity(tx, ty, 15)) {
+          return false;
+        }
+      }
+      return true;
+    };
 
-    if (!collisionManager.isPointInsideBuilding(aheadX, aheadY, 16)) {
+    if (isClearAt(rawAngle)) {
       return rawAngle;
     }
 
-    const offsets = [0.65, -0.65, 1.25, -1.25, 1.9, -1.9];
+    const offsets = [0.48, -0.48, 0.95, -0.95, 1.45, -1.45, 2.05, -2.05];
     for (const off of offsets) {
       const testAngle = rawAngle + off;
-      const tx = this.sprite.x + Math.cos(testAngle) * probeDist;
-      const ty = this.sprite.y + Math.sin(testAngle) * probeDist;
-      if (!collisionManager.isPointInsideBuilding(tx, ty, 16)) {
+      if (isClearAt(testAngle)) {
         return testAngle;
       }
     }
 
-    return rawAngle + Math.PI * 0.5;
+    return rawAngle + Math.PI * 0.65;
   }
 
   private updateLightbar(dtSeconds: number): void {

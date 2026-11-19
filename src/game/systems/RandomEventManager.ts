@@ -315,6 +315,41 @@ export class RandomEventManager {
     }
   }
 
+  public isPointNearEvent(x: number, y: number, radius = 260): boolean {
+    if (!this.enabled || this.activeEvents.length === 0) return false;
+    for (const ev of this.activeEvents) {
+      if (Phaser.Math.Distance.Between(x, y, ev.x, ev.y) <= radius) {
+        return true;
+      }
+      for (const actor of ev.actors) {
+        if (Phaser.Math.Distance.Between(x, y, actor.x, actor.y) <= radius) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  public getTurretTargets(): Array<{ x: number; y: number; damage: (amount: number) => boolean }> {
+    if (!this.enabled || this.activeEvents.length === 0) return [];
+    const results: Array<{ x: number; y: number; damage: (amount: number) => boolean }> = [];
+    for (const ev of this.activeEvents) {
+      for (const actor of ev.actors) {
+        if (!actor.sprite.active) continue;
+        results.push({
+          x: actor.x,
+          y: actor.y,
+          damage: (amount: number) => {
+            const idx = ev.actors.indexOf(actor);
+            if (idx === -1) return false;
+            return this.applyDamageToActor(ev, idx, amount);
+          },
+        });
+      }
+    }
+    return results;
+  }
+
   public checkVehicleRam(vx: number, vy: number, speedPx: number): void {
     if (!this.enabled || speedPx < 130) return;
     for (const ev of this.activeEvents) {
@@ -509,11 +544,11 @@ export class RandomEventManager {
   }
 
   private findSpawnLocation(playerPos: { x: number; y: number }): { x: number; y: number } | null {
-    for (let attempt = 0; attempt < 24; attempt++) {
+    for (let attempt = 0; attempt < 34; attempt++) {
       const x = 140 + Math.random() * (WORLD_CONFIG.WIDTH - 280);
       const y = 140 + Math.random() * (WORLD_CONFIG.HEIGHT - 280);
       const dist = Phaser.Math.Distance.Between(playerPos.x, playerPos.y, x, y);
-      if (dist < 340 || dist > 1350) continue;
+      if (dist < 360 || dist > 1750) continue;
       if (this.collisionManager.isPointClearForEntity(x, y, 28)) {
         return { x: Math.round(x), y: Math.round(y) };
       }

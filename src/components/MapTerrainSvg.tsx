@@ -1,3 +1,4 @@
+import { WORLD_CONFIG } from '../game/config/BalanceConfig';
 import type { DistrictData, MountainDef } from '../game/world/DistrictManager';
 
 interface MapTerrainSvgProps {
@@ -7,7 +8,7 @@ interface MapTerrainSvgProps {
 
 function renderMountainPeaks(mt: MountainDef, showLabels: boolean) {
   // Special centerpiece: Obsidian Active Volcano with glowing caldera & branching lava rivers
-  if (mt.id === 'mtn-se-crag') {
+  if (mt.biome === 'volcano') {
     const cx = mt.x + mt.w / 2;
     const cy = mt.y + mt.h / 2;
     const left = mt.x + 12;
@@ -226,7 +227,7 @@ export function MapTerrainSvg({ districtData, showLabels = false }: MapTerrainSv
   return (
     <>
       {/* Base Lush Backdrop */}
-      <rect x={0} y={0} width={3200} height={2400} fill="#101828" />
+      <rect x={0} y={0} width={WORLD_CONFIG.WIDTH} height={WORLD_CONFIG.HEIGHT} fill="#101828" />
 
       {/* Snow Alps */}
       {districtData.snowZones.map((zn, idx) => (
@@ -337,8 +338,50 @@ export function MapTerrainSvg({ districtData, showLabels = false }: MapTerrainSv
         />
       ))}
 
+      {/* Skyport Runways & Helipads */}
+      {districtData.runways.map((rw, idx) => (
+        <g key={`rw-${idx}`}>
+          <rect
+            x={rw.x}
+            y={rw.y}
+            width={rw.w}
+            height={rw.h}
+            fill="#1E293B"
+            stroke="#00F5FF"
+            strokeWidth={5}
+            strokeOpacity={0.65}
+          />
+          <line
+            x1={rw.x + 28}
+            y1={rw.y + rw.h / 2}
+            x2={rw.x + rw.w - 28}
+            y2={rw.y + rw.h / 2}
+            stroke="#E2E8F0"
+            strokeWidth={6}
+            strokeDasharray="28 18"
+            strokeOpacity={0.75}
+          />
+        </g>
+      ))}
+      {districtData.helipads.map((hp, idx) => (
+        <g key={`hp-${idx}`} transform={`translate(${hp.x}, ${hp.y})`}>
+          <circle r={24} fill="#141A26" stroke="#FFD166" strokeWidth={4} />
+          <text
+            x={0}
+            y={7}
+            textAnchor="middle"
+            fill="#FFD166"
+            fontSize="22"
+            fontWeight="800"
+            fontFamily="monospace"
+          >
+            H
+          </text>
+        </g>
+      ))}
+
       {/* Central Neon Plaza Holographic Mandala */}
-      <g transform="translate(800, 608)">
+      <g transform={`translate(${districtData.plazaCenter.x}, ${districtData.plazaCenter.y})`}>
         <circle r={60} fill="#1E1B4B" stroke="#00F5FF" strokeWidth={5} />
         <circle r={38} fill="none" stroke="#FF2E88" strokeWidth={4} strokeDasharray="14 8" />
         <circle r={16} fill="#38BDF8" />

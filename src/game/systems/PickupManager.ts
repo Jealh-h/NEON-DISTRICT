@@ -36,38 +36,48 @@ interface ActivePickupNode {
 }
 
 const CHIP_LOCATIONS: ChipDef[] = [
-  { id: 'chip-1', x: 800, y: 608, label: '霓虹中心喷泉芯片' },
-  { id: 'chip-2', x: 1472, y: 120, label: '天际公寓天台通道芯片' },
-  { id: 'chip-3', x: 160, y: 1120, label: '霓虹餐厅后巷芯片' },
-  { id: 'chip-4', x: 800, y: 1360, label: '翠水湾湖心桥芯片' },
-  { id: 'chip-5', x: 1560, y: 1420, label: '滨河东岸步道芯片' },
-  { id: 'chip-6', x: 2224, y: 544, label: '苍穹山顶观景台芯片' },
-  { id: 'chip-7', x: 2880, y: 896, label: '东海盘山悬崖芯片' },
-  { id: 'chip-8', x: 528, y: 2290, label: '暗港西货柜栈桥芯片' },
-  { id: 'chip-9', x: 1104, y: 2290, label: '暗港东码头飞跃芯片' },
-  { id: 'chip-10', x: 2420, y: 1840, label: '铬铁聚变厂核心芯片' },
+  { id: 'chip-1', x: 1312, y: 1024, label: '霓虹中心喷泉芯片' },
+  { id: 'chip-2', x: 680, y: 380, label: '天际公寓加密暗巷芯片' },
+  { id: 'chip-3', x: 416, y: 920, label: '霓虹街机后巷芯片' },
+  { id: 'chip-4', x: 2048, y: 400, label: '量子实验室科研芯片' },
+  { id: 'chip-5', x: 3120, y: 920, label: '生态科研温室芯片' },
+  { id: 'chip-6', x: 3680, y: 580, label: '苍穹雪岭观景台芯片' },
+  { id: 'chip-7', x: 4320, y: 480, label: '红岩峡谷断崖芯片' },
+  { id: 'chip-8', x: 3968, y: 1184, label: '黑曜石火山前哨芯片' },
+  { id: 'chip-9', x: 2096, y: 1584, label: '翠水湾湖心木桥芯片' },
+  { id: 'chip-10', x: 2816, y: 1648, label: '霓虹竞技场南门芯片' },
+  { id: 'chip-11', x: 1296, y: 3424, label: '暗港离岸灯塔岛芯片' },
+  { id: 'chip-12', x: 528, y: 2432, label: '暗港深水货柜泊位芯片' },
+  { id: 'chip-13', x: 2320, y: 2432, label: '铬铁冷核聚变厂芯片' },
+  { id: 'chip-14', x: 4224, y: 2464, label: '星港超长主跑道芯片' },
 ];
 
 const STREET_CRATES: StreetCrateDef[] = [
-  { id: 'crate-plaza-cash', kind: 'cash', x: 560, y: 520, amount: 75 },
-  { id: 'crate-clinic-med', kind: 'medkit', x: 260, y: 740, amount: 40 },
-  { id: 'crate-tech-ammo', kind: 'ammo', x: 1080, y: 660, amount: 45 },
-  { id: 'crate-park-med', kind: 'medkit', x: 640, y: 1260, amount: 45 },
-  { id: 'crate-park-cash', kind: 'cash', x: 1120, y: 1480, amount: 90 },
-  { id: 'crate-highland-ammo', kind: 'ammo', x: 1940, y: 620, amount: 60 },
-  { id: 'crate-harbor-cash', kind: 'cash', x: 760, y: 1880, amount: 120 },
-  { id: 'crate-harbor-ammo', kind: 'ammo', x: 960, y: 2010, amount: 60 },
-  { id: 'crate-chrome-med', kind: 'medkit', x: 2280, y: 1840, amount: 50 },
-  { id: 'crate-chrome-cash', kind: 'cash', x: 2860, y: 1560, amount: 110 },
-  { id: 'crate-plaza-armor', kind: 'armor', x: 640, y: 800, amount: 50 },
-  { id: 'crate-harbor-armor', kind: 'armor', x: 520, y: 2040, amount: 50 },
-  { id: 'crate-chrome-armor', kind: 'armor', x: 2560, y: 1620, amount: 50 },
-  { id: 'crate-highland-armor', kind: 'armor', x: 2140, y: 420, amount: 50 },
-  { id: 'bribe-alley-west', kind: 'bribe', x: 184, y: 640, amount: 1 },
-  { id: 'bribe-park-canal', kind: 'bribe', x: 960, y: 1520, amount: 1 },
-  { id: 'bribe-highland-pass', kind: 'bribe', x: 2560, y: 480, amount: 1 },
-  { id: 'bribe-harbor-pier', kind: 'bribe', x: 1160, y: 2220, amount: 1 },
-  { id: 'bribe-chrome-yard', kind: 'bribe', x: 2140, y: 1960, amount: 1 },
+  { id: 'crate-plaza-cash', kind: 'cash', x: 1480, y: 960, amount: 85 },
+  { id: 'crate-clinic-med', kind: 'medkit', x: 1120, y: 616, amount: 45 },
+  { id: 'crate-tech-ammo', kind: 'ammo', x: 1984, y: 560, amount: 50 },
+  { id: 'crate-tech-cash', kind: 'cash', x: 2880, y: 1024, amount: 110 },
+  { id: 'crate-park-med', kind: 'medkit', x: 1584, y: 1520, amount: 45 },
+  { id: 'crate-park-cash', kind: 'cash', x: 2320, y: 1504, amount: 100 },
+  { id: 'crate-highland-ammo', kind: 'ammo', x: 3744, y: 640, amount: 65 },
+  { id: 'crate-volcano-med', kind: 'medkit', x: 3968, y: 1120, amount: 55 },
+  { id: 'crate-harbor-cash', kind: 'cash', x: 640, y: 2688, amount: 125 },
+  { id: 'crate-harbor-ammo', kind: 'ammo', x: 1312, y: 2464, amount: 65 },
+  { id: 'crate-chrome-med', kind: 'medkit', x: 1976, y: 2496, amount: 55 },
+  { id: 'crate-chrome-cash', kind: 'cash', x: 2800, y: 2496, amount: 130 },
+  { id: 'crate-skyport-ammo', kind: 'ammo', x: 4064, y: 1760, amount: 70 },
+  { id: 'crate-plaza-armor', kind: 'armor', x: 680, y: 920, amount: 50 },
+  { id: 'crate-harbor-armor', kind: 'armor', x: 416, y: 2496, amount: 50 },
+  { id: 'crate-chrome-armor', kind: 'armor', x: 3120, y: 2432, amount: 50 },
+  { id: 'crate-highland-armor', kind: 'armor', x: 3600, y: 560, amount: 50 },
+  { id: 'crate-skyport-armor', kind: 'armor', x: 3680, y: 1760, amount: 60 },
+  { id: 'bribe-alley-west', kind: 'bribe', x: 544, y: 400, amount: 1 },
+  { id: 'bribe-tech-east', kind: 'bribe', x: 3168, y: 520, amount: 1 },
+  { id: 'bribe-park-canal', kind: 'bribe', x: 1856, y: 1520, amount: 1 },
+  { id: 'bribe-highland-pass', kind: 'bribe', x: 4224, y: 720, amount: 1 },
+  { id: 'bribe-harbor-pier', kind: 'bribe', x: 688, y: 3440, amount: 1 },
+  { id: 'bribe-chrome-yard', kind: 'bribe', x: 2432, y: 2752, amount: 1 },
+  { id: 'bribe-skyport-north', kind: 'bribe', x: 4384, y: 1888, amount: 1 },
 ];
 
 export interface PickupCallbacks {
@@ -274,14 +284,14 @@ export class PickupManager {
       this.collectedChipIds.add(node.persistentChipId);
       const chipDef = CHIP_LOCATIONS.find((c) => c.id === node.persistentChipId);
       const allDone = this.collectedChipIds.size >= CHIP_LOCATIONS.length;
-      const reward = node.amount + (allDone ? 1000 : 0);
+      const reward = node.amount + (allDone ? 1500 : 0);
       callbacks.onCash(reward);
       callbacks.onChipCollected?.(allDone);
       if (allDone) {
         this.audioManager.playMissionComplete();
         gameEvents.emit(
           GAME_EVENT.STATUS_TOAST,
-          `集齐全部 10 枚霓虹数据芯片！额外奖励 +$1,000！`
+          `集齐全部 ${CHIP_LOCATIONS.length} 枚霓虹数据芯片！额外奖励 +$1,500！`
         );
       } else {
         this.audioManager.playPurchase();

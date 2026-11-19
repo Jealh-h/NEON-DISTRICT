@@ -101,9 +101,65 @@ export interface DistrictZoneDef extends CityRect {
   name: string;
 }
 
+export interface SignalTowerDef {
+  id: string;
+  districtId: string;
+  districtName: string;
+  name: string;
+  x: number;
+  y: number;
+  rewardCash: number;
+  rewardExp: number;
+  accentHex: string;
+}
+
+export interface MetroStationDef {
+  id: string;
+  districtId: string;
+  name: string;
+  x: number;
+  y: number;
+  spawnX: number;
+  spawnY: number;
+  accentHex: string;
+}
+
+export interface SecretVaultDef {
+  id: string;
+  districtId: string;
+  name: string;
+  hint: string;
+  x: number;
+  y: number;
+  rewardCash: number;
+  rewardExp: number;
+  rewardArmor: number;
+}
+
+export interface GangOutpostDef {
+  id: string;
+  districtId: string;
+  name: string;
+  faction: string;
+  x: number;
+  y: number;
+  radius: number;
+  guardCount: number;
+  hasBoss: boolean;
+  rewardCash: number;
+  rewardExp: number;
+  accentHex: string;
+}
+
 export interface DistrictData {
   id: string;
   name: string;
+  plazaCenter: { x: number; y: number };
+  exitMarkers: {
+    east: { x: number; y: number; label: string };
+    south: { x: number; y: number; label: string };
+    farEast: { x: number; y: number; label: string };
+  };
   roads: CityRect[];
   sidewalks: CityRect[];
   plazaZones: CityRect[];
@@ -115,6 +171,8 @@ export interface DistrictData {
   sandZones: CityRect[];
   waterfalls: CityRect[];
   docks: CityRect[];
+  runways: CityRect[];
+  helipads: Array<{ x: number; y: number }>;
   rivers: CityRect[];
   waterColliders: CityRect[];
   bridges: CityRect[];
@@ -129,14 +187,20 @@ export interface DistrictData {
   trafficSignals: TrafficSignalDef[];
   steamVents: SteamVentDef[];
   landmarks: LandmarkInfo[];
+  signalTowers: SignalTowerDef[];
+  metroStations: MetroStationDef[];
+  secretVaults: SecretVaultDef[];
+  gangOutposts: GangOutpostDef[];
 }
 
 export const CITY_DISTRICTS = [
-  { id: 'neon-plaza', name: '霓虹广场', direction: '中心枢纽 · 商业区' },
-  { id: 'riverside-park', name: '滨河生态公园', direction: '南区水岸 · 公园栈道' },
-  { id: 'skyline-highlands', name: '苍穹山脉', direction: '东北高地 · 盘山弯道' },
-  { id: 'dark-harbor', name: '暗港码头', direction: '西南港口 · 集装箱区' },
-  { id: 'chrome-town', name: '铬铁工业区', direction: '东南工业 · 涡轮高速' },
+  { id: 'neon-plaza', name: '霓虹广场', direction: '中心枢纽 · CBD 商业核' },
+  { id: 'quantum-tech', name: '量子科教区', direction: '北中走廊 · 尖端研发城' },
+  { id: 'skyline-highlands', name: '苍穹山脉', direction: '东北高地 · 雪岭峡谷火山' },
+  { id: 'riverside-park', name: '滨河生态公园', direction: '翠水湾岸 · 竞技场绿带' },
+  { id: 'dark-harbor', name: '暗港码头', direction: '西南港湾 · 黑市金沙灯塔' },
+  { id: 'chrome-town', name: '铬铁工业区', direction: '东南重工 · F1 涡轮赛道' },
+  { id: 'neon-skyport', name: '星港航空区', direction: '远东空港 · 超长跑道机库' },
 ] as const;
 
 export class DistrictManager {
@@ -149,972 +213,1243 @@ export class DistrictManager {
     return data.name;
   }
 
+  public getDistrictZoneAt(x: number, y: number, data: DistrictData): DistrictZoneDef | null {
+    for (const z of data.zones) {
+      if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
+        return z;
+      }
+    }
+    return null;
+  }
+
   public getNeonPlaza(): DistrictData {
+    // 7 Grand Cohesive Districts covering full 4800 x 3584 world
     const zones: DistrictZoneDef[] = [
-      { id: 'neon-plaza', name: '霓虹广场', x: 0, y: 0, w: 1664, h: 1184 },
-      { id: 'riverside-park', name: '滨河生态公园', x: 0, y: 1184, w: 1664, h: 512 },
-      { id: 'dark-harbor', name: '暗港码头', x: 0, y: 1696, w: 1664, h: 704 },
-      { id: 'skyline-highlands', name: '苍穹山脉', x: 1664, y: 0, w: 1536, h: 1568 },
-      { id: 'chrome-town', name: '铬铁工业区', x: 1664, y: 1568, w: 1536, h: 832 },
+      { id: 'neon-plaza', name: '霓虹广场', x: 0, y: 0, w: 1792, h: 1408 },
+      { id: 'quantum-tech', name: '量子科教区', x: 1792, y: 0, w: 1664, h: 1408 },
+      { id: 'skyline-highlands', name: '苍穹山脉', x: 3456, y: 0, w: 1344, h: 1408 },
+      { id: 'riverside-park', name: '滨河生态公园', x: 0, y: 1408, w: 3456, h: 640 },
+      { id: 'dark-harbor', name: '暗港码头', x: 0, y: 2048, w: 1792, h: 1536 },
+      { id: 'chrome-town', name: '铬铁工业区', x: 1792, y: 2048, w: 1664, h: 1536 },
+      { id: 'neon-skyport', name: '星港航空区', x: 3456, y: 1408, w: 1344, h: 2176 },
     ];
 
+    // 128px wide 4-tile arterial grid + outer ring loop + highlands mountain pass
     const roads: CityRect[] = [
-      { x: 32, y: 256, w: 2912, h: 128 },
-      { x: 32, y: 832, w: 2912, h: 128 },
-      { x: 32, y: 1568, w: 2912, h: 128 },
-      { x: 288, y: 2080, w: 2656, h: 128 },
-      { x: 288, y: 32, w: 128, h: 2176 },
-      { x: 1184, y: 32, w: 128, h: 2176 },
-      { x: 1888, y: 256, w: 128, h: 1952 },
-      { x: 2176, y: 256, w: 96, h: 1440 },
-      { x: 2336, y: 1568, w: 128, h: 640 },
-      { x: 2816, y: 256, w: 128, h: 1952 },
+      // Horizontal arterials
+      { x: 128, y: 128, w: 4544, h: 128 },   // 北环高速 (y: 128..256)
+      { x: 128, y: 640, w: 3328, h: 128 },   // 霓虹北街 / 科教大道 (y: 640..768)
+      { x: 3456, y: 672, w: 1088, h: 96 },   // 苍穹盘山峡谷公路 (y: 672..768)
+      { x: 128, y: 1280, w: 4544, h: 128 },  // 中央大道 (y: 1280..1408)
+      { x: 128, y: 2048, w: 4544, h: 128 },  // 滨河干道 / 涡轮大道 (y: 2048..2176)
+      { x: 128, y: 2816, w: 4544, h: 128 },  // 南港工贸大道 / F1赛道南段 (y: 2816..2944)
+      { x: 128, y: 3264, w: 3328, h: 96 },   // 南环滨海大道 (y: 3264..3360)
+
+      // Vertical arterials
+      { x: 128, y: 128, w: 128, h: 3232 },   // 西环高速 (x: 128..256)
+      { x: 832, y: 128, w: 128, h: 3232 },   // 中轴西街 / 暗港大道 (x: 832..960)
+      { x: 1664, y: 128, w: 128, h: 3232 },  // 核心经脉大道 (x: 1664..1792)
+      { x: 2496, y: 128, w: 128, h: 3232 },  // 东岸枢纽大道 (x: 2496..2624)
+      { x: 3328, y: 128, w: 128, h: 3232 },  // 航空高速 (x: 3328..3456)
+      { x: 4544, y: 128, w: 128, h: 2816 },  // 远东环山高速 (x: 4544..4672)
+      // Skyport taxiway connector between Central Ave & Runway Apron
+      { x: 3840, y: 2176, w: 96, h: 160 },
+      { x: 3840, y: 2592, w: 96, h: 224 },
     ];
 
     const sidewalks: CityRect[] = [
-      { x: 32, y: 32, w: 256, h: 224 },
-      { x: 416, y: 32, w: 768, h: 224 },
-      { x: 1312, y: 32, w: 320, h: 224 },
-      { x: 32, y: 384, w: 256, h: 448 },
-      { x: 416, y: 384, w: 768, h: 448 },
-      { x: 1312, y: 384, w: 320, h: 448 },
-      { x: 32, y: 960, w: 256, h: 224 },
-      { x: 416, y: 960, w: 768, h: 224 },
-      { x: 1312, y: 960, w: 320, h: 224 },
+      // Neon Plaza urban blocks
+      { x: 256, y: 256, w: 576, h: 384 },
+      { x: 960, y: 256, w: 704, h: 384 },
+      { x: 256, y: 768, w: 576, h: 512 },
+      // Quantum Tech blocks
+      { x: 1792, y: 256, w: 704, h: 384 },
+      { x: 2624, y: 256, w: 704, h: 384 },
+      { x: 1792, y: 768, w: 704, h: 512 },
+      { x: 2624, y: 768, w: 704, h: 512 },
+      // Chrome Town upper blocks
+      { x: 1792, y: 2176, w: 704, h: 640 },
+      { x: 2624, y: 2176, w: 704, h: 640 },
+      { x: 1792, y: 2944, w: 1536, h: 320 },
+      // Skyport terminal & cargo aprons
+      { x: 3456, y: 1408, w: 1088, h: 640 },
+      { x: 3456, y: 2176, w: 1088, h: 640 },
+      { x: 3456, y: 2944, w: 1088, h: 416 },
     ];
 
     const plazaZones: CityRect[] = [
-      { x: 512, y: 544, w: 576, h: 128 },
-      { x: 736, y: 384, w: 128, h: 160 },
-      { x: 704, y: 672, w: 192, h: 160 },
+      // Grand Neon Plaza pedestrian core
+      { x: 960, y: 768, w: 704, h: 512 },
+      // Quantum Central Courtyard
+      { x: 2208, y: 1056, w: 256, h: 192 },
     ];
 
     const parks: CityRect[] = [
-      { x: 32, y: 1184, w: 1600, h: 384 },
-      { x: 1856, y: 960, w: 416, h: 608 },
-      { x: 704, y: 2272, w: 192, h: 64 },
+      // Riverside Park North Bank (across whole river frontage)
+      { x: 256, y: 1408, w: 576, h: 288 },
+      { x: 960, y: 1408, w: 704, h: 288 },
+      { x: 1792, y: 1408, w: 704, h: 288 },
+      { x: 2624, y: 1408, w: 704, h: 288 },
+      // Riverside Park South Promenade
+      { x: 256, y: 1888, w: 576, h: 160 },
+      { x: 960, y: 1888, w: 704, h: 160 },
+      { x: 1792, y: 1888, w: 704, h: 160 },
+      { x: 2624, y: 1888, w: 704, h: 160 },
     ];
 
     const snowZones: CityRect[] = [
-      { x: 1856, y: 32, w: 672, h: 800 },
+      // NW Skyline Highlands: Alpine Snow Peaks
+      { x: 3456, y: 256, w: 544, h: 416 },
+      { x: 3456, y: 0, w: 608, h: 128 },
     ];
 
     const desertZones: CityRect[] = [
-      { x: 2528, y: 32, w: 640, h: 800 },
+      // NE Skyline Highlands: Red-Rock Canyon & Badlands
+      { x: 4000, y: 256, w: 544, h: 416 },
+      { x: 4064, y: 0, w: 736, h: 128 },
+      { x: 4672, y: 128, w: 128, h: 640 },
     ];
 
     const volcanoZones: CityRect[] = [
-      { x: 2272, y: 960, w: 896, h: 608 },
+      // SE Skyline Highlands: Obsidian Active Volcano Region
+      { x: 3456, y: 768, w: 1088, h: 512 },
+      { x: 4672, y: 768, w: 128, h: 512 },
     ];
 
     const lavaZones: CityRect[] = [
-      { x: 2304, y: 992, w: 480, h: 32 },
-      { x: 2304, y: 1472, w: 480, h: 32 },
-      { x: 2304, y: 992, w: 32, h: 512 },
-      { x: 2752, y: 992, w: 32, h: 512 },
+      // Molten Lava Caldera & River inside Volcano (keeps mountain roads clear)
+      { x: 4128, y: 896, w: 288, h: 192 },
+      { x: 4224, y: 1088, w: 96, h: 128 },
     ];
 
     const sandZones: CityRect[] = [
-      { x: 32, y: 2208, w: 1600, h: 32 },
-      { x: 672, y: 2272, w: 256, h: 96 },
-      { x: 2944, y: 1568, w: 64, h: 800 },
+      // Golden Beach Strip & Lighthouse Sandbar Island
+      { x: 256, y: 2944, w: 576, h: 320 },
+      { x: 960, y: 2944, w: 704, h: 320 },
+      { x: 128, y: 3360, w: 1664, h: 64 },
+      { x: 1184, y: 3424, w: 224, h: 128 }, // Offshore Lighthouse Island
     ];
 
     const waterfalls: CityRect[] = [
-      { x: 1696, y: 32, w: 96, h: 96 },
-      { x: 608, y: 1280, w: 96, h: 32 },
+      { x: 1984, y: 1664, w: 160, h: 32 },
+      { x: 3456, y: 1664, w: 96, h: 64 },
     ];
 
     const docks: CityRect[] = [
-      { x: 32, y: 1696, w: 1600, h: 512 },
-      { x: 448, y: 2208, w: 160, h: 128 },
-      { x: 768, y: 2208, w: 96, h: 64 },
-      { x: 1024, y: 2208, w: 160, h: 128 },
+      // Harbor Industrial Blocks + Cargo Piers extending over Southern Ocean
+      { x: 256, y: 2176, w: 576, h: 640 },
+      { x: 960, y: 2176, w: 704, h: 640 },
+      // Timber/Steel Piers jutting south into ocean
+      { x: 352, y: 3360, w: 96, h: 192 },
+      { x: 640, y: 3360, w: 96, h: 192 },
+      { x: 1248, y: 3360, w: 96, h: 96 }, // Pier walkway connecting beach to Lighthouse Island
     ];
 
+    const runways: CityRect[] = [
+      { x: 3520, y: 2336, w: 960, h: 256 },
+    ];
+
+    const helipads: Array<{ x: number; y: number }> = [
+      { x: 3680, y: 2240 },
+      { x: 4160, y: 2240 },
+      { x: 544, y: 2432 },
+    ];
+
+    // Visual river & ocean channels
     const rivers: CityRect[] = [
-      { x: 1664, y: 32, w: 160, h: 2336 },
-      { x: 32, y: 2240, w: 1632, h: 128 },
-      { x: 512, y: 1312, w: 576, h: 128 },
-      { x: 3008, y: 1568, w: 160, h: 800 },
+      { x: 0, y: 1696, w: 3456, h: 192 },  // Central Emerald River
+      { x: 0, y: 3424, w: 4800, h: 160 },  // Southern Deep Ocean
     ];
 
-    const waterColliders: CityRect[] = [
-      // Neon Cyber River sections between the 4 bridges
-      { x: 1664, y: 32, w: 160, h: 224 },
-      { x: 1664, y: 384, w: 160, h: 448 },
-      { x: 1664, y: 960, w: 160, h: 608 },
-      { x: 1664, y: 1696, w: 160, h: 384 },
-      { x: 1664, y: 2208, w: 160, h: 160 },
-      // Southern Harbor Bay excluding the golden beach (row 69), two cargo piers, footbridge, and lighthouse island
-      { x: 32, y: 2240, w: 416, h: 128 },
-      { x: 608, y: 2240, w: 160, h: 32 },
-      { x: 608, y: 2272, w: 64, h: 96 },
-      { x: 864, y: 2240, w: 160, h: 32 },
-      { x: 928, y: 2272, w: 96, h: 96 },
-      { x: 1184, y: 2240, w: 480, h: 128 },
-      { x: 448, y: 2336, w: 160, h: 32 },
-      { x: 1024, y: 2336, w: 160, h: 32 },
-      // Riverside Park Emerald Lagoon
-      { x: 512, y: 1312, w: 224, h: 128 },
-      { x: 864, y: 1312, w: 224, h: 128 },
-      // East Coast Ocean Cove
-      { x: 3008, y: 1568, w: 160, h: 800 },
-    ];
-
+    // Bridges cleanly spanning the river & lagoon
     const bridges: CityRect[] = [
-      { x: 1632, y: 256, w: 224, h: 128 },
-      { x: 1632, y: 832, w: 224, h: 128 },
-      { x: 1632, y: 1568, w: 224, h: 128 },
-      { x: 1632, y: 2080, w: 224, h: 128 },
-      { x: 736, y: 1312, w: 128, h: 128 },
+      { x: 128, y: 1696, w: 128, h: 192 },   // West Ring Bridge
+      { x: 832, y: 1696, w: 128, h: 192 },   // West Axis / Harbor Bridge
+      { x: 1664, y: 1696, w: 128, h: 192 },  // Central Spine Bridge
+      { x: 2048, y: 1696, w: 96, h: 192 },   // Park Wooden Pier Bridge
+      { x: 2496, y: 1696, w: 128, h: 192 },  // East Hub Bridge
+      { x: 3328, y: 1696, w: 128, h: 192 },  // Skyport Expressway Bridge
+    ];
+
+    // Physics water colliders strictly in the segments BETWEEN bridges & piers!
+    const waterColliders: CityRect[] = [
+      // River segments
+      { x: 0, y: 1696, w: 128, h: 192 },
+      { x: 256, y: 1696, w: 576, h: 192 },
+      { x: 960, y: 1696, w: 704, h: 192 },
+      { x: 1792, y: 1696, w: 256, h: 192 },
+      { x: 2144, y: 1696, w: 352, h: 192 },
+      { x: 2624, y: 1696, w: 704, h: 192 },
+      // Southern ocean segments around cargo piers & lighthouse island
+      { x: 0, y: 3424, w: 352, h: 160 },
+      { x: 448, y: 3424, w: 192, h: 160 },
+      { x: 736, y: 3424, w: 448, h: 160 },
+      { x: 1408, y: 3424, w: 3392, h: 160 },
+      // Volcano Molten Caldera Hazard Collider (non-drivable lava pool)
+      { x: 4128, y: 896, w: 288, h: 192 },
     ];
 
     const mountains: MountainDef[] = [
-      { id: 'mtn-north', name: '雪域北峰', x: 1888, y: 64, w: 512, h: 160, elevation: 420, biome: 'snow' },
-      { id: 'mtn-desert-mesa', name: '赤岩北台', x: 2400, y: 64, w: 448, h: 160, elevation: 340, biome: 'desert' },
-      { id: 'mtn-skyline', name: '苍穹雪峰', x: 2048, y: 416, w: 96, h: 384, elevation: 480, biome: 'snow' },
-      { id: 'mtn-east-plateau', name: '云巅冰原', x: 2272, y: 384, w: 224, h: 416, elevation: 520, biome: 'snow' },
-      { id: 'mtn-desert-butte', name: '金砂红崖', x: 2528, y: 384, w: 256, h: 416, elevation: 390, biome: 'desert' },
-      { id: 'mtn-coast-cliff-n', name: '东海砾岩', x: 2976, y: 384, w: 160, h: 416, elevation: 360, biome: 'desert' },
-      { id: 'mtn-south-gorge', name: '翠林南岭', x: 2048, y: 1024, w: 96, h: 480, elevation: 360, biome: 'forest' },
-      { id: 'mtn-se-crag', name: '黑曜活火山', x: 2336, y: 1056, w: 384, h: 384, elevation: 620, biome: 'volcano' },
-      { id: 'mtn-coast-cliff-s', name: '熔岩海岬', x: 2976, y: 960, w: 160, h: 544, elevation: 450, biome: 'volcano' },
+      { id: 'mt-snow-1', name: '苍穹雪峰主脊', x: 3520, y: 288, w: 256, h: 192, elevation: 1450, biome: 'snow' },
+      { id: 'mt-canyon-1', name: '红岩断崖峰', x: 4192, y: 288, w: 288, h: 192, elevation: 1120, biome: 'desert' },
+      { id: 'mt-volcano-1', name: '黑曜熔岩火山锥', x: 3584, y: 832, w: 320, h: 224, elevation: 1320, biome: 'volcano' },
     ];
 
     const turboStrips: TurboStripDef[] = [
-      { id: 'turbo-express-1', x: 2048, y: 1600, w: 64, h: 64, dir: 'E' },
-      { id: 'turbo-express-2', x: 2528, y: 1600, w: 64, h: 64, dir: 'E' },
-      { id: 'turbo-south-1', x: 2112, y: 2112, w: 64, h: 64, dir: 'W' },
-      { id: 'turbo-south-2', x: 2592, y: 2112, w: 64, h: 64, dir: 'W' },
-      { id: 'turbo-east-1', x: 2848, y: 576, w: 64, h: 64, dir: 'S' },
-      { id: 'turbo-east-2', x: 2848, y: 1216, w: 64, h: 64, dir: 'S' },
-      { id: 'turbo-east-3', x: 2848, y: 1824, w: 64, h: 64, dir: 'S' },
-      { id: 'turbo-north-1', x: 2464, y: 288, w: 64, h: 64, dir: 'E' },
-      { id: 'turbo-harbor-1', x: 704, y: 2112, w: 64, h: 64, dir: 'W' },
+      // Chrome Town F1 Turbo Straight (y: 2816..2944)
+      { id: 'turbo-f1-1', x: 1856, y: 2848, w: 160, h: 64, dir: 'E' },
+      { id: 'turbo-f1-2', x: 2784, y: 2848, w: 160, h: 64, dir: 'E' },
+      // North Ring Highway Turbo
+      { id: 'turbo-north-1', x: 2048, y: 160, w: 160, h: 64, dir: 'E' },
+      // Skyport Main Runway Booster
+      { id: 'turbo-runway-1', x: 3744, y: 2432, w: 192, h: 64, dir: 'E' },
+      { id: 'turbo-runway-2', x: 4096, y: 2432, w: 160, h: 64, dir: 'E' },
+      // Central Boulevard Westbound Booster
+      { id: 'turbo-central-w', x: 2048, y: 1312, w: 160, h: 64, dir: 'W' },
     ];
 
     const stuntRamps: StuntRampDef[] = [
-      { id: 'ramp-helipad', name: '暗港停机坪跳台', x: 192, y: 1920, w: 64, h: 64 },
-      { id: 'ramp-north-bridge', name: '北桥助推跳台', x: 1472, y: 288, w: 64, h: 64 },
-      { id: 'ramp-chrome-express', name: '铬铁涡轮跳台', x: 2656, y: 1600, w: 64, h: 64 },
-      { id: 'ramp-pier-east', name: '东码头水上飞跃', x: 1056, y: 2208, w: 96, h: 32 },
-      { id: 'ramp-highland', name: '苍穹峡谷跳台', x: 1920, y: 1248, w: 64, h: 64 },
+      { id: 'ramp-harbor', name: '暗港跨海飞跃跳台', x: 768, y: 2944, w: 64, h: 64 },
+      { id: 'ramp-chrome', name: '铬铁涡轮腾空台', x: 2304, y: 2848, w: 64, h: 64 },
+      { id: 'ramp-canyon', name: '红岩峡谷飞跃坡', x: 4032, y: 512, w: 64, h: 64 },
+      { id: 'ramp-skyport', name: '星港跑道极限跳台', x: 4384, y: 2432, w: 64, h: 64 },
+      { id: 'ramp-river', name: '翠水湾西岸跳台', x: 1312, y: 1600, w: 64, h: 64 },
     ];
 
-    const parkingLot: CityRect = {
-      x: 1344,
-      y: 416,
-      w: 192,
-      h: 384,
-    };
+    const parkingLot: CityRect = { x: 592, y: 1088, w: 192, h: 160 };
 
+    // Cleanly zoned buildings inside urban blocks (never overlapping roads or sidewalks clearance)
     const buildings: BuildingDef[] = [
-      // === District 1: Neon Plaza ===
+      // === 霓虹广场 NEON PLAZA ===
       {
-        id: 'byte-mart',
-        label: '字节便利店',
-        signText: '24H 便利',
-        x: 64,
-        y: 64,
-        w: 160,
-        h: 128,
-        neonColor: PALETTE.NEON_CYAN,
-        accentHex: PALETTE.NEON_CYAN_HEX,
-        roofStyle: 'store',
-        hasFan: true,
-      },
-      {
-        id: 'cyber-corp',
-        label: '赛博集团',
-        signText: '集团总部',
-        x: 480,
-        y: 64,
-        w: 256,
-        h: 128,
+        id: 'corp-tower',
+        label: '赛博集团总部',
+        x: 304,
+        y: 288,
+        w: 224,
+        h: 144,
         neonColor: PALETTE.NEON_CYAN,
         accentHex: PALETTE.NEON_CYAN_HEX,
         roofStyle: 'tech',
-        hasFan: true,
-      },
-      {
-        id: 'data-exchange',
-        label: '数据交易所',
-        signText: '网络枢纽',
-        x: 832,
-        y: 64,
-        w: 288,
-        h: 128,
-        neonColor: PALETTE.NEON_PURPLE,
-        accentHex: PALETTE.NEON_PURPLE_HEX,
-        roofStyle: 'tech',
+        signText: 'ARASAKA',
         hasFan: true,
       },
       {
         id: 'skyline-apts',
-        label: '天际公寓',
-        signText: '居住区01',
-        x: 1376,
-        y: 64,
-        w: 160,
-        h: 128,
+        label: '天际公寓 · 安全屋',
+        x: 576,
+        y: 288,
+        w: 208,
+        h: 144,
         neonColor: PALETTE.NEON_PINK,
         accentHex: PALETTE.NEON_PINK_HEX,
         roofStyle: 'residential',
-      },
-      {
-        id: 'arcade-lounge',
-        label: '街机俱乐部',
-        signText: '电玩赌局',
-        x: 64,
-        y: 448,
-        w: 160,
-        h: 128,
-        neonColor: PALETTE.NEON_PINK,
-        accentHex: PALETTE.NEON_PINK_HEX,
-        roofStyle: 'arcade',
-      },
-      {
-        id: 'cyber-clinic',
-        label: '义体诊所',
-        signText: '医疗舱',
-        x: 64,
-        y: 640,
-        w: 160,
-        h: 128,
-        neonColor: PALETTE.NEON_CYAN,
-        accentHex: PALETTE.NEON_CYAN_HEX,
-        roofStyle: 'tech',
-        hasFan: true,
-      },
-      {
-        id: 'nexus-ops',
-        label: '枢纽行动处',
-        signText: '任务中心',
-        x: 480,
-        y: 432,
-        w: 224,
-        h: 96,
-        neonColor: PALETTE.NEON_CYAN,
-        accentHex: PALETTE.NEON_CYAN_HEX,
-        roofStyle: 'tech',
-        hasFan: true,
-      },
-      {
-        id: 'holo-tower',
-        label: '全息塔楼',
-        signText: '全息视界',
-        x: 896,
-        y: 432,
-        w: 224,
-        h: 96,
-        neonColor: PALETTE.NEON_PURPLE,
-        accentHex: PALETTE.NEON_PURPLE_HEX,
-        roofStyle: 'tech',
-        hasFan: true,
+        signText: 'SAFEHOUSE',
       },
       {
         id: 'kitsune-noodles',
-        label: '狐狸拉面馆',
-        signText: '24H 拉面',
-        x: 480,
-        y: 688,
-        w: 192,
-        h: 96,
+        label: '狐狸夜宵拉面馆',
+        x: 304,
+        y: 480,
+        w: 176,
+        h: 128,
         neonColor: PALETTE.NEON_PINK,
         accentHex: PALETTE.NEON_PINK_HEX,
         roofStyle: 'diner',
+        signText: 'RAMEN',
       },
       {
-        id: 'plaza-tech',
-        label: '广场科技坊',
-        signText: '军械终端',
-        x: 928,
-        y: 688,
-        w: 192,
-        h: 96,
+        id: 'byte-mart',
+        label: '字节便利店 24/7',
+        x: 544,
+        y: 480,
+        w: 208,
+        h: 128,
         neonColor: PALETTE.NEON_CYAN,
         accentHex: PALETTE.NEON_CYAN_HEX,
         roofStyle: 'store',
-      },
-      {
-        id: 'parking-booth',
-        label: '泊车亭',
-        signText: '泊车',
-        x: 1344,
-        y: 424,
-        w: 64,
-        h: 48,
-        neonColor: PALETTE.GOLD,
-        accentHex: PALETTE.GOLD_HEX,
-        roofStyle: 'booth',
-      },
-      {
-        id: 'neon-diner',
-        label: '霓虹餐厅',
-        signText: '夜宵',
-        x: 64,
-        y: 1008,
-        w: 160,
-        h: 112,
-        neonColor: PALETTE.NEON_PINK,
-        accentHex: PALETTE.NEON_PINK_HEX,
-        roofStyle: 'diner',
-      },
-      {
-        id: 'transit-hub',
-        label: '地铁枢纽',
-        signText: '城铁站',
-        x: 480,
-        y: 1008,
-        w: 256,
-        h: 112,
-        neonColor: PALETTE.NEON_CYAN,
-        accentHex: PALETTE.NEON_CYAN_HEX,
-        roofStyle: 'tech',
-        hasFan: true,
+        signText: '24/7',
       },
       {
         id: 'police-hq',
-        label: '特区警署',
-        signText: 'NCPD',
-        x: 752,
-        y: 1008,
-        w: 96,
-        h: 112,
+        label: 'NCPD 特区警署',
+        x: 1008,
+        y: 288,
+        w: 272,
+        h: 144,
         neonColor: 0x38bdf8,
         accentHex: '#38BDF8',
         roofStyle: 'police',
+        signText: 'NCPD',
         hasFan: true,
       },
       {
-        id: 'synth-club',
-        label: '脉冲夜店',
-        signText: '午夜酒吧',
-        x: 864,
-        y: 1008,
-        w: 256,
-        h: 112,
+        id: 'data-exchange',
+        label: '全息数据交易所',
+        x: 1344,
+        y: 288,
+        w: 272,
+        h: 144,
         neonColor: PALETTE.NEON_PURPLE,
         accentHex: PALETTE.NEON_PURPLE_HEX,
-        roofStyle: 'club',
+        roofStyle: 'tech',
+        signText: 'NEXUS',
+        hasFan: true,
+      },
+      {
+        id: 'cyber-clinic',
+        label: '义体急救诊所',
+        x: 1008,
+        y: 480,
+        w: 224,
+        h: 128,
+        neonColor: PALETTE.NEON_CYAN,
+        accentHex: PALETTE.NEON_CYAN_HEX,
+        roofStyle: 'booth',
+        signText: 'CLINIC',
+      },
+      {
+        id: 'nexus-ops',
+        label: '枢纽行动终端',
+        x: 1344,
+        y: 480,
+        w: 272,
+        h: 128,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'tech',
+        signText: 'OPS',
+      },
+      {
+        id: 'arcade-lounge',
+        label: '街机电玩俱乐部',
+        x: 304,
+        y: 800,
+        w: 224,
+        h: 144,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'arcade',
+        signText: 'ARCADE',
+      },
+      {
+        id: 'plaza-tech',
+        label: '广场军械库',
+        x: 576,
+        y: 800,
+        w: 208,
+        h: 144,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'store',
+        signText: 'ARMS',
       },
       {
         id: 'plaza-garage',
-        label: '广场车库',
-        signText: '修车库',
-        x: 1360,
-        y: 1008,
-        w: 176,
-        h: 112,
+        label: '霓虹超跑车库',
+        x: 304,
+        y: 1088,
+        w: 240,
+        h: 144,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'warehouse',
+        signText: 'GARAGE',
+      },
+      {
+        id: 'synth-club',
+        label: '脉冲夜店酒吧',
+        x: 1008,
+        y: 1088,
+        w: 208,
+        h: 144,
+        neonColor: PALETTE.NEON_PURPLE,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
+        roofStyle: 'club',
+        signText: 'PULSE',
+      },
+
+      // === 量子科教区 QUANTUM TECH ===
+      {
+        id: 'quantum-lab',
+        label: '量子核心实验室',
+        x: 1840,
+        y: 288,
+        w: 288,
+        h: 160,
         neonColor: PALETTE.NEON_CYAN,
         accentHex: PALETTE.NEON_CYAN_HEX,
         roofStyle: 'tech',
+        signText: 'QUANTUM',
         hasFan: true,
       },
       {
+        id: 'server-matrix',
+        label: '超算矩阵塔',
+        x: 2192,
+        y: 288,
+        w: 256,
+        h: 160,
+        neonColor: PALETTE.NEON_PURPLE,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
+        roofStyle: 'tech',
+        signText: 'MATRIX',
+        hasFan: true,
+      },
+      {
+        id: 'cyber-academy',
+        label: '义体工程研究院',
+        x: 1840,
+        y: 800,
+        w: 288,
+        h: 160,
+        neonColor: PALETTE.NEON_CYAN,
+        accentHex: PALETTE.NEON_CYAN_HEX,
+        roofStyle: 'tech',
+        signText: 'ACADEMY',
+      },
+      {
+        id: 'neural-hub',
+        label: '神经链路大厦',
+        x: 2672,
+        y: 288,
+        w: 272,
+        h: 160,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'tech',
+        signText: 'NEURAL',
+        hasFan: true,
+      },
+      {
+        id: 'drone-foundry',
+        label: '无人机航电中心',
+        x: 3008,
+        y: 288,
+        w: 272,
+        h: 160,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'factory',
+        signText: 'DRONE',
+      },
+      {
+        id: 'holo-theater',
+        label: '全息巨幕剧院',
+        x: 2672,
+        y: 800,
+        w: 288,
+        h: 176,
+        neonColor: PALETTE.NEON_PURPLE,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
+        roofStyle: 'club',
+        signText: 'HOLO',
+      },
+      {
+        id: 'synth-conservatory',
+        label: '生态科研温室',
+        x: 3024,
+        y: 800,
+        w: 256,
+        h: 176,
+        neonColor: 0x34d399,
+        accentHex: '#34D399',
+        roofStyle: 'stadium',
+        signText: 'BIO',
+      },
+
+      // === 滨河公园 RIVERSIDE ===
+      {
         id: 'neon-stadium',
-        label: '霓虹竞技场',
+        label: '霓虹穹顶竞技场',
+        x: 2672,
+        y: 1440,
+        w: 320,
+        h: 192,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'stadium',
         signText: 'ARENA',
-        x: 1344,
-        y: 1232,
+      },
+
+      // === 暗港码头 DARK HARBOR ===
+      {
+        id: 'harbor-customs',
+        label: '暗港海关大楼',
+        x: 304,
+        y: 2224,
+        w: 240,
+        h: 144,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'warehouse',
+        signText: 'CUSTOMS',
+      },
+      {
+        id: 'harbor-warehouse-a',
+        label: '保税一号货仓',
+        x: 592,
+        y: 2224,
         w: 192,
+        h: 144,
+        neonColor: 0xf97316,
+        accentHex: '#F97316',
+        roofStyle: 'container',
+        signText: 'CARGO A',
+      },
+      {
+        id: 'harbor-market',
+        label: '暗港黑市军械站',
+        x: 304,
+        y: 2560,
+        w: 224,
+        h: 144,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'container',
+        signText: 'BLACKMKT',
+      },
+      {
+        id: 'harbor-cargo-hub',
+        label: '深水集装箱区',
+        x: 1008,
+        y: 2224,
+        w: 256,
+        h: 144,
+        neonColor: 0x38bdf8,
+        accentHex: '#38BDF8',
+        roofStyle: 'container',
+        signText: 'PORT 01',
+      },
+      {
+        id: 'harbor-crane-depot',
+        label: '重型龙门吊货场',
+        x: 1344,
+        y: 2224,
+        w: 272,
+        h: 144,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'warehouse',
+        signText: 'CRANE',
+      },
+      {
+        id: 'harbor-lighthouse',
+        label: '暗港霓虹灯塔',
+        x: 1248,
+        y: 3456,
+        w: 96,
+        h: 96,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'lighthouse',
+        signText: 'BEACON',
+      },
+
+      // === 铬铁工业区 CHROME TOWN ===
+      {
+        id: 'chrome-workshop',
+        label: '铬铁重工 · 涡轮车坊',
+        x: 1840,
+        y: 2224,
+        w: 272,
+        h: 160,
+        neonColor: PALETTE.NEON_CYAN,
+        accentHex: PALETTE.NEON_CYAN_HEX,
+        roofStyle: 'factory',
+        signText: 'CHROME',
+        hasFan: true,
+      },
+      {
+        id: 'fusion-plant',
+        label: '冷核聚变电厂',
+        x: 2192,
+        y: 2224,
+        w: 256,
+        h: 160,
+        neonColor: PALETTE.GOLD,
+        accentHex: PALETTE.GOLD_HEX,
+        roofStyle: 'factory',
+        signText: 'FUSION',
+        hasFan: true,
+      },
+      {
+        id: 'motorsport-hq',
+        label: 'F1 极速赛事中心',
+        x: 2672,
+        y: 2224,
+        w: 272,
         h: 160,
         neonColor: PALETTE.NEON_PINK,
         accentHex: PALETTE.NEON_PINK_HEX,
         roofStyle: 'stadium',
+        signText: 'APEX F1',
       },
       {
-        id: 'harbor-lighthouse',
-        label: '暗港灯塔',
-        signText: 'BEACON',
-        x: 768,
-        y: 2288,
-        w: 64,
-        h: 56,
-        neonColor: PALETTE.GOLD,
-        accentHex: PALETTE.GOLD_HEX,
-        roofStyle: 'lighthouse',
+        id: 'tank-depot',
+        label: '重装战车整备库',
+        x: 3008,
+        y: 2224,
+        w: 272,
+        h: 160,
+        neonColor: 0x4ade80,
+        accentHex: '#4ADE80',
+        roofStyle: 'warehouse',
+        signText: 'ARMORY',
       },
 
-      // === District 4: Dark Harbor (South-West) ===
+      // === 星港航空区 NEON SKYPORT ===
       {
-        id: 'harbor-warehouse',
-        label: '远洋货仓',
-        signText: '货运中心',
-        x: 464,
-        y: 1744,
-        w: 256,
-        h: 112,
-        neonColor: PALETTE.GOLD,
-        accentHex: PALETTE.GOLD_HEX,
-        roofStyle: 'warehouse',
-        roofColor: 0x2a2420,
-        hasFan: true,
-      },
-      {
-        id: 'harbor-blackmarket',
-        label: '暗港黑市',
-        signText: '地下军火',
-        x: 864,
-        y: 1920,
-        w: 224,
-        h: 112,
-        neonColor: PALETTE.NEON_PINK,
-        accentHex: PALETTE.NEON_PINK_HEX,
-        roofStyle: 'warehouse',
-        roofColor: 0x261a26,
-      },
-      {
-        id: 'harbor-container-1',
-        label: 'A区货柜',
-        signText: 'CARGO A',
-        x: 464,
-        y: 1920,
-        w: 128,
-        h: 64,
-        neonColor: 0xef4444,
-        accentHex: '#EF4444',
-        roofStyle: 'container',
-        roofColor: 0x7f1d1d,
-      },
-      {
-        id: 'harbor-container-2',
-        label: 'B区货柜',
-        signText: 'CARGO B',
-        x: 640,
-        y: 1920,
-        w: 128,
-        h: 64,
-        neonColor: 0x14b8a6,
-        accentHex: '#14B8A6',
-        roofStyle: 'container',
-        roofColor: 0x115e59,
-      },
-      {
-        id: 'harbor-customs',
-        label: '港务调度站',
-        signText: '港务塔台',
-        x: 1360,
-        y: 1760,
-        w: 192,
-        h: 128,
+        id: 'skyport-terminal',
+        label: '星港国际航站楼',
+        x: 3520,
+        y: 1440,
+        w: 320,
+        h: 160,
         neonColor: PALETTE.NEON_CYAN,
         accentHex: PALETTE.NEON_CYAN_HEX,
         roofStyle: 'tech',
-        hasFan: true,
-      },
-
-      // === District 5: Chrome Town Industrial (South-East) ===
-      {
-        id: 'chrome-foundry',
-        label: '铬铁重工工坊',
-        signText: '涡轮改装',
-        x: 2080,
-        y: 1760,
-        w: 208,
-        h: 112,
-        neonColor: 0xf59e0b,
-        accentHex: '#F59E0B',
-        roofStyle: 'factory',
-        roofColor: 0x2b241d,
+        signText: 'TERMINAL',
         hasFan: true,
       },
       {
-        id: 'chrome-powerplant',
-        label: '聚变供电厂',
-        signText: '高压核心',
-        x: 2528,
-        y: 1760,
-        w: 224,
-        h: 128,
-        neonColor: PALETTE.NEON_PURPLE,
-        accentHex: PALETTE.NEON_PURPLE_HEX,
-        roofStyle: 'factory',
-        roofColor: 0x232030,
-        hasFan: true,
-      },
-      {
-        id: 'chrome-racetrack-hq',
-        label: '极速赛事总部',
-        signText: 'GT-X 联盟',
-        x: 2528,
-        y: 1936,
-        w: 224,
-        h: 96,
+        id: 'skyport-garage',
+        label: '星港机库改装站',
+        x: 3936,
+        y: 1440,
+        w: 256,
+        h: 160,
         neonColor: PALETTE.GOLD,
         accentHex: PALETTE.GOLD_HEX,
-        roofStyle: 'store',
+        roofStyle: 'warehouse',
+        signText: 'HANGAR 1',
       },
       {
-        id: 'chrome-reactor-tower',
-        label: '散热冷却塔',
-        signText: 'COOLING',
-        x: 2080,
-        y: 1936,
-        w: 176,
-        h: 96,
-        neonColor: 0xf97316,
-        accentHex: '#F97316',
-        roofStyle: 'factory',
-        roofColor: 0x29211d,
+        id: 'skyport-tower',
+        label: '航空指挥塔台',
+        x: 4256,
+        y: 1440,
+        w: 192,
+        h: 160,
+        neonColor: PALETTE.NEON_PINK,
+        accentHex: PALETTE.NEON_PINK_HEX,
+        roofStyle: 'lighthouse',
+        signText: 'ATC',
       },
     ];
 
+    // Environmental & decorative props
     const props: PropDef[] = [
-      // Streetlamps along Cyan Boulevard
-      { type: 'lamp', x: 268, y: 240, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 436, y: 240, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 784, y: 240, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1164, y: 240, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1332, y: 240, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 436, y: 400, collidable: true, tint: PALETTE.NEON_PURPLE },
-      { type: 'lamp', x: 1164, y: 400, collidable: true, tint: PALETTE.NEON_PURPLE },
+      // Neon Plaza Mandala Lights & Lamps
+      { type: 'lamp', x: 1120, y: 896, collidable: false },
+      { type: 'lamp', x: 1504, y: 896, collidable: false },
+      { type: 'lamp', x: 1120, y: 1152, collidable: false },
+      { type: 'lamp', x: 1504, y: 1152, collidable: false },
+      { type: 'planter', x: 1216, y: 928, collidable: true },
+      { type: 'planter', x: 1408, y: 928, collidable: true },
+      { type: 'planter', x: 1216, y: 1120, collidable: true },
+      { type: 'planter', x: 1408, y: 1120, collidable: true },
+      { type: 'bench', x: 1264, y: 992, collidable: false },
+      { type: 'bench', x: 1360, y: 992, collidable: false },
+      { type: 'vending', x: 528, y: 620, collidable: true },
+      { type: 'vending', x: 1264, y: 620, collidable: true },
+      { type: 'kiosk', x: 1456, y: 880, collidable: true },
 
-      // Streetlamps along Synthway Drive
-      { type: 'lamp', x: 268, y: 816, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 436, y: 816, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 1164, y: 816, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 1332, y: 816, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 436, y: 976, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1164, y: 976, collidable: true, tint: PALETTE.NEON_CYAN },
+      // Quantum Tech Labs & Campus Trees
+      { type: 'tree_emerald', x: 1840, y: 1024, collidable: false },
+      { type: 'tree_emerald', x: 1968, y: 1024, collidable: false },
+      { type: 'tree_emerald', x: 2096, y: 1024, collidable: false },
+      { type: 'billboard', x: 2528, y: 624, collidable: false, label: 'QUANTUM CORPS' },
+      { type: 'radar', x: 2416, y: 352, collidable: false },
+      { type: 'radar', x: 4352, y: 1520, collidable: false },
 
-      // Central Plaza planters, benches, and hologram kiosks
-      { type: 'planter', x: 560, y: 560, collidable: true, tint: PALETTE.NEON_PURPLE },
-      { type: 'planter', x: 1040, y: 560, collidable: true, tint: PALETTE.NEON_PURPLE },
-      { type: 'planter', x: 560, y: 656, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'planter', x: 1040, y: 656, collidable: true, tint: PALETTE.NEON_PINK },
+      // Riverside Park Scenic Sakura & Emerald Trees
+      { type: 'tree_sakura', x: 480, y: 1472, collidable: false },
+      { type: 'tree_sakura', x: 672, y: 1504, collidable: false },
+      { type: 'tree_sakura', x: 1120, y: 1488, collidable: false },
+      { type: 'tree_sakura', x: 1312, y: 1520, collidable: false },
+      { type: 'tree_emerald', x: 1888, y: 1488, collidable: false },
+      { type: 'tree_sakura', x: 2208, y: 1504, collidable: false },
+      { type: 'tree_emerald', x: 2400, y: 1488, collidable: false },
+      { type: 'tree_autumn', x: 3104, y: 1504, collidable: false },
+      { type: 'bench', x: 1984, y: 1616, collidable: false },
+      { type: 'bench', x: 2176, y: 1616, collidable: false },
 
-      { type: 'bench', x: 640, y: 560, collidable: true },
-      { type: 'bench', x: 960, y: 560, collidable: true },
-      { type: 'bench', x: 640, y: 656, collidable: true },
-      { type: 'bench', x: 960, y: 656, collidable: true },
+      // Highlands Snow Pines
+      { type: 'tree_snow', x: 3488, y: 512, collidable: false },
+      { type: 'tree_snow', x: 3616, y: 544, collidable: false },
+      { type: 'tree_snow', x: 3872, y: 448, collidable: false },
+      { type: 'tree_snow', x: 3936, y: 336, collidable: false },
 
-      { type: 'kiosk', x: 592, y: 540, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'billboard', x: 800, y: 404, collidable: true, tint: PALETTE.NEON_CYAN, label: '霓虹广场' },
-      { type: 'billboard', x: 800, y: 812, collidable: true, tint: PALETTE.NEON_PINK, label: '合成波街' },
-
-      { type: 'vending', x: 238, y: 120, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'vending', x: 238, y: 160, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'vending', x: 238, y: 500, collidable: true, tint: PALETTE.NEON_PURPLE },
-      { type: 'vending', x: 462, y: 736, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'vending', x: 752, y: 1040, collidable: true, tint: PALETTE.NEON_CYAN },
-
-      { type: 'stool', x: 516, y: 676, collidable: true },
-      { type: 'stool', x: 540, y: 676, collidable: true },
-      { type: 'stool', x: 612, y: 676, collidable: true },
-
-      { type: 'trashbin', x: 256, y: 212, collidable: true },
-      { type: 'trashbin', x: 452, y: 556, collidable: true },
-      { type: 'trashbin', x: 1140, y: 556, collidable: true },
-      { type: 'trashbin', x: 756, y: 984, collidable: true },
-
-      { type: 'bollard', x: 744, y: 392, collidable: true },
-      { type: 'bollard', x: 856, y: 392, collidable: true },
-      { type: 'bollard', x: 716, y: 822, collidable: true },
-      { type: 'bollard', x: 884, y: 822, collidable: true },
-
-      { type: 'cone', x: 1336, y: 504, collidable: true },
-      { type: 'cone', x: 1336, y: 536, collidable: true },
-      { type: 'cone', x: 1412, y: 992, collidable: true },
-      { type: 'cone', x: 1484, y: 992, collidable: true },
-
-      // Bridgehead, Highland, Harbor & Chrome Props
-      { type: 'lamp', x: 1644, y: 244, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1644, y: 396, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1844, y: 244, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 1844, y: 396, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 1644, y: 820, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 1644, y: 972, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 1644, y: 1556, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 1844, y: 1556, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 1644, y: 2068, collidable: true, tint: PALETTE.NEON_PINK },
-      { type: 'lamp', x: 1844, y: 2068, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'kiosk', x: 2254, y: 544, collidable: true, tint: PALETTE.GOLD },
-      { type: 'bench', x: 768, y: 1270, collidable: true },
-      { type: 'bench', x: 832, y: 1270, collidable: true },
-      { type: 'lamp', x: 730, y: 1296, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 870, y: 1296, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'billboard', x: 960, y: 2058, collidable: true, tint: PALETTE.NEON_PINK, label: '暗港黑市' },
-      { type: 'billboard', x: 2400, y: 1546, collidable: true, tint: PALETTE.GOLD, label: '铬铁高速' },
-      { type: 'cone', x: 2260, y: 1744, collidable: true },
-      { type: 'cone', x: 2300, y: 1744, collidable: true },
-
-      // === Riverside Park Emerald Forest, Autumn Scrub & Cyber Sakura ===
-      { type: 'tree_emerald', x: 68, y: 1216, collidable: true },
-      { type: 'tree_emerald', x: 132, y: 1216, collidable: true },
-      { type: 'tree_emerald', x: 216, y: 1216, collidable: true },
-      { type: 'tree_emerald', x: 260, y: 1236, collidable: true },
-      { type: 'tree_sakura', x: 160, y: 1260, collidable: true },
-      { type: 'tree_autumn', x: 184, y: 1304, collidable: true },
-      { type: 'tree_emerald', x: 64, y: 1316, collidable: true },
-      { type: 'tree_sakura', x: 246, y: 1320, collidable: true },
-      { type: 'tree_emerald', x: 138, y: 1348, collidable: true },
-      { type: 'tree_emerald', x: 110, y: 1412, collidable: true },
-      { type: 'tree_emerald', x: 196, y: 1412, collidable: true },
-      { type: 'tree_emerald', x: 252, y: 1404, collidable: true },
-      { type: 'tree_autumn', x: 68, y: 1432, collidable: true },
-      { type: 'tree_sakura', x: 160, y: 1460, collidable: true },
-      { type: 'tree_emerald', x: 236, y: 1480, collidable: true },
-      { type: 'tree_emerald', x: 72, y: 1524, collidable: true },
-      { type: 'tree_sakura', x: 148, y: 1528, collidable: true },
-      { type: 'tree_emerald', x: 248, y: 1530, collidable: true },
-
-      // Mid-West & Lagoon Shore Park Woods
-      { type: 'tree_emerald', x: 446, y: 1214, collidable: true },
-      { type: 'tree_sakura', x: 456, y: 1260, collidable: true },
-      { type: 'tree_emerald', x: 486, y: 1324, collidable: true },
-      { type: 'tree_autumn', x: 444, y: 1404, collidable: true },
-      { type: 'tree_sakura', x: 456, y: 1460, collidable: true },
-      { type: 'tree_emerald', x: 488, y: 1526, collidable: true },
-      { type: 'tree_emerald', x: 536, y: 1214, collidable: true },
-      { type: 'tree_sakura', x: 640, y: 1220, collidable: true },
-      { type: 'tree_emerald', x: 716, y: 1214, collidable: true },
-      { type: 'tree_emerald', x: 884, y: 1214, collidable: true },
-      { type: 'tree_sakura', x: 960, y: 1220, collidable: true },
-      { type: 'tree_emerald', x: 1056, y: 1214, collidable: true },
-      { type: 'tree_emerald', x: 536, y: 1526, collidable: true },
-      { type: 'tree_sakura', x: 664, y: 1526, collidable: true },
-      { type: 'tree_emerald', x: 936, y: 1526, collidable: true },
-      { type: 'tree_emerald', x: 1056, y: 1526, collidable: true },
-      { type: 'tree_emerald', x: 1116, y: 1218, collidable: true },
-      { type: 'tree_autumn', x: 1156, y: 1296, collidable: true },
-      { type: 'tree_sakura', x: 1120, y: 1360, collidable: true },
-      { type: 'tree_emerald', x: 1118, y: 1420, collidable: true },
-      { type: 'tree_emerald', x: 1584, y: 1218, collidable: true },
-      { type: 'tree_sakura', x: 1584, y: 1340, collidable: true },
-      { type: 'tree_emerald', x: 1348, y: 1524, collidable: true },
-      { type: 'tree_sakura', x: 1560, y: 1480, collidable: true },
-      { type: 'tree_emerald', x: 1560, y: 1528, collidable: true },
-
-      // === Skyline Highlands Snow Pines, Forest & Desert Scrub + Observatory Radar ===
-      { type: 'tree_snow', x: 1856, y: 76, collidable: true },
-      { type: 'tree_snow', x: 1856, y: 140, collidable: true },
-      { type: 'tree_snow', x: 1856, y: 208, collidable: true },
-      { type: 'tree_snow', x: 1856, y: 460, collidable: true },
-      { type: 'tree_snow', x: 1856, y: 560, collidable: true },
-      { type: 'tree_pine', x: 1856, y: 680, collidable: true },
-      { type: 'tree_snow', x: 1856, y: 760, collidable: true },
-      { type: 'tree_snow', x: 2028, y: 432, collidable: true },
-      { type: 'tree_snow', x: 2028, y: 540, collidable: true },
-      { type: 'tree_pine', x: 2032, y: 814, collidable: true },
-      { type: 'tree_snow', x: 2158, y: 428, collidable: true },
-      { type: 'tree_snow', x: 2158, y: 660, collidable: true },
-      { type: 'tree_pine', x: 2158, y: 740, collidable: true },
-      { type: 'tree_pine', x: 2158, y: 986, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1004, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1080, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1176, collidable: true },
-      { type: 'tree_emerald', x: 2028, y: 1200, collidable: true },
-      { type: 'tree_pine', x: 1856, y: 1272, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1360, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1456, collidable: true },
-      { type: 'tree_emerald', x: 1856, y: 1524, collidable: true },
-      { type: 'tree_autumn', x: 2512, y: 460, collidable: true },
-      { type: 'tree_snow', x: 2512, y: 540, collidable: true },
-      { type: 'tree_autumn', x: 2512, y: 620, collidable: true },
-      { type: 'tree_autumn', x: 2512, y: 700, collidable: true },
-      { type: 'tree_autumn', x: 2796, y: 440, collidable: true },
-      { type: 'tree_autumn', x: 2796, y: 530, collidable: true },
-      { type: 'tree_autumn', x: 2796, y: 620, collidable: true },
-      { type: 'tree_autumn', x: 2796, y: 720, collidable: true },
-      { type: 'tree_autumn', x: 2958, y: 120, collidable: true },
-      { type: 'tree_autumn', x: 2948, y: 200, collidable: true },
-      { type: 'tree_palm', x: 3040, y: 140, collidable: true },
-      { type: 'tree_palm', x: 3104, y: 200, collidable: true },
-      { type: 'radar', x: 2384, y: 592, collidable: false },
-
-      // === Golden Sandy Beaches & Tropical Coastal Palms ===
-      { type: 'tree_palm', x: 80, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 140, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 220, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 360, y: 2224, collidable: true },
-      { type: 'tree_palm', x: 660, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 960, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 1280, y: 2224, collidable: true },
-      { type: 'tree_palm', x: 1400, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 1520, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 1580, y: 2222, collidable: true },
-      { type: 'tree_palm', x: 704, y: 2318, collidable: true },
-      { type: 'tree_palm', x: 896, y: 2318, collidable: true },
-      { type: 'tree_palm', x: 2968, y: 1620, collidable: true },
-      { type: 'tree_palm', x: 2964, y: 1700, collidable: true },
-      { type: 'tree_palm', x: 2968, y: 1780, collidable: true },
-      { type: 'tree_palm', x: 2984, y: 1880, collidable: true },
-      { type: 'tree_palm', x: 2968, y: 1980, collidable: true },
-      { type: 'tree_palm', x: 2964, y: 2080, collidable: true },
-      { type: 'tree_palm', x: 2968, y: 2180, collidable: true },
-      { type: 'tree_palm', x: 2984, y: 2260, collidable: true },
-      { type: 'tree_palm', x: 2968, y: 2320, collidable: true },
-
-      // === Dark Harbor Moored Cargo Barge & Speedboats ===
-      { type: 'barge', x: 230, y: 2304, collidable: false },
-      { type: 'barge', x: 1380, y: 2304, collidable: false },
-      { type: 'speedboat', x: 638, y: 2320, collidable: false },
-      { type: 'speedboat', x: 1230, y: 2320, collidable: false },
-      { type: 'lamp', x: 464, y: 2232, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 592, y: 2232, collidable: true, tint: PALETTE.GOLD },
-      { type: 'lamp', x: 1040, y: 2232, collidable: true, tint: PALETTE.NEON_CYAN },
-      { type: 'lamp', x: 1168, y: 2232, collidable: true, tint: PALETTE.NEON_CYAN },
+      // Southern Gold Sand Palm Trees & Harbor Boats
+      { type: 'tree_palm', x: 352, y: 3120, collidable: false },
+      { type: 'tree_palm', x: 544, y: 3136, collidable: false },
+      { type: 'tree_palm', x: 1056, y: 3120, collidable: false },
+      { type: 'tree_palm', x: 1440, y: 3152, collidable: false },
+      { type: 'barge', x: 512, y: 3488, collidable: false },
+      { type: 'speedboat', x: 960, y: 3488, collidable: false },
+      { type: 'speedboat', x: 1312, y: 1792, collidable: false },
     ];
 
+    // Interactive world props (ATMs, explosive barrels, supply crates, hydrants)
     const interactiveProps: InteractivePropDef[] = [
-      // Cyber ATMs (press E to hack/withdraw cash)
-      { id: 'atm-byte-mart', type: 'atm', x: 244, y: 92 },
-      { id: 'atm-cyber-corp', type: 'atm', x: 752, y: 196 },
-      { id: 'atm-plaza-east', type: 'atm', x: 1144, y: 500 },
-      { id: 'atm-transit', type: 'atm', x: 460, y: 1050 },
-      { id: 'atm-harbor', type: 'atm', x: 1344, y: 1856 },
-      { id: 'atm-chrome', type: 'atm', x: 2504, y: 1984 },
-      { id: 'atm-highland', type: 'atm', x: 2200, y: 510 },
-
-      // Explosive Red Fuel Barrels (shoot or ram fast for chain explosions!)
-      { id: 'barrel-alley-n', type: 'barrel', x: 756, y: 120 },
-      { id: 'barrel-alley-w', type: 'barrel', x: 120, y: 596 },
-      { id: 'barrel-parking', type: 'barrel', x: 1368, y: 740 },
-      { id: 'barrel-harbor-1', type: 'barrel', x: 438, y: 1800 },
-      { id: 'barrel-harbor-2', type: 'barrel', x: 438, y: 1824 },
-      { id: 'barrel-harbor-3', type: 'barrel', x: 614, y: 1940 },
-      { id: 'barrel-harbor-4', type: 'barrel', x: 800, y: 1948 },
-      { id: 'barrel-harbor-5', type: 'barrel', x: 528, y: 2248 },
-      { id: 'barrel-chrome-1', type: 'barrel', x: 2308, y: 1810 },
-      { id: 'barrel-chrome-2', type: 'barrel', x: 2334, y: 1810 },
-      { id: 'barrel-chrome-3', type: 'barrel', x: 2496, y: 1816 },
-      { id: 'barrel-chrome-4', type: 'barrel', x: 2496, y: 1842 },
-      { id: 'barrel-chrome-5', type: 'barrel', x: 2278, y: 1980 },
-      { id: 'barrel-highland-1', type: 'barrel', x: 2016, y: 760 },
-      { id: 'barrel-highland-2', type: 'barrel', x: 2800, y: 1280 },
-
-      // Destructible Supply Crates (smash or shoot for cash/ammo drops!)
-      { id: 'crate-alley-1', type: 'crate', x: 792, y: 160 },
-      { id: 'crate-harbor-1', type: 'crate', x: 744, y: 1780 },
-      { id: 'crate-harbor-2', type: 'crate', x: 772, y: 1780 },
-      { id: 'crate-harbor-3', type: 'crate', x: 488, y: 2008 },
-      { id: 'crate-harbor-4', type: 'crate', x: 660, y: 2008 },
-      { id: 'crate-harbor-5', type: 'crate', x: 1104, y: 2248 },
-      { id: 'crate-chrome-1', type: 'crate', x: 2048, y: 1816 },
-      { id: 'crate-chrome-2', type: 'crate', x: 2772, y: 1824 },
-      { id: 'crate-chrome-3', type: 'crate', x: 2772, y: 1984 },
-      { id: 'crate-park-1', type: 'crate', x: 1440, y: 1448 },
-
-      // Fire Hydrants (shoot or hit for pressurized water geyser!)
-      { id: 'hydrant-1', type: 'hydrant', x: 276, y: 232 },
-      { id: 'hydrant-2', type: 'hydrant', x: 1168, y: 232 },
-      { id: 'hydrant-3', type: 'hydrant', x: 428, y: 808 },
-      { id: 'hydrant-4', type: 'hydrant', x: 1320, y: 808 },
-      { id: 'hydrant-5', type: 'hydrant', x: 428, y: 1552 },
-      { id: 'hydrant-6', type: 'hydrant', x: 1876, y: 1552 },
+      { id: 'atm-plaza-nw', type: 'atm', x: 560, y: 448 },
+      { id: 'atm-plaza-ops', type: 'atm', x: 1312, y: 616 },
+      { id: 'atm-tech', type: 'atm', x: 2128, y: 544 },
+      { id: 'atm-harbor', type: 'atm', x: 560, y: 2496 },
+      { id: 'atm-chrome', type: 'atm', x: 2672, y: 2496 },
+      { id: 'atm-skyport', type: 'atm', x: 3680, y: 1648 },
+      { id: 'barrel-harbor-1', type: 'barrel', x: 1120, y: 2560 },
+      { id: 'barrel-harbor-2', type: 'barrel', x: 1408, y: 2544 },
+      { id: 'barrel-chrome-1', type: 'barrel', x: 2160, y: 2512 },
+      { id: 'barrel-chrome-2', type: 'barrel', x: 3120, y: 2512 },
+      { id: 'barrel-skyport-1', type: 'barrel', x: 3744, y: 3024 },
+      { id: 'crate-plaza', type: 'crate', x: 1536, y: 944 },
+      { id: 'crate-park', type: 'crate', x: 1584, y: 1568 },
+      { id: 'crate-highlands', type: 'crate', x: 3968, y: 576 },
+      { id: 'crate-volcano', type: 'crate', x: 3872, y: 1184 },
+      { id: 'crate-skyport', type: 'crate', x: 4064, y: 2240 },
+      { id: 'hydrant-1', type: 'hydrant', x: 800, y: 624 },
+      { id: 'hydrant-2', type: 'hydrant', x: 1632, y: 1264 },
+      { id: 'hydrant-3', type: 'hydrant', x: 2464, y: 1264 },
     ];
 
+    // Intersection Traffic Signals covering the grid dynamically
     const trafficSignals: TrafficSignalDef[] = [
-      { x: 274, y: 244, axis: 'ns' },
-      { x: 430, y: 396, axis: 'ew' },
-      { x: 1170, y: 244, axis: 'ns' },
-      { x: 1326, y: 396, axis: 'ew' },
-      { x: 274, y: 820, axis: 'ns' },
-      { x: 430, y: 972, axis: 'ew' },
-      { x: 1170, y: 820, axis: 'ns' },
-      { x: 1326, y: 972, axis: 'ew' },
+      { x: 896, y: 192, axis: 'ns' },
+      { x: 1728, y: 192, axis: 'ew' },
+      { x: 2560, y: 192, axis: 'ns' },
+      { x: 896, y: 704, axis: 'ew' },
+      { x: 1728, y: 704, axis: 'ns' },
+      { x: 2560, y: 704, axis: 'ew' },
+      { x: 896, y: 1344, axis: 'ns' },
+      { x: 1728, y: 1344, axis: 'ew' },
+      { x: 2560, y: 1344, axis: 'ns' },
+      { x: 3392, y: 1344, axis: 'ew' },
+      { x: 896, y: 2112, axis: 'ew' },
+      { x: 1728, y: 2112, axis: 'ns' },
+      { x: 2560, y: 2112, axis: 'ew' },
+      { x: 3392, y: 2112, axis: 'ns' },
+      { x: 1728, y: 2880, axis: 'ew' },
+      { x: 2560, y: 2880, axis: 'ns' },
     ];
 
     const steamVents: SteamVentDef[] = [
-      { x: 464, y: 400 },
-      { x: 784, y: 120 },
-      { x: 1136, y: 400 },
-      { x: 160, y: 608 },
-      { x: 464, y: 816 },
-      { x: 1136, y: 816 },
-      { x: 800, y: 1860 },
-      { x: 2480, y: 1760 },
-      { x: 2480, y: 1960 },
+      { x: 448, y: 1248 },
+      { x: 1872, y: 2448 },
+      { x: 2304, y: 2448 },
+      { x: 4032, y: 1088 },
     ];
 
+    // Interactive Landmarks (preserve all 11 core SERVICE_LANDMARK_IDS + add new world POIs)
     const landmarks: LandmarkInfo[] = [
       {
         id: 'nexus-ops',
-        name: '枢纽行动终端',
-        category: '任务中心',
-        description: '特区中心合约终端，可接取加急派送、街头竞速与高危委托任务。',
-        x: 592,
-        y: 544,
-        accentColor: PALETTE.NEON_CYAN_HEX,
+        name: '枢纽行动终端 · NEXUS',
+        category: '任务与警务枢纽',
+        description: '接取霓虹特区跑腿、极速飙车与高危脱逃委托，或开启巡警反恐义警行动！',
+        x: 1480,
+        y: 624,
+        accentColor: PALETTE.GOLD_HEX,
       },
       {
         id: 'plaza-garage',
-        name: '广场改装车库',
+        name: '霓虹超跑车库 · 改装',
         category: '维修与改装',
-        description: '提供车身修复、引擎与悬挂改装及隐匿喷漆消星服务（可驾车驶入）。',
-        x: 1326,
-        y: 988,
-        accentColor: PALETTE.NEON_CYAN_HEX,
+        description: '修复战损车身、喷涂赛博渐变色、强化引擎与装甲，或提取专属座驾。',
+        x: 424,
+        y: 1056,
+        accentColor: PALETTE.GOLD_HEX,
       },
       {
         id: 'cyber-clinic',
-        name: '义体诊所',
-        category: '医疗急救',
-        description: '提供快速纳米急救修复生命值。',
-        x: 248,
-        y: 704,
+        name: '义体急救诊所',
+        category: '医疗与义体',
+        description: '恢复生命值、补充战术护甲，并升级你的义体芯片与角色属性。',
+        x: 1120,
+        y: 624,
         accentColor: PALETTE.NEON_CYAN_HEX,
       },
       {
         id: 'byte-mart',
         name: '字节便利店 24/7',
         category: '便利商店',
-        description: '24小时营业的街头便利店，售卖可恢复生命的合成能量饮。',
-        x: 144,
-        y: 204,
+        description: '24小时营业的街头便利店，售卖可恢复生命的合成能量饮与夜宵补给。',
+        x: 648,
+        y: 624,
         accentColor: PALETTE.NEON_CYAN_HEX,
       },
       {
         id: 'kitsune-noodles',
-        name: '狐狸拉面馆',
+        name: '狐狸夜宵拉面馆',
         category: '街头餐饮',
         description: '霓虹蒸汽缭绕的赛博拉面摊，热腾腾的合成豚骨汤可大幅恢复体力。',
-        x: 576,
-        y: 676,
+        x: 392,
+        y: 624,
         accentColor: PALETTE.NEON_PINK_HEX,
       },
       {
         id: 'plaza-tech',
         name: '广场科技坊 · 军械库',
         category: '武器与弹药',
-        description: '黑市义体军械终端，售卖霓虹冲锋枪、等离子霰弹枪与高能弹药补给。',
-        x: 1024,
-        y: 676,
+        description: '黑市义体军械终端，购买并升级霓虹冲锋枪、激光步枪、电磁轨炮与火箭筒！',
+        x: 680,
+        y: 976,
         accentColor: PALETTE.NEON_PINK_HEX,
-      },
-      {
-        id: 'north-bridge',
-        name: '北跨河霓虹大桥',
-        category: '跨河通道',
-        description: '横跨霓虹运河的双线钢构大桥，直通东岸山地公路与东海环线。',
-        x: 1744,
-        y: 320,
-        accentColor: PALETTE.NEON_CYAN_HEX,
-      },
-      {
-        id: 'mountain-overlook',
-        name: '苍穹山顶观景台',
-        category: '高山地貌',
-        description: '东岸苍穹山海拔最高观景平台，可俯瞰霓虹运河与全城天际线。',
-        x: 2224,
-        y: 544,
-        accentColor: PALETTE.GOLD_HEX,
-      },
-      {
-        id: 'riverside-park',
-        name: '滨河生态公园',
-        category: '公园水岸',
-        description: '南区人工翠水湾与木栈道步桥，适合徒步观景与躲避巡逻视线。',
-        x: 800,
-        y: 1360,
-        accentColor: PALETTE.NEON_CYAN_HEX,
-      },
-      {
-        id: 'harbor-market',
-        name: '暗港黑市 · 地下军械',
-        category: '黑市军械库',
-        description: '暗港码头走私终端，随时购买重火力武器与高能弹药补给。',
-        x: 960,
-        y: 2048,
-        accentColor: PALETTE.NEON_PINK_HEX,
-      },
-      {
-        id: 'harbor-pier',
-        name: '暗港深水货柜泊位',
-        category: '海港码头',
-        description: '南部深水码头区，拥有双栈桥泊位与停机坪飞跃跳台。',
-        x: 528,
-        y: 2280,
-        accentColor: PALETTE.GOLD_HEX,
-      },
-      {
-        id: 'chrome-workshop',
-        name: '铬铁重工 · 涡轮车坊',
-        category: '维修与改装',
-        description: '铬铁工业区顶级改装工坊，提供全套车辆强化、修复与隐匿喷漆。',
-        x: 2288,
-        y: 1790,
-        accentColor: PALETTE.NEON_CYAN_HEX,
-      },
-      {
-        id: 'chrome-circuit',
-        name: '铬铁涡轮高架直道',
-        category: '极速赛道',
-        description: '铺设多组电磁涡轮加速带的高速环线，极速飙车与飞跃跳台的圣地。',
-        x: 2560,
-        y: 1632,
-        accentColor: PALETTE.GOLD_HEX,
       },
       {
         id: 'skyline-apts',
         name: '天际公寓 · 安全屋',
         category: '私人房产',
-        description: '可购买作为私人安全屋：随时免费恢复满状态、躲避消星并保存进度。',
-        x: 1456,
-        y: 204,
+        description: '可购买作为私人安全屋：随时免费恢复满状态、消星躲避追缉并保存进度。',
+        x: 680,
+        y: 464,
         accentColor: PALETTE.NEON_PINK_HEX,
       },
       {
         id: 'arcade-lounge',
-        name: '街机俱乐部 · 霓虹博弈',
+        name: '街机电玩俱乐部',
         category: '娱乐博弈',
-        description: '街头地下电玩城，参与赛博幸运轮盘赌局，小博大赢取高额现金！',
-        x: 144,
-        y: 588,
+        description: '街头地下电玩城，参与赛博幸运轮盘赌局，赢取丰厚现金与稀有奖池！',
+        x: 416,
+        y: 976,
         accentColor: PALETTE.NEON_PINK_HEX,
       },
       {
         id: 'synth-club',
         name: '脉冲夜店 · 午夜酒吧',
         category: '夜店酒吧',
-        description: '购买合成霓虹特调激活短暂过载狂暴，或花钱买通地下线人降低通缉！',
-        x: 992,
-        y: 996,
+        description: '购买合成霓虹特调激活短时过载狂暴，或贿赂地下线人降低通缉等级！',
+        x: 1112,
+        y: 1056,
         accentColor: PALETTE.NEON_PURPLE_HEX,
       },
       {
         id: 'police-hq',
-        name: '特区警署 · NCPD',
+        name: 'NCPD 特区警署',
         category: '执法总部',
-        description: '霓虹特区治安指挥枢纽，警力巡逻与重装拦截部队从此出动。',
-        x: 800,
-        y: 996,
+        description: '霓虹特区治安指挥总部，高速拦截巡逻车与特警机甲从此出动。',
+        x: 1144,
+        y: 464,
         accentColor: '#38BDF8',
       },
       {
+        id: 'quantum-lab',
+        name: '量子核心实验室',
+        category: '科技地标',
+        description: '量子科教区心脏地带，拥有尖端神经网络塔与全息科研走廊。',
+        x: 1984,
+        y: 480,
+        accentColor: PALETTE.NEON_CYAN_HEX,
+      },
+      {
+        id: 'mountain-overlook',
+        name: '苍穹雪岭观景台',
+        category: '高山地貌',
+        description: '高海拔雪岭平台，可一览量子新城、星港跑道与南岸碧湾全景。',
+        x: 3680,
+        y: 608,
+        accentColor: PALETTE.GOLD_HEX,
+      },
+      {
+        id: 'obsidian-volcano',
+        name: '黑曜石活火山口',
+        category: '火山奇观',
+        description: '炽热熔岩翻涌的黑曜岩山口，山腰盘山路暗藏高价值加密金库！',
+        x: 3968,
+        y: 1216,
+        accentColor: '#F97316',
+      },
+      {
+        id: 'riverside-park',
+        name: '滨河生态公园湖心桥',
+        category: '公园水岸',
+        description: '横跨翠水湾的浪漫樱花木栈桥，风光绝佳且适合甩开高速警车追击。',
+        x: 2096,
+        y: 1584,
+        accentColor: '#34D399',
+      },
+      {
         id: 'neon-stadium',
-        name: '霓虹竞技场',
+        name: '霓虹穹顶竞技场',
         category: '地标场馆',
-        description: '滨河东岸穹顶体育馆，环状霓虹顶棚是南城天际线最耀眼的坐标。',
-        x: 1440,
-        y: 1412,
+        description: '滨河东岸顶级赛博体育场，环城赛事与全息角斗的荣耀中心。',
+        x: 2816,
+        y: 1656,
+        accentColor: PALETTE.NEON_PINK_HEX,
+      },
+      {
+        id: 'harbor-market',
+        name: '暗港黑市 · 地下军械',
+        category: '黑市军械库',
+        description: '暗港集装箱走私终端，随时购买重火力武器、补给弹药并强化武器性能。',
+        x: 416,
+        y: 2528,
         accentColor: PALETTE.NEON_PINK_HEX,
       },
       {
         id: 'harbor-lighthouse',
         name: '暗港霓虹灯塔岛',
         category: '离岸灯塔',
-        description: '穿过木栈步桥即可抵达的南部沙洲岛，高耸灯塔指引着暗港航道。',
-        x: 800,
-        y: 2264,
+        description: '跨过海滨木栈桥即可登岛的南部礁岛，指引暗港深水航道并藏有秘宝。',
+        x: 1296,
+        y: 3408,
         accentColor: PALETTE.GOLD_HEX,
       },
       {
-        id: 'obsidian-volcano',
-        name: '黑曜活火山口',
-        category: '火山奇观',
-        description: '高地东南端的炙热活火山，炽烈熔岩流与黑曜岩崖壁构筑出狂野地形。',
-        x: 2160,
-        y: 1248,
-        accentColor: '#F97316',
+        id: 'chrome-workshop',
+        name: '铬铁重工 · 涡轮车坊',
+        category: '维修与改装',
+        description: '铬铁工业区核心改装厂，提供全套载具强化、快速维修及重装战车停机坪。',
+        x: 1976,
+        y: 2416,
+        accentColor: PALETTE.NEON_CYAN_HEX,
+      },
+      {
+        id: 'chrome-circuit',
+        name: 'F1 涡轮极速直道',
+        category: '极速赛道',
+        description: '配备电磁涡轮加速带与飞跃跳台的南部极速测试赛段。',
+        x: 2560,
+        y: 2880,
+        accentColor: PALETTE.GOLD_HEX,
+      },
+      {
+        id: 'skyport-terminal',
+        name: '星港国际航站楼',
+        category: '航空枢纽',
+        description: '远东航空港客运大厅，直通超长起降跑道、停机坪与重型武装直升机停泊区。',
+        x: 3680,
+        y: 1632,
+        accentColor: PALETTE.NEON_CYAN_HEX,
+      },
+      {
+        id: 'skyport-garage',
+        name: '星港机库改装站',
+        category: '维修与改装',
+        description: '航空港专属机库车坊，可修理战车、重喷隐匿车漆或呼叫专属座驾！',
+        x: 4064,
+        y: 1632,
+        accentColor: PALETTE.GOLD_HEX,
+      },
+    ];
+
+    // 7 District Cyber Signal Towers (Hack to unlock Metro + District Vaults)
+    const signalTowers: SignalTowerDef[] = [
+      {
+        id: 'tower-neon-plaza',
+        districtId: 'neon-plaza',
+        districtName: '霓虹广场',
+        name: '霓虹中心信号塔',
+        x: 1584,
+        y: 832,
+        rewardCash: 320,
+        rewardExp: 180,
+        accentHex: PALETTE.NEON_CYAN_HEX,
+      },
+      {
+        id: 'tower-quantum-tech',
+        districtId: 'quantum-tech',
+        districtName: '量子科教区',
+        name: '量子超算中继塔',
+        x: 2352,
+        y: 1152,
+        rewardCash: 380,
+        rewardExp: 220,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
+      },
+      {
+        id: 'tower-highlands',
+        districtId: 'skyline-highlands',
+        districtName: '苍穹山脉',
+        name: '雪岭气象观测塔',
+        x: 3888,
+        y: 592,
+        rewardCash: 450,
+        rewardExp: 260,
+        accentHex: '#38BDF8',
+      },
+      {
+        id: 'tower-riverside',
+        districtId: 'riverside-park',
+        districtName: '滨河生态公园',
+        name: '翠水湾全息基站',
+        x: 2320,
+        y: 1552,
+        rewardCash: 350,
+        rewardExp: 200,
+        accentHex: '#34D399',
+      },
+      {
+        id: 'tower-harbor',
+        districtId: 'dark-harbor',
+        districtName: '暗港码头',
+        name: '暗港灯塔雷达塔',
+        x: 1072,
+        y: 2704,
+        rewardCash: 420,
+        rewardExp: 240,
+        accentHex: PALETTE.GOLD_HEX,
+      },
+      {
+        id: 'tower-chrome',
+        districtId: 'chrome-town',
+        districtName: '铬铁工业区',
+        name: '铬铁高压脉冲塔',
+        x: 2800,
+        y: 2688,
+        rewardCash: 440,
+        rewardExp: 250,
+        accentHex: '#F97316',
+      },
+      {
+        id: 'tower-skyport',
+        districtId: 'neon-skyport',
+        districtName: '星港航空区',
+        name: '星港空域信标塔',
+        x: 4320,
+        y: 1920,
+        rewardCash: 500,
+        rewardExp: 300,
+        accentHex: PALETTE.NEON_PINK_HEX,
+      },
+    ];
+
+    // 7 Discoverable Maglev Metro Fast-Travel Hubs
+    const metroStations: MetroStationDef[] = [
+      {
+        id: 'metro-plaza',
+        districtId: 'neon-plaza',
+        name: '磁悬浮 · 霓虹中央站',
+        x: 688,
+        y: 1184,
+        spawnX: 688,
+        spawnY: 1232,
+        accentHex: PALETTE.NEON_CYAN_HEX,
+      },
+      {
+        id: 'metro-tech',
+        districtId: 'quantum-tech',
+        name: '磁悬浮 · 量子科教站',
+        x: 1984,
+        y: 576,
+        spawnX: 1984,
+        spawnY: 616,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
+      },
+      {
+        id: 'metro-riverside',
+        districtId: 'riverside-park',
+        name: '磁悬浮 · 翠水湾公园站',
+        x: 1488,
+        y: 1552,
+        spawnX: 1488,
+        spawnY: 1608,
+        accentHex: '#34D399',
+      },
+      {
+        id: 'metro-highlands',
+        districtId: 'skyline-highlands',
+        name: '磁悬浮 · 苍穹山麓站',
+        x: 3568,
+        y: 624,
+        spawnX: 3568,
+        spawnY: 704,
+        accentHex: '#38BDF8',
+      },
+      {
+        id: 'metro-harbor',
+        districtId: 'dark-harbor',
+        name: '磁悬浮 · 暗港南泊位站',
+        x: 688,
+        y: 2704,
+        spawnX: 688,
+        spawnY: 2768,
+        accentHex: PALETTE.GOLD_HEX,
+      },
+      {
+        id: 'metro-chrome',
+        districtId: 'chrome-town',
+        name: '磁悬浮 · 铬铁工业站',
+        x: 3152,
+        y: 2688,
+        spawnX: 3152,
+        spawnY: 2768,
+        accentHex: '#F97316',
+      },
+      {
+        id: 'metro-skyport',
+        districtId: 'neon-skyport',
+        name: '磁悬浮 · 星港航站楼',
+        x: 3648,
+        y: 1920,
+        spawnX: 3648,
+        spawnY: 1984,
+        accentHex: PALETTE.NEON_PINK_HEX,
+      },
+    ];
+
+    // 8 Hidden Encrypted Vaults (High reward stashes across landmarks, islands, mountains & alleyways)
+    const secretVaults: SecretVaultDef[] = [
+      {
+        id: 'vault-plaza-alley',
+        districtId: 'neon-plaza',
+        name: '集团机密金库',
+        hint: '藏于赛博集团与公寓之间的加密暗巷',
+        x: 544,
+        y: 352,
+        rewardCash: 350,
+        rewardExp: 120,
+        rewardArmor: 35,
+      },
+      {
+        id: 'vault-tech-greenhouse',
+        districtId: 'quantum-tech',
+        name: '神经矩阵冷库',
+        hint: '隐匿于全息剧院东侧的科研温室广场',
+        x: 3200,
+        y: 1120,
+        rewardCash: 420,
+        rewardExp: 150,
+        rewardArmor: 40,
+      },
+      {
+        id: 'vault-snow-ridge',
+        districtId: 'skyline-highlands',
+        name: '雪峰科考补给箱',
+        hint: '位于苍穹雪岭西坡林间边缘',
+        x: 3520,
+        y: 576,
+        rewardCash: 480,
+        rewardExp: 170,
+        rewardArmor: 50,
+      },
+      {
+        id: 'vault-volcano-rim',
+        districtId: 'skyline-highlands',
+        name: '黑曜熔岩秘藏',
+        hint: '坐落在黑曜石火山口南侧炙热岩崖边',
+        x: 4288,
+        y: 1184,
+        rewardCash: 620,
+        rewardExp: 220,
+        rewardArmor: 60,
+      },
+      {
+        id: 'vault-park-west',
+        districtId: 'riverside-park',
+        name: '樱花林荫密匣',
+        hint: '藏在西岸樱花河畔树丛旁',
+        x: 544,
+        y: 1552,
+        rewardCash: 360,
+        rewardExp: 130,
+        rewardArmor: 35,
+      },
+      {
+        id: 'vault-lighthouse-island',
+        districtId: 'dark-harbor',
+        name: '离岸灯塔走私库',
+        hint: '穿过南部木栈道登岛即可在灯塔脚下发现',
+        x: 1376,
+        y: 3488,
+        rewardCash: 580,
+        rewardExp: 200,
+        rewardArmor: 50,
+      },
+      {
+        id: 'vault-chrome-foundry',
+        districtId: 'chrome-town',
+        name: '聚变核心保险柜',
+        hint: '位于冷核聚变电厂与赛道之间的维修平台',
+        x: 2432,
+        y: 2672,
+        rewardCash: 500,
+        rewardExp: 180,
+        rewardArmor: 50,
+      },
+      {
+        id: 'vault-skyport-cargo',
+        districtId: 'neon-skyport',
+        name: '星港黑匣子保险库',
+        hint: '封存在星港跑道东端外侧的停机坪角落',
+        x: 4416,
+        y: 2704,
+        rewardCash: 650,
+        rewardExp: 240,
+        rewardArmor: 70,
+      },
+    ];
+
+    // 4 Tactical Gang Strongholds / Turf Outposts
+    const gangOutposts: GangOutpostDef[] = [
+      {
+        id: 'outpost-harbor',
+        districtId: 'dark-harbor',
+        name: '暗港走私帮货场据点',
+        faction: '海蛇走私团',
+        x: 1312,
+        y: 2608,
+        radius: 210,
+        guardCount: 5,
+        hasBoss: false,
+        rewardCash: 560,
+        rewardExp: 260,
+        accentHex: '#F97316',
+      },
+      {
+        id: 'outpost-chrome',
+        districtId: 'chrome-town',
+        name: '铬铁机械狂徒熔炉营',
+        faction: '铁腕义体帮',
+        x: 2144,
+        y: 2608,
+        radius: 210,
+        guardCount: 6,
+        hasBoss: true,
+        rewardCash: 720,
+        rewardExp: 320,
+        accentHex: PALETTE.NEON_PINK_HEX,
+      },
+      {
+        id: 'outpost-canyon',
+        districtId: 'skyline-highlands',
+        name: '红岩峡谷掠夺者营地',
+        faction: '荒漠沙盗团',
+        x: 4224,
+        y: 576,
+        radius: 190,
+        guardCount: 5,
+        hasBoss: false,
+        rewardCash: 620,
+        rewardExp: 280,
+        accentHex: PALETTE.GOLD_HEX,
+      },
+      {
+        id: 'outpost-skyport',
+        districtId: 'neon-skyport',
+        name: '星港黑翼佣兵封锁区',
+        faction: '黑翼安保雇佣兵',
+        x: 3840,
+        y: 3120,
+        radius: 220,
+        guardCount: 7,
+        hasBoss: true,
+        rewardCash: 880,
+        rewardExp: 380,
+        accentHex: PALETTE.NEON_PURPLE_HEX,
       },
     ];
 
     return {
       id: 'neon-district',
       name: WORLD_CONFIG.STARTING_DISTRICT,
+      plazaCenter: { x: 1312, y: 1024 },
+      exitMarkers: {
+        east: { x: 1728, y: 704, label: '→ 量子科教区 & 苍穹山脉' },
+        south: { x: 896, y: 1792, label: '↓ 翠水湾 & 暗港码头' },
+        farEast: { x: 3392, y: 2112, label: '→ 星港航空区 & 跑道' },
+      },
       roads,
       sidewalks,
       plazaZones,
@@ -1126,6 +1461,8 @@ export class DistrictManager {
       sandZones,
       waterfalls,
       docks,
+      runways,
+      helipads,
       rivers,
       waterColliders,
       bridges,
@@ -1140,6 +1477,10 @@ export class DistrictManager {
       trafficSignals,
       steamVents,
       landmarks,
+      signalTowers,
+      metroStations,
+      secretVaults,
+      gangOutposts,
     };
   }
 }

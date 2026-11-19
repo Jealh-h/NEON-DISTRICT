@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE, PLAYER_CONFIG } from '../config/BalanceConfig';
+import { DistrictManager } from '../world/DistrictManager';
+import { generateCityTilemap } from '../world/MapGenerator';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -7,10 +9,17 @@ export class BootScene extends Phaser.Scene {
   }
 
   public preload(): void {
-    this.load.tilemapTiledJSON('neon_plaza_map', 'maps/neon_plaza.json');
+    // World tilemap is deterministically generated from DistrictManager in create()
   }
 
   public create(): void {
+    const district = new DistrictManager().getNeonPlaza();
+    const mapJson = generateCityTilemap(district);
+    this.cache.tilemap.add('neon_plaza_map', {
+      format: Phaser.Tilemaps.Formats.TILED_JSON,
+      data: mapJson,
+    });
+
     this.createTilesetTexture();
     this.createPlayerTextures();
     this.createNpcTextures();
@@ -39,10 +48,10 @@ export class BootScene extends Phaser.Scene {
     };
 
     const drawAsphaltBase = (ox: number, oy: number, dark: boolean) => {
-      ctx.fillStyle = dark ? '#111724' : '#161D2C';
+      ctx.fillStyle = dark ? '#182134' : '#1E283F';
       ctx.fillRect(ox, oy, 32, 32);
       // Multi-tone asphalt aggregate & subtle wheel wear
-      ctx.fillStyle = dark ? '#0D121D' : '#1B2335';
+      ctx.fillStyle = dark ? '#141B2B' : '#24304B';
       const specks = [
         [3, 5], [11, 2], [21, 9], [28, 4], [7, 15], [16, 19],
         [25, 14], [4, 26], [13, 28], [22, 24], [29, 29], [18, 8],
@@ -51,7 +60,7 @@ export class BootScene extends Phaser.Scene {
       for (const [sx, sy] of specks) {
         ctx.fillRect(ox + sx, oy + sy, 2, 1);
       }
-      ctx.fillStyle = dark ? '#192233' : '#121826';
+      ctx.fillStyle = dark ? '#222E46' : '#1A2337';
       ctx.fillRect(ox + 6, oy + 7, 1, 1);
       ctx.fillRect(ox + 23, oy + 16, 2, 1);
       ctx.fillRect(ox + 12, oy + 23, 1, 1);
@@ -67,10 +76,10 @@ export class BootScene extends Phaser.Scene {
     {
       const { ox, oy } = tileOrigin(2);
       drawAsphaltBase(ox, oy, true);
-      ctx.fillStyle = '#0A0E17';
+      ctx.fillStyle = '#121A2B';
       ctx.fillRect(ox, oy + 6, 32, 3);
       ctx.fillRect(ox, oy + 23, 32, 3);
-      ctx.fillStyle = '#080B13';
+      ctx.fillStyle = '#0F1524';
       ctx.fillRect(ox + 4, oy + 11, 6, 1);
       ctx.fillRect(ox + 10, oy + 12, 4, 1);
       ctx.fillRect(ox + 14, oy + 13, 5, 1);
@@ -141,16 +150,16 @@ export class BootScene extends Phaser.Scene {
     // 9: SIDEWALK_BASE
     {
       const { ox, oy } = tileOrigin(9);
-      ctx.fillStyle = '#1C2538';
+      ctx.fillStyle = '#26334C';
       ctx.fillRect(ox, oy, 32, 32);
       // 16x16 slab seams
-      ctx.fillStyle = '#141B2B';
+      ctx.fillStyle = '#1C263B';
       ctx.fillRect(ox, oy + 15, 32, 1);
       ctx.fillRect(ox + 15, oy, 1, 32);
       ctx.fillRect(ox, oy + 31, 32, 1);
       ctx.fillRect(ox + 31, oy, 1, 32);
       // Subtle top-left slab bevel highlights
-      ctx.fillStyle = '#253047';
+      ctx.fillStyle = '#314161';
       ctx.fillRect(ox + 1, oy + 1, 13, 1);
       ctx.fillRect(ox + 17, oy + 1, 13, 1);
       ctx.fillRect(ox + 1, oy + 17, 13, 1);
@@ -160,9 +169,9 @@ export class BootScene extends Phaser.Scene {
     // 10: SIDEWALK_CURB_TOP
     {
       const { ox, oy } = tileOrigin(10);
-      ctx.fillStyle = '#1C2538';
+      ctx.fillStyle = '#26334C';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#2B3650';
+      ctx.fillStyle = '#36476A';
       ctx.fillRect(ox, oy, 32, 4);
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(ox, oy, 32, 1);
@@ -171,30 +180,30 @@ export class BootScene extends Phaser.Scene {
     // 11: SIDEWALK_CURB_BOTTOM
     {
       const { ox, oy } = tileOrigin(11);
-      ctx.fillStyle = '#1C2538';
+      ctx.fillStyle = '#26334C';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#2B3650';
+      ctx.fillStyle = '#36476A';
       ctx.fillRect(ox, oy + 28, 32, 4);
     }
 
     // 12: PLAZA_TILE_DARK
     {
       const { ox, oy } = tileOrigin(12);
-      ctx.fillStyle = '#182034';
+      ctx.fillStyle = '#212D48';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#111728';
+      ctx.fillStyle = '#182136';
       ctx.fillRect(ox, oy, 32, 1);
       ctx.fillRect(ox, oy, 1, 32);
-      ctx.fillStyle = '#24304D';
+      ctx.fillStyle = '#2E3E62';
       ctx.fillRect(ox + 8, oy + 8, 16, 16);
-      ctx.fillStyle = '#182034';
+      ctx.fillStyle = '#212D48';
       ctx.fillRect(ox + 10, oy + 10, 12, 12);
     }
 
     // 13: PLAZA_TILE_NEON_P
     {
       const { ox, oy } = tileOrigin(13);
-      ctx.fillStyle = '#1A1E36';
+      ctx.fillStyle = '#242A4A';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#C000FF';
       ctx.fillRect(ox + 2, oy + 2, 28, 2);
@@ -205,7 +214,7 @@ export class BootScene extends Phaser.Scene {
     // 14: PLAZA_TILE_NEON_K
     {
       const { ox, oy } = tileOrigin(14);
-      ctx.fillStyle = '#1A1E36';
+      ctx.fillStyle = '#242A4A';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#FF2E88';
       ctx.fillRect(ox + 2, oy + 2, 2, 28);
@@ -216,9 +225,9 @@ export class BootScene extends Phaser.Scene {
     // 15: PARKING_TARMAC
     {
       const { ox, oy } = tileOrigin(15);
-      ctx.fillStyle = '#0F1522';
+      ctx.fillStyle = '#192236';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#182135';
+      ctx.fillStyle = '#24314D';
       ctx.fillRect(ox + 4, oy + 10, 4, 2);
       ctx.fillRect(ox + 20, oy + 22, 3, 2);
     }
@@ -226,12 +235,12 @@ export class BootScene extends Phaser.Scene {
     // 16: PARKING_STALL
     {
       const { ox, oy } = tileOrigin(16);
-      ctx.fillStyle = '#0F1522';
+      ctx.fillStyle = '#192236';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(ox, oy, 32, 2);
       ctx.fillRect(ox, oy + 30, 32, 2);
-      ctx.fillStyle = '#475569';
+      ctx.fillStyle = '#64748B';
       ctx.fillRect(ox + 24, oy + 6, 4, 20);
     }
 

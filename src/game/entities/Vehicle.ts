@@ -57,6 +57,7 @@ export class Vehicle {
   private airTimer = 0;
   private airDuration = 0;
   private rampCooldown = 0;
+  private rampLaunchPos: { x: number; y: number } | null = null;
 
   constructor(
     scene: Phaser.Scene,
@@ -221,7 +222,7 @@ export class Vehicle {
   public update(
     dtSeconds: number,
     controls?: DrivingControlsState,
-    onStuntLanded?: (bonus: number) => void,
+    onStuntLanded?: (bonus: number, meters: number) => void,
     onDestroyed?: (vehicle: Vehicle) => void,
     modifiers?: { speedMult?: number; nitroRegenMult?: number; gripMult?: number }
   ): void {
@@ -278,7 +279,13 @@ export class Vehicle {
         this.shadow.setScale(1);
         this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 12);
         this.scene.cameras.main.shake(95, 0.004);
-        onStuntLanded?.(100);
+        const launch = this.rampLaunchPos;
+        this.rampLaunchPos = null;
+        const meters = launch
+          ? Math.max(8, Math.round(Phaser.Math.Distance.Between(launch.x, launch.y, this.sprite.x, this.sprite.y) / 7))
+          : 15;
+        const bonus = 80 + Math.round(meters * 4);
+        onStuntLanded?.(bonus, meters);
       }
     }
 
@@ -492,6 +499,7 @@ export class Vehicle {
     this.airDuration = 0.85;
     this.airTimer = 0.85;
     this.rampCooldown = 1.8;
+    this.rampLaunchPos = { x: this.sprite.x, y: this.sprite.y };
     this.nitro = Math.min(100, this.nitro + 25);
     this.forwardSpeed = Math.max(this.forwardSpeed, this.getEffectiveMaxSpeed() * 1.1);
     this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 10);
@@ -621,6 +629,11 @@ export class Vehicle {
   public getSpeedPxPerSec(): number {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     return Math.round(Math.hypot(body.velocity.x, body.velocity.y));
+  }
+
+  public getVelocity(): { vx: number; vy: number } {
+    const body = this.sprite.body as Phaser.Physics.Arcade.Body;
+    return { vx: body.velocity.x, vy: body.velocity.y };
   }
 
   public getSpeedKmh(): number {

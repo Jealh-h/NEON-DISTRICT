@@ -21,6 +21,14 @@ import { NPCManager } from './NPCManager';
 import { PoliceManager } from './PoliceManager';
 import type { ProgressionManager } from './ProgressionManager';
 import type { RandomEventManager } from './RandomEventManager';
+import type {
+  SandboxExplorationManager,
+  SandboxUpdateCallbacks,
+} from './SandboxExplorationManager';
+import type {
+  TerrariaSandboxManager,
+  TerrariaUpdateCallbacks,
+} from './TerrariaSandboxManager';
 import { TrafficManager } from './TrafficManager';
 import { VehicleManager } from './VehicleManager';
 import { CrimeType } from './WantedManager';
@@ -103,6 +111,10 @@ export class WeaponManager {
   private progressionManager?: ProgressionManager;
   private hordeRef?: HordeManager;
   private randomEventManager?: RandomEventManager;
+  private sandboxExplorationManager?: SandboxExplorationManager;
+  private sandboxCallbacks?: SandboxUpdateCallbacks;
+  private terrariaManager?: TerrariaSandboxManager;
+  private terrariaCallbacks?: TerrariaUpdateCallbacks;
   private getPlayerHpRatio?: () => number;
   private onCombatKillBonus?: (healHp: number, healArmor: number, exp: number) => void;
 
@@ -156,14 +168,30 @@ export class WeaponManager {
     progressionManager?: ProgressionManager;
     hordeManager?: HordeManager;
     randomEventManager?: RandomEventManager;
+    sandboxExplorationManager?: SandboxExplorationManager;
+    sandboxCallbacks?: SandboxUpdateCallbacks;
+    terrariaManager?: TerrariaSandboxManager;
+    terrariaCallbacks?: TerrariaUpdateCallbacks;
     getPlayerHpRatio?: () => number;
     onCombatKillBonus?: (healHp: number, healArmor: number, exp: number) => void;
   }): void {
     this.progressionManager = opts.progressionManager;
     this.hordeRef = opts.hordeManager;
     this.randomEventManager = opts.randomEventManager;
+    this.sandboxExplorationManager = opts.sandboxExplorationManager;
+    this.sandboxCallbacks = opts.sandboxCallbacks;
+    this.terrariaManager = opts.terrariaManager;
+    this.terrariaCallbacks = opts.terrariaCallbacks;
     this.getPlayerHpRatio = opts.getPlayerHpRatio;
     this.onCombatKillBonus = opts.onCombatKillBonus;
+  }
+
+  private isAuthorizedCombatZone(x: number, y: number): boolean {
+    return Boolean(
+      this.sandboxExplorationManager?.isPointNearOutpostCombat(x, y) ||
+        this.randomEventManager?.isPointNearEvent(x, y) ||
+        this.terrariaManager?.isPointNearCombatOrOre(x, y)
+    );
   }
 
   public getEquippedId(): WeaponId {
@@ -298,9 +326,10 @@ export class WeaponManager {
     const progRateMult = this.progressionManager?.getFireRateMultiplier() ?? 1;
     const hordeRateMult = this.hordeRef?.isActive() ? this.hordeRef.getFireRateMultiplier() : 1;
     const totalRateMult = progRateMult * hordeRateMult;
+    const terrariaRateIntervalMult = this.terrariaManager?.getFireRateMultiplier() ?? 1;
     const fireInterval = Math.max(
       40,
-      Math.round((overdriveActive ? baseInterval * 0.56 : baseInterval) / totalRateMult)
+      Math.round(((overdriveActive ? baseInterval * 0.56 : baseInterval) / totalRateMult) * terrariaRateIntervalMult)
     );
     if (nowMs - this.lastFireAt < fireInterval) {
       return false;
@@ -429,10 +458,10 @@ export class WeaponManager {
       });
     }
 
-    // 5. Public gunfire triggers nearby NPC panic & police attention
-    npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 195);
-    const nearbyPolice = policeManager.isPoliceNearby(muzzle.x, muzzle.y, 440);
-    if (nearbyPolice) {
+    // 5. Public gunfire triggers nearby NPC panic & police attention (exempt when fighting Bosses/Outposts/Events or mining)
+    npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 175);
+    const nearbyPolice = policeManager.isPoliceNearby(muzzle.x, muzzle.y, 260);
+    if (nearbyPolice && !this.isAuthorizedCombatZone(muzzle.x, muzzle.y)) {
       onCrime('weapon_discharge', muzzle, true);
     }
 
@@ -490,8 +519,11 @@ export class WeaponManager {
         hitTargets: new Set<object>(),
       });
 
-      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 290);
-      if (policeManager.isPoliceNearby(muzzle.x, muzzle.y, 520)) {
+      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 240);
+      if (
+        policeManager.isPoliceNearby(muzzle.x, muzzle.y, 320) &&
+        !this.isAuthorizedCombatZone(muzzle.x, muzzle.y)
+      ) {
         onCrime('weapon_discharge', muzzle, true);
       }
       return true;
@@ -539,8 +571,11 @@ export class WeaponManager {
         hitTargets: new Set<object>(),
       });
 
-      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 230);
-      if (policeManager.isPoliceNearby(muzzle.x, muzzle.y, 500)) {
+      npcManager.triggerAreaPanic(muzzle.x, muzzle.y, 210);
+      if (
+        policeManager.isPoliceNearby(muzzle.x, muzzle.y, 310) &&
+        !this.isAuthorizedCombatZone(muzzle.x, muzzle.y)
+      ) {
         onCrime('weapon_discharge', muzzle, true);
       }
       return true;
@@ -961,6 +996,87 @@ export class WeaponManager {
         }
       }
 
+      // 1.38 Hit Sandbox Gang Outpost Guards
+      if (
+        !removeProjectile &&
+        this.sandboxExplorationManager &&
+        this.sandboxCallbacks &&
+        this.sandboxExplorationManager.checkProjectileHit(
+          p.sprite.x,
+          p.sprite.y,
+          p.damage,
+          p.hitTargets,
+          this.sandboxCallbacks,
+          (tx, ty, killed, isBoss) => {
+            if (p.blastRadius > 0) return;
+            this.spawnImpactRing(tx, ty, isBoss ? PALETTE.GOLD : p.colorNum, isBoss ? 1.2 : 0.95);
+            this.hitSparkEmitter.emitParticleAt(tx, ty, isBoss ? 9 : 6);
+            this.audioManager.playImpactHit(isBoss || Boolean(p.isCrit));
+            this.spawnDamageText(
+              tx,
+              ty - 16,
+              killed ? `-${p.damage} 击倒!` : p.isCrit ? `暴击 -${p.damage}` : `-${p.damage}`,
+              killed || p.isCrit ? PALETTE.GOLD_HEX : PALETTE.NEON_PINK_HEX
+            );
+            if (killed) {
+              this.onCombatKillBonus?.(
+                this.progressionManager?.getKillHealAmount() ?? 0,
+                0,
+                isBoss ? 40 : 20
+              );
+              onHitstop(isBoss ? 0.045 : 0.022);
+            }
+          }
+        )
+      ) {
+        if (p.blastRadius > 0) {
+          detonateRocket();
+        } else {
+          p.pierceLeft -= 1;
+          if (p.pierceLeft <= 0) removeProjectile = true;
+        }
+      }
+
+      // 1.42 Hit Terraria Ore Veins & Summoned World Boss
+      if (
+        !removeProjectile &&
+        this.terrariaManager &&
+        this.terrariaCallbacks &&
+        this.terrariaManager.checkProjectileHit(
+          p.sprite.x,
+          p.sprite.y,
+          p.damage,
+          p.hitTargets,
+          this.terrariaCallbacks,
+          (tx, ty, killed, isBoss, colorHex) => {
+            if (p.blastRadius > 0) return;
+            this.spawnImpactRing(tx, ty, isBoss ? PALETTE.GOLD : p.colorNum, isBoss ? 1.25 : 0.95);
+            this.hitSparkEmitter.emitParticleAt(tx, ty, isBoss ? 9 : 6);
+            this.audioManager.playImpactHit(isBoss || Boolean(p.isCrit));
+            this.spawnDamageText(
+              tx,
+              ty - 16,
+              killed && isBoss ? 'BOSS 击破!' : `-${p.damage}`,
+              isBoss && p.isCrit ? PALETTE.GOLD_HEX : colorHex
+            );
+            if (this.terrariaManager?.hasCelestialLifesteal() && Math.random() < (isBoss ? 0.35 : 0.14)) {
+              this.onCombatKillBonus?.(2, 0, 0);
+            }
+            if (killed && isBoss) {
+              this.triggerExplosion(tx, ty, 78);
+              onHitstop(0.055);
+            }
+          }
+        )
+      ) {
+        if (p.blastRadius > 0) {
+          detonateRocket();
+        } else {
+          p.pierceLeft -= 1;
+          if (p.pierceLeft <= 0) removeProjectile = true;
+        }
+      }
+
       // 1.5 Hit Horde Enemies
       if (!removeProjectile && hordeManager && hordeEnemies.length > 0) {
         for (const enemy of hordeEnemies) {
@@ -1265,6 +1381,7 @@ export class WeaponManager {
   ): void {
     const radius = proj.blastRadius;
     this.triggerExplosion(bx, by, radius);
+    _trafficManager.notifyDisturbance(bx, by, radius + 220);
     onHitstop(0.042);
 
     if (interactivePropManager) {
@@ -1285,6 +1402,20 @@ export class WeaponManager {
           this.onCombatKillBonus?.(this.progressionManager?.getKillHealAmount() ?? 0, 0, 22);
         }
       });
+    }
+
+    if (this.sandboxExplorationManager && this.sandboxCallbacks) {
+      this.sandboxExplorationManager.applyBlastDamage(
+        bx,
+        by,
+        radius,
+        proj.damage,
+        this.sandboxCallbacks
+      );
+    }
+
+    if (this.terrariaManager && this.terrariaCallbacks) {
+      this.terrariaManager.applyBlastDamage(bx, by, radius, proj.damage, this.terrariaCallbacks);
     }
 
     if (hordeManager && hordeManager.isActive()) {

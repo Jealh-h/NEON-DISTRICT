@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE, TRAFFIC_CONFIG } from '../config/BalanceConfig';
 import { Player } from '../entities/Player';
+import { TrafficSignalDef } from '../world/DistrictManager';
 import { AudioManager } from './AudioManager';
 import { NPCManager } from './NPCManager';
 
@@ -22,14 +23,16 @@ class TrafficCar {
   private maxCruiseSpeed: number;
   private aiTimer: number;
   private pauseTimer = 0;
-  private blockedAhead = false;
+  private panicTimer = 0;
+  private speedFactorAhead = 1;
+  private swerveOffset = 0;
   public readonly textureKey: string;
   private hiddenUntilMs = 0;
 
   constructor(scene: Phaser.Scene, def: TrafficLoopDef) {
     this.textureKey = def.textureKey;
     this.waypoints = def.waypoints;
-    this.wpIdx = def.startWaypointIdx;
+    this.wpIdx = def.startWaypointIdx % def.waypoints.length;
     this.maxCruiseSpeed = TRAFFIC_CONFIG.CRUISE_SPEED * def.speedMultiplier;
     this.aiTimer = Math.random() * 0.14;
 
@@ -59,11 +62,17 @@ class TrafficCar {
     this.syncAttachments();
   }
 
+  public triggerPanicDrive(durationSec = 2.6): void {
+    this.panicTimer = Math.max(this.panicTimer, durationSec);
+    this.pauseTimer = 0;
+  }
+
   public update(
     dtSeconds: number,
     timeSeconds: number,
     nowMs: number,
-    obstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }>
+    obstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }>,
+    signals: TrafficSignalDef[]
   ): void {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
 
@@ -82,6 +91,10 @@ class TrafficCar {
       }
     }
 
+    if (this.panicTimer > 0) {
+      this.panicTimer = Math.max(0, this.panicTimer - dtSeconds);
+    }
+
     if (this.pauseTimer > 0) {
       this.pauseTimer -= dtSeconds;
       this.currentSpeed = Math.max(0, this.currentSpeed - 260 * dtSeconds);
@@ -98,29 +111,32 @@ class TrafficCar {
     const dy = target.y - this.sprite.y;
     const dist = Math.hypot(dx, dy);
 
-    if (dist < 28) {
+    if (dist < 32) {
       this.wpIdx = (this.wpIdx + 1) % this.waypoints.length;
     }
 
-    // Smooth steering toward current lane waypoint
-    const desiredAngle = Math.atan2(dy, dx);
+    // Staggered forward obstacle, smooth braking, lane nudge & dynamic traffic signal check
+    this.aiTimer += dtSeconds;
+    if (this.aiTimer >= 0.12) {
+      this.aiTimer = 0;
+      const evalRes = this.evaluateTrafficAhead(timeSeconds, obstacles, signals);
+      this.speedFactorAhead = evalRes.speedFactor;
+      this.swerveOffset = evalRes.swerveAngle;
+    }
+
+    // Smooth steering toward current lane waypoint + mild avoidance swerve
+    const desiredAngle = Math.atan2(dy, dx) + this.swerveOffset;
     const angleDiff = Phaser.Math.Angle.Wrap(desiredAngle - this.sprite.rotation);
-    const turnRate = 4.2 * dtSeconds;
+    const turnRate = (this.panicTimer > 0 ? 5.6 : 4.2) * dtSeconds;
     if (Math.abs(angleDiff) <= turnRate) {
       this.sprite.rotation = desiredAngle;
     } else {
       this.sprite.rotation += Math.sign(angleDiff) * turnRate;
     }
 
-    // Staggered forward obstacle & intersection signal check
-    this.aiTimer += dtSeconds;
-    if (this.aiTimer >= 0.12) {
-      this.aiTimer = 0;
-      this.blockedAhead = this.checkForwardBlocked(timeSeconds, obstacles);
-    }
-
-    const targetSpeed = this.blockedAhead ? 0 : this.maxCruiseSpeed;
-    const accelRate = this.blockedAhead ? 260 : 150;
+    const panicMult = this.panicTimer > 0 ? 1.48 : 1;
+    const targetSpeed = this.maxCruiseSpeed * panicMult * this.speedFactorAhead;
+    const accelRate = this.speedFactorAhead < 0.4 ? 275 : this.panicTimer > 0 ? 240 : 155;
     if (this.currentSpeed < targetSpeed) {
       this.currentSpeed = Math.min(targetSpeed, this.currentSpeed + accelRate * dtSeconds);
     } else {
@@ -135,71 +151,69 @@ class TrafficCar {
     this.syncAttachments();
   }
 
-  private checkForwardBlocked(
+  private evaluateTrafficAhead(
     timeSeconds: number,
-    obstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }>
-  ): boolean {
+    obstacles: Array<{ x: number; y: number; selfSprite?: Phaser.Physics.Arcade.Sprite }>,
+    signals: TrafficSignalDef[]
+  ): { speedFactor: number; swerveAngle: number } {
     const fwdX = Math.cos(this.sprite.rotation);
     const fwdY = Math.sin(this.sprite.rotation);
+    let minFactor = 1;
+    let swerveAngle = 0;
 
-    // 1. Check nearby entities ahead in our forward cone
+    // 1. Check nearby entities ahead in our forward lane cone with proportional braking & lane nudge
     for (const obs of obstacles) {
       if (obs.selfSprite === this.sprite) continue;
       const ox = obs.x - this.sprite.x;
       const oy = obs.y - this.sprite.y;
       const forwardProj = ox * fwdX + oy * fwdY;
-      if (forwardProj > 0 && forwardProj < TRAFFIC_CONFIG.STOP_DISTANCE) {
-        const lateralDist = Math.abs(-ox * fwdY + oy * fwdX);
-        if (lateralDist < 28) {
-          return true;
+      if (forwardProj > 0 && forwardProj < TRAFFIC_CONFIG.SLOW_DISTANCE) {
+        const lateralSigned = -ox * fwdY + oy * fwdX;
+        const lateralDist = Math.abs(lateralSigned);
+        if (lateralDist < 30) {
+          if (forwardProj <= TRAFFIC_CONFIG.STOP_DISTANCE) {
+            minFactor = 0;
+            // Gentle steer away from blocked car if not at complete standstill
+            if (lateralDist > 4) {
+              swerveAngle = lateralSigned > 0 ? -0.22 : 0.22;
+            }
+            break;
+          }
+          const t =
+            (forwardProj - TRAFFIC_CONFIG.STOP_DISTANCE) /
+            Math.max(1, TRAFFIC_CONFIG.SLOW_DISTANCE - TRAFFIC_CONFIG.STOP_DISTANCE);
+          minFactor = Math.min(minFactor, Math.max(0.25, t));
         }
       }
     }
 
-    // 2. Yield to red traffic signals right before entering major intersections
-    const cycle = timeSeconds % 10;
-    const movingHoriz = Math.abs(fwdX) > Math.abs(fwdY);
-    const isRed = movingHoriz ? ((cycle + 5) % 10) >= 4.2 : cycle >= 4.2;
+    // 2. Yield to red traffic signals derived dynamically from DistrictData (panicking drivers run red lights!)
+    if (minFactor > 0 && this.panicTimer <= 0 && signals.length > 0) {
+      const cycle = timeSeconds % 10;
+      const movingHoriz = Math.abs(fwdX) > Math.abs(fwdY);
+      const isRed = movingHoriz ? ((cycle + 5) % 10) >= 4.2 : cycle >= 4.2;
 
-    if (isRed) {
-      const stopChecks = movingHoriz
-        ? [
-            { x: 256, y: 352, dir: 1 },
-            { x: 1152, y: 352, dir: 1 },
-            { x: 448, y: 288, dir: -1 },
-            { x: 1344, y: 288, dir: -1 },
-            { x: 448, y: 864, dir: -1 },
-            { x: 1344, y: 864, dir: -1 },
-            { x: 256, y: 928, dir: 1 },
-            { x: 1152, y: 928, dir: 1 },
-          ]
-        : [
-            { x: 320, y: 224, dir: 1 },
-            { x: 320, y: 800, dir: 1 },
-            { x: 1216, y: 224, dir: 1 },
-            { x: 1216, y: 800, dir: 1 },
-            { x: 384, y: 416, dir: -1 },
-            { x: 384, y: 992, dir: -1 },
-            { x: 1280, y: 416, dir: -1 },
-            { x: 1280, y: 992, dir: -1 },
-          ];
-
-      for (const s of stopChecks) {
-        const axisMatch = movingHoriz ? Math.sign(fwdX) === s.dir : Math.sign(fwdY) === s.dir;
-        if (!axisMatch) continue;
-        const dist = Phaser.Math.Distance.Between(this.sprite.x, this.sprite.y, s.x, s.y);
-        if (dist < 42) {
-          return true;
+      if (isRed) {
+        for (const sig of signals) {
+          const ox = sig.x - this.sprite.x;
+          const oy = sig.y - this.sprite.y;
+          const fwdDist = ox * fwdX + oy * fwdY;
+          const latDist = Math.abs(-ox * fwdY + oy * fwdX);
+          if (fwdDist > 46 && fwdDist < 104 && latDist < 68) {
+            minFactor = 0;
+            swerveAngle = 0;
+            break;
+          }
         }
       }
     }
 
-    return false;
+    return { speedFactor: minFactor, swerveAngle };
   }
 
   public handleBump(): void {
     this.currentSpeed = 0;
-    this.pauseTimer = 1.4;
+    this.pauseTimer = 1.2;
   }
 
   public freeze(): void {
@@ -253,61 +267,60 @@ class TrafficCar {
   }
 }
 
-const INNER_CLOCKWISE_LOOP = [
-  { x: 384, y: 352 },
-  { x: 1216, y: 352 },
-  { x: 1216, y: 864 },
-  { x: 384, y: 864 },
+// Right-hand lane offsets along the 4800x3584 arterial grid
+const PLAZA_INNER_CLOCKWISE = [
+  { x: 924, y: 732 },
+  { x: 1700, y: 732 },
+  { x: 1700, y: 1316 },
+  { x: 924, y: 1316 },
 ];
 
-const OUTER_COUNTER_LOOP = [
-  { x: 320, y: 288 },
-  { x: 320, y: 928 },
-  { x: 1280, y: 928 },
-  { x: 1280, y: 288 },
+const PLAZA_OUTER_COUNTER = [
+  { x: 220, y: 220 },
+  { x: 220, y: 1372 },
+  { x: 1756, y: 1372 },
+  { x: 1756, y: 220 },
+];
+
+const TECH_EXPRESS_LOOP = [
+  { x: 1756, y: 220 },
+  { x: 3364, y: 220 },
+  { x: 3364, y: 1316 },
+  { x: 1756, y: 1316 },
+];
+
+const HARBOR_CHROME_LOOP = [
+  { x: 868, y: 2140 },
+  { x: 2588, y: 2140 },
+  { x: 2588, y: 2852 },
+  { x: 868, y: 2852 },
+];
+
+const SKYPORT_RING_LOOP = [
+  { x: 3420, y: 1372 },
+  { x: 4576, y: 1372 },
+  { x: 4576, y: 2852 },
+  { x: 3420, y: 2852 },
+];
+
+const NORTH_SOUTH_BRIDGE_EXPRESS = [
+  { x: 1696, y: 732 },
+  { x: 2528, y: 732 },
+  { x: 2528, y: 2080 },
+  { x: 1696, y: 2080 },
 ];
 
 const TRAFFIC_DEFS: TrafficLoopDef[] = [
-  {
-    id: 'traffic-cab-1',
-    textureKey: 'veh_traffic',
-    waypoints: INNER_CLOCKWISE_LOOP,
-    startWaypointIdx: 0,
-    speedMultiplier: 1.0,
-  },
-  {
-    id: 'traffic-cab-2',
-    textureKey: 'veh_traffic',
-    waypoints: INNER_CLOCKWISE_LOOP,
-    startWaypointIdx: 2,
-    speedMultiplier: 0.94,
-  },
-  {
-    id: 'traffic-cab-3',
-    textureKey: 'veh_traffic',
-    waypoints: OUTER_COUNTER_LOOP,
-    startWaypointIdx: 1,
-    speedMultiplier: 1.02,
-  },
-  {
-    id: 'traffic-compact-loop',
-    textureKey: 'veh_compact',
-    waypoints: OUTER_COUNTER_LOOP,
-    startWaypointIdx: 3,
-    speedMultiplier: 0.9,
-  },
-  {
-    id: 'traffic-bridge-cab',
-    textureKey: 'veh_traffic',
-    waypoints: [
-      { x: 1280, y: 352 },
-      { x: 1952, y: 352 },
-      { x: 1952, y: 1600 },
-      { x: 1280, y: 1600 },
-    ],
-    startWaypointIdx: 0,
-    speedMultiplier: 1.05,
-  },
+  { id: 'traffic-cab-1', textureKey: 'veh_traffic', waypoints: PLAZA_INNER_CLOCKWISE, startWaypointIdx: 0, speedMultiplier: 1.0 },
+  { id: 'traffic-cab-2', textureKey: 'veh_traffic', waypoints: PLAZA_INNER_CLOCKWISE, startWaypointIdx: 2, speedMultiplier: 0.94 },
+  { id: 'traffic-cab-3', textureKey: 'veh_traffic', waypoints: PLAZA_OUTER_COUNTER, startWaypointIdx: 1, speedMultiplier: 1.04 },
+  { id: 'traffic-compact-plaza', textureKey: 'veh_compact', waypoints: PLAZA_OUTER_COUNTER, startWaypointIdx: 3, speedMultiplier: 0.92 },
+  { id: 'traffic-tech-1', textureKey: 'veh_traffic', waypoints: TECH_EXPRESS_LOOP, startWaypointIdx: 0, speedMultiplier: 1.08 },
+  { id: 'traffic-tech-2', textureKey: 'veh_compact', waypoints: TECH_EXPRESS_LOOP, startWaypointIdx: 2, speedMultiplier: 0.98 },
+  { id: 'traffic-harbor-1', textureKey: 'veh_traffic', waypoints: HARBOR_CHROME_LOOP, startWaypointIdx: 0, speedMultiplier: 1.02 },
+  { id: 'traffic-chrome-2', textureKey: 'veh_compact', waypoints: HARBOR_CHROME_LOOP, startWaypointIdx: 2, speedMultiplier: 1.12 },
+  { id: 'traffic-skyport-1', textureKey: 'veh_traffic', waypoints: SKYPORT_RING_LOOP, startWaypointIdx: 1, speedMultiplier: 1.1 },
+  { id: 'traffic-bridge-cab', textureKey: 'veh_traffic', waypoints: NORTH_SOUTH_BRIDGE_EXPRESS, startWaypointIdx: 0, speedMultiplier: 1.05 },
 ];
 
 export class TrafficManager {
@@ -315,10 +328,15 @@ export class TrafficManager {
   private audioManager: AudioManager;
   private cars: TrafficCar[] = [];
   private trafficGroup!: Phaser.Physics.Arcade.Group;
+  private signals: TrafficSignalDef[] = [];
 
   constructor(scene: Phaser.Scene, audioManager: AudioManager) {
     this.scene = scene;
     this.audioManager = audioManager;
+  }
+
+  public setTrafficSignals(signals: TrafficSignalDef[]): void {
+    this.signals = signals;
   }
 
   public spawnTraffic(
@@ -335,7 +353,6 @@ export class TrafficManager {
       this.trafficGroup.add(car.sprite);
     }
 
-    // Collide with player on foot
     this.scene.physics.add.collider(player.sprite, this.trafficGroup, (_p, carObj) => {
       const car = this.cars.find((c) => c.sprite === carObj);
       if (car) {
@@ -344,7 +361,6 @@ export class TrafficManager {
       }
     });
 
-    // Collide with drivable vehicles
     for (const vSprite of playerVehicleSprites) {
       this.scene.physics.add.collider(vSprite, this.trafficGroup, (_v, carObj) => {
         const car = this.cars.find((c) => c.sprite === carObj);
@@ -355,14 +371,23 @@ export class TrafficManager {
             this.audioManager.playCrash(this.scene.time.now, Math.min(1, body.speed / 350));
             this.scene.cameras.main.shake(90, 0.003);
             npcManager.triggerAreaPanic(vSprite.x, vSprite.y);
+            this.notifyDisturbance(vSprite.x, vSprite.y, 220);
             onVehicleCrash?.(vSprite, body.speed);
           }
         }
       });
     }
 
-    // Traffic vs NPCs
     npcManager.registerVehicleColliders(this.cars.map((c) => c.sprite));
+  }
+
+  public notifyDisturbance(x: number, y: number, radius = 260): void {
+    for (const car of this.cars) {
+      if (car.isHidden()) continue;
+      if (Phaser.Math.Distance.Between(x, y, car.sprite.x, car.sprite.y) <= radius) {
+        car.triggerPanicDrive(2.8);
+      }
+    }
   }
 
   public update(
@@ -379,7 +404,7 @@ export class TrafficManager {
     ];
 
     for (const car of this.cars) {
-      car.update(dtSeconds, timeSeconds, nowMs, allObstacles);
+      car.update(dtSeconds, timeSeconds, nowMs, allObstacles, this.signals);
     }
   }
 
@@ -406,14 +431,19 @@ export class TrafficManager {
     return this.cars.map((c) => c.sprite);
   }
 
-  public getFastVehicleData(): Array<{ x: number; y: number; speedPx: number }> {
+  public getFastVehicleData(): Array<{ x: number; y: number; vx?: number; vy?: number; speedPx: number }> {
     return this.cars
       .filter((c) => !c.isHidden())
-      .map((c) => ({
-        x: c.sprite.x,
-        y: c.sprite.y,
-        speedPx: c.getSpeedPx(),
-      }));
+      .map((c) => {
+        const body = c.sprite.body as Phaser.Physics.Arcade.Body;
+        return {
+          x: c.sprite.x,
+          y: c.sprite.y,
+          vx: body?.velocity.x ?? 0,
+          vy: body?.velocity.y ?? 0,
+          speedPx: c.getSpeedPx(),
+        };
+      });
   }
 
   public freezeAll(): void {

@@ -13,14 +13,14 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '自由骇客',
     variant: 0,
     waypoints: [
-      { x: 608, y: 590 },
-      { x: 760, y: 590 },
-      { x: 860, y: 632 },
-      { x: 640, y: 632 },
+      { x: 1184, y: 832 },
+      { x: 1472, y: 832 },
+      { x: 1472, y: 992 },
+      { x: 1184, y: 992 },
     ],
     dialogues: [
       '枢纽行动处的加密信号最近一直在闪，估计马上就有大单子了。',
-      '广场中央的信号塔能截获全区频段，不过小心别撞上巡逻车。',
+      '各区都有独立信号塔，按 E 黑入后就能解锁磁悬浮站和区域加密金库位置！',
     ],
   },
   {
@@ -29,10 +29,10 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '拉面常客',
     variant: 1,
     waypoints: [
-      { x: 520, y: 656 },
-      { x: 630, y: 656 },
-      { x: 660, y: 740 },
-      { x: 520, y: 740 },
+      { x: 416, y: 620 },
+      { x: 560, y: 620 },
+      { x: 560, y: 780 },
+      { x: 416, y: 780 },
     ],
     dialogues: [
       '狐狸拉面馆的合成豚骨汤全霓虹广场最好喝，夜班全靠它撑着。',
@@ -45,14 +45,14 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '夜班速递员',
     variant: 2,
     waypoints: [
-      { x: 768, y: 408 },
-      { x: 832, y: 408 },
-      { x: 832, y: 580 },
-      { x: 768, y: 580 },
+      { x: 1312, y: 800 },
+      { x: 1600, y: 800 },
+      { x: 1600, y: 1200 },
+      { x: 1312, y: 1200 },
     ],
     dialogues: [
-      '东边泊车区停了几辆状态不错的车，开上街头竞速车比走路快多了。',
-      '听说铬铁镇和暗港区那边最近封锁得很严，目前只能在这片逛。',
+      '如今七大城区全部连通了，开超跑走中央大道能一口气冲到远东星港。',
+      '要是懒得长途驾驶，走近磁悬浮地铁站自动解锁，就能随时跨区传送！',
     ],
   },
   {
@@ -61,14 +61,14 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '字节便利店员',
     variant: 1,
     waypoints: [
-      { x: 120, y: 218 },
-      { x: 256, y: 218 },
-      { x: 256, y: 120 },
-      { x: 256, y: 218 },
+      { x: 576, y: 622 },
+      { x: 752, y: 622 },
+      { x: 784, y: 500 },
+      { x: 784, y: 622 },
     ],
     dialogues: [
       '欢迎光临字节便利店！全自动售货机就在门口，24小时不打烊。',
-      '刚才有辆竞速车从赛博大道飞驰过去，把门牌灯都震闪了。',
+      '刚才有辆竞速车从霓虹北街飞驰过去，把门牌灯都震闪了。',
     ],
   },
   {
@@ -77,14 +77,14 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '集团安保顾问',
     variant: 2,
     waypoints: [
-      { x: 460, y: 224 },
-      { x: 780, y: 224 },
-      { x: 1120, y: 224 },
-      { x: 780, y: 224 },
+      { x: 1024, y: 452 },
+      { x: 1320, y: 452 },
+      { x: 1584, y: 452 },
+      { x: 1320, y: 452 },
     ],
     dialogues: [
-      '赛博集团北侧大道车流密集，请勿在人行道上飙车。',
-      '特区巡逻警车就停在西侧路口附近，尽量别惹麻烦。',
+      'NCPD 警署部署了高速拦截车与重装机甲，通缉 3 星以上会正面迎头封堵。',
+      '听说暗港、铬铁区和星港都有帮派武装占领的据点，敢去端掉的人寥寥无几。',
     ],
   },
   {
@@ -93,30 +93,30 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '电玩玩家',
     variant: 0,
     waypoints: [
-      { x: 252, y: 460 },
-      { x: 252, y: 620 },
-      { x: 120, y: 608 },
-      { x: 252, y: 608 },
+      { x: 352, y: 964 },
+      { x: 760, y: 964 },
+      { x: 760, y: 1060 },
+      { x: 352, y: 964 },
     ],
     dialogues: [
-      '街机俱乐部刚上了新机台，手感顺滑得跟真车漂移一样！',
-      '义体诊所就在南边巷子对面，真出了事故可以去那儿看看。',
+      '街机俱乐部刚上了新机台，手感顺滑得跟在涡轮赛道漂移一样！',
+      '飞跃跳台的最高滞空纪录现在全城都能实时播报，快去挑战看看！',
     ],
   },
   {
     id: 'npc-south-1',
     name: '老周',
-    role: '修车技师',
+    role: '超跑技师',
     variant: 1,
     waypoints: [
-      { x: 1336, y: 984 },
-      { x: 1520, y: 984 },
-      { x: 1520, y: 1136 },
-      { x: 1336, y: 984 },
+      { x: 576, y: 1120 },
+      { x: 784, y: 1120 },
+      { x: 784, y: 1248 },
+      { x: 576, y: 1248 },
     ],
     dialogues: [
-      '车撞凹了？广场车库马上就要开通改装和维修服务了。',
-      '街头竞速车起步猛、抓地滑，过弯前记得轻点刹车。',
+      '车撞凹了就开进霓虹车库、铬铁车坊或星港机库，喷漆也能瞬间摆脱通缉！',
+      '星港跑道南端那几辆飞行器和涡轮超跑速度极快，过弯前记得轻点刹车。',
     ],
   },
   {
@@ -125,46 +125,46 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '电音DJ',
     variant: 0,
     waypoints: [
-      { x: 840, y: 984 },
-      { x: 1140, y: 984 },
-      { x: 1140, y: 804 },
-      { x: 840, y: 804 },
+      { x: 1024, y: 1040 },
+      { x: 1248, y: 1040 },
+      { x: 1248, y: 1216 },
+      { x: 1024, y: 1040 },
     ],
     dialogues: [
-      '脉冲夜店的低音炮整晚都在震，顺着合成波街就能找到入口。',
-      '这城市越到深夜越热闹，霓虹灯一亮就没人想回家。',
+      '脉冲夜店的低音炮整晚都在震，点一杯霓虹特调就能进入狂暴节奏。',
+      '全城隐藏着八座高加密金库，靠近时终端声纳会自己滴答作响！',
     ],
   },
   {
-    id: 'npc-east-1',
-    name: '陆远',
-    role: '地铁通勤客',
+    id: 'npc-tech-1',
+    name: '凯博士',
+    role: '量子研究员',
     variant: 2,
     waypoints: [
-      { x: 452, y: 984 },
-      { x: 760, y: 984 },
-      { x: 760, y: 790 },
-      { x: 452, y: 984 },
+      { x: 1856, y: 608 },
+      { x: 2144, y: 608 },
+      { x: 2432, y: 608 },
+      { x: 2144, y: 608 },
     ],
     dialogues: [
-      '地铁枢纽刚到一班夜车，站台外面全是被霓虹映亮的积水。',
-      '走大道过街记得看红绿灯，十秒一轮换。',
+      '量子科教区的超算中继塔能透视加密信道，黑客声望高了大有好处。',
+      '看到路边游荡的数据芯片记得捡起来，集齐 14 枚芯片有巨额全城奖金！',
     ],
   },
   {
-    id: 'npc-east-2',
-    name: '小岚',
-    role: '街头摄影师',
+    id: 'npc-tech-2',
+    name: '艾莉丝',
+    role: '全息剧迷',
     variant: 0,
     waypoints: [
-      { x: 960, y: 590 },
-      { x: 1148, y: 590 },
-      { x: 1148, y: 420 },
-      { x: 960, y: 590 },
+      { x: 2688, y: 1024 },
+      { x: 2960, y: 1024 },
+      { x: 2960, y: 1168 },
+      { x: 2688, y: 1168 },
     ],
     dialogues: [
-      '霓虹广场的全息灯牌配湿漉漉的柏油路，随手一拍都是大片。',
-      '东侧泊车场那边灯光不错，不过车进车出的时候挺吵的。',
+      '全息巨幕剧院今晚首映《熔岩轨道》，散场后我打算去温室那边的广场兜风。',
+      '在地图上直接点击任意位置可以打自定义 GPS 航标，不用再靠盲猜找路！',
     ],
   },
   {
@@ -173,30 +173,94 @@ const NEON_PLAZA_NPCS: NpcProfile[] = [
     role: '水岸垂钓者',
     variant: 1,
     waypoints: [
-      { x: 760, y: 1272 },
-      { x: 800, y: 1360 },
-      { x: 840, y: 1272 },
-      { x: 800, y: 1440 },
+      { x: 1280, y: 1520 },
+      { x: 1520, y: 1520 },
+      { x: 1520, y: 1620 },
+      { x: 1280, y: 1620 },
     ],
     dialogues: [
-      '滨河公园的木栈道夜里可安静了，水面还能映出广场的霓虹光。',
-      '如果想去东边山上，顺着跨河大桥一直往东开就能上盘山路。',
+      '滨河公园横跨了整片翠水湾，六座跨河大桥把南北城区彻底连成一片。',
+      '想甩开地面警车，把车往大桥或星港高速一拐准没错。',
     ],
   },
   {
-    id: 'npc-mountain-1',
-    name: '山鹰',
-    role: '山地勘测员',
+    id: 'npc-park-2',
+    name: '凌风',
+    role: '竞技场解说',
     variant: 2,
     waypoints: [
-      { x: 2210, y: 500 },
-      { x: 2248, y: 560 },
-      { x: 2210, y: 610 },
-      { x: 2190, y: 540 },
+      { x: 2672, y: 1652 },
+      { x: 3008, y: 1652 },
+      { x: 3168, y: 1552 },
+      { x: 3008, y: 1652 },
     ],
     dialogues: [
-      '苍穹山顶海拔 480 米，整片霓虹特区和运河两岸尽收眼底！',
-      '山体岩壁极度陡峭，千万别把车开出盘山公路的护栏。',
+      '十六赛段环城极速挑战已经贯通七大区，最高奖池就等街头车神来拿！',
+      '滨河东侧过了桥就是铬铁工业区，那边的涡轮直道爽翻了。',
+    ],
+  },
+  {
+    id: 'npc-highlands-1',
+    name: '山鹰',
+    role: '雪岭勘测员',
+    variant: 2,
+    waypoints: [
+      { x: 3552, y: 620 },
+      { x: 3840, y: 620 },
+      { x: 3968, y: 620 },
+      { x: 3712, y: 620 },
+    ],
+    dialogues: [
+      '苍穹山脉西侧冰封雪原，东边红岩峡谷，往南还能看见黑曜石活火山熔岩！',
+      '红岩峡谷东端有荒漠沙盗据点，建议带够护甲再进去清剿。',
+    ],
+  },
+  {
+    id: 'npc-harbor-1',
+    name: '老船长',
+    role: '暗港线人',
+    variant: 1,
+    waypoints: [
+      { x: 560, y: 2500 },
+      { x: 784, y: 2500 },
+      { x: 784, y: 2740 },
+      { x: 560, y: 2740 },
+    ],
+    dialogues: [
+      '穿过南部金沙滩木栈道能登上暗港灯塔岛，老走私贩的秘藏就在塔下。',
+      '海蛇走私团把东边货场圈成了禁区，端掉他们整个码头都会感谢你！',
+    ],
+  },
+  {
+    id: 'npc-chrome-1',
+    name: '阿铁',
+    role: '涡轮改装迷',
+    variant: 1,
+    waypoints: [
+      { x: 1856, y: 2432 },
+      { x: 2400, y: 2432 },
+      { x: 2400, y: 2688 },
+      { x: 1856, y: 2432 },
+    ],
+    dialogues: [
+      '南段 F1 赛道的电磁加速带和飞跃跳台能让你一口气飞出六十多米！',
+      '重装战车整备库门口常停着坦克或装甲车，但小心铁腕义体帮的火力。',
+    ],
+  },
+  {
+    id: 'npc-skyport-1',
+    name: '克莱尔',
+    role: '星港领航员',
+    variant: 0,
+    waypoints: [
+      { x: 3552, y: 1656 },
+      { x: 4064, y: 1656 },
+      { x: 4320, y: 1656 },
+      { x: 3968, y: 1824 },
+    ],
+    dialogues: [
+      '星港 960 米超长起降跑道与双停机坪全面开放，直升机和极速超跑随你挑！',
+      '跑道最南头被黑翼安保雇佣兵封锁了，清场成功会有大笔赏金和机库荣誉。',
     ],
   },
 ];
@@ -258,19 +322,35 @@ export class NPCManager {
 
   public update(
     dtSeconds: number,
-    fastVehicles: Array<{ x: number; y: number; speedPx: number }>
+    fastVehicles: Array<{ x: number; y: number; speedPx: number; vx?: number; vy?: number }>,
+    weatherSpeedMul = 1
   ): void {
     for (const npc of this.npcs) {
-      npc.update(dtSeconds);
+      npc.update(dtSeconds, weatherSpeedMul);
     }
 
-    // Staggered lightweight proximity panic check against speeding vehicles
+    // Staggered lightweight proximity dodge & panic check against speeding approaching vehicles
     this.dangerScanTimer += dtSeconds;
-    if (this.dangerScanTimer >= 0.22) {
+    if (this.dangerScanTimer >= 0.18) {
       this.dangerScanTimer = 0;
       for (const v of fastVehicles) {
-        if (v.speedPx >= 175) {
-          this.triggerAreaPanic(v.x, v.y, NPC_CONFIG.PANIC_TRIGGER_RADIUS);
+        if (v.speedPx < 135) continue;
+        const hasVec = v.vx !== undefined && v.vy !== undefined;
+        for (const npc of this.npcs) {
+          if (npc.isIncapacitated()) continue;
+          const dx = npc.sprite.x - v.x;
+          const dy = npc.sprite.y - v.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist <= 135 && hasVec) {
+            const dot = dx * (v.vx ?? 0) + dy * (v.vy ?? 0);
+            if (dot > 0) {
+              npc.triggerDodge(v.x, v.y, v.vx ?? 0, v.vy ?? 0);
+              continue;
+            }
+          }
+          if (v.speedPx >= 185 && dist <= NPC_CONFIG.PANIC_TRIGGER_RADIUS) {
+            npc.triggerPanic(v.x, v.y);
+          }
         }
       }
     }
@@ -303,7 +383,11 @@ export class NPCManager {
     };
   }
 
-  public interactNearest(x: number, y: number): string | null {
+  public interactNearest(
+    x: number,
+    y: number,
+    worldContext?: { weather?: string; wantedLevel?: number; syncedTowers?: number }
+  ): string | null {
     let closest: NPC | null = null;
     let bestDist: number = PLAYER_CONFIG.INTERACT_RADIUS;
 
@@ -318,7 +402,7 @@ export class NPCManager {
 
     if (!closest) return null;
     this.audioManager.playInteract();
-    return closest.interact(x, y);
+    return closest.interact(x, y, worldContext);
   }
 
   public freezeAll(): void {

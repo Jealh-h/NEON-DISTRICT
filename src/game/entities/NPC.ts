@@ -78,7 +78,7 @@ export class NPC {
     this.alertMark.setVisible(false);
   }
 
-  public update(dtSeconds: number): void {
+  public update(dtSeconds: number, weatherSpeedMul = 1): void {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     this.aiTimer += dtSeconds;
 
@@ -165,13 +165,11 @@ export class NPC {
       }
     }
 
-    body.setVelocity(
-      this.moveDir.x * NPC_CONFIG.WALK_SPEED,
-      this.moveDir.y * NPC_CONFIG.WALK_SPEED
-    );
+    const walkSpeed = NPC_CONFIG.WALK_SPEED * weatherSpeedMul;
+    body.setVelocity(this.moveDir.x * walkSpeed, this.moveDir.y * walkSpeed);
     if (Math.abs(this.moveDir.x) > 0.05 || Math.abs(this.moveDir.y) > 0.05) {
       this.sprite.setRotation(Math.atan2(this.moveDir.y, this.moveDir.x));
-      this.animateWalk(dtSeconds, 0.17);
+      this.animateWalk(dtSeconds, 0.17 / Math.max(0.8, weatherSpeedMul));
     }
 
     this.syncAttachments();
@@ -240,11 +238,50 @@ export class NPC {
     this.alertMark.setVisible(true);
   }
 
-  public interact(playerX: number, playerY: number): string {
+  public triggerDodge(vehX: number, vehY: number, vehVx: number, vehVy: number): void {
+    if (this.state === 'KO') return;
+    const speed = Math.hypot(vehVx, vehVy) || 1;
+    const fx = vehVx / speed;
+    const fy = vehVy / speed;
+    // Perpendicular escape vector away from the vehicle trajectory
+    const toNpcX = this.sprite.x - vehX;
+    const toNpcY = this.sprite.y - vehY;
+    const cross = fx * toNpcY - fy * toNpcX;
+    const sign = cross >= 0 ? 1 : -1;
+    const perpX = -fy * sign;
+    const perpY = fx * sign;
+    this.panicDir = { x: perpX, y: perpY };
+    this.state = 'PANICKING';
+    this.stateTimer = Math.max(this.stateTimer, 2.2);
+    this.alertMark.setText('!');
+    this.alertMark.setVisible(true);
+  }
+
+  public interact(
+    playerX: number,
+    playerY: number,
+    worldContext?: { weather?: string; wantedLevel?: number; syncedTowers?: number }
+  ): string {
     const angle = Math.atan2(playerY - this.sprite.y, playerX - this.sprite.x);
     this.sprite.setRotation(angle);
     this.state = 'CHATTING';
-    this.stateTimer = 2.2;
+    this.stateTimer = 2.4;
+
+    // Surface dynamic situational chatter occasionally
+    if (worldContext) {
+      if ((worldContext.wantedLevel ?? 0) >= 3 && Math.random() < 0.45) {
+        return `${this.name}（${this.role}）：「NCPD 的拦截机甲和特警都出动了，快去车库喷漆或躲进安全屋！」`;
+      }
+      if (worldContext.weather === 'acid_rain' && Math.random() < 0.35) {
+        return `${this.name}（${this.role}）：「酸雨把街面护栏都腐蚀得滋滋响，赶紧上车或者找屋檐躲雨吧！」`;
+      }
+      if (worldContext.weather === 'fog' && Math.random() < 0.35) {
+        return `${this.name}（${this.role}）：「今晚辐射雾真浓，全城信号塔没同步的话根本看不清近道。」`;
+      }
+      if ((worldContext.syncedTowers ?? 0) >= 3 && Math.random() < 0.25) {
+        return `${this.name}（${this.role}）：「听说全区磁悬浮站点正在陆续上线，按 M 打开地图就能跨区瞬移了！」`;
+      }
+    }
 
     const line = this.dialogues[this.dialogueIndex % this.dialogues.length];
     this.dialogueIndex += 1;

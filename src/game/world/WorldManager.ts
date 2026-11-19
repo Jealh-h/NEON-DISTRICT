@@ -49,40 +49,50 @@ export class WorldManager {
     overlayG.setDepth(3);
 
     // Central Neon Plaza Holographic Mandala (matching cyber hub aesthetic)
+    const { x: px, y: py } = district.plazaCenter;
     overlayG.fillStyle(0x7c3aed, 0.14);
-    overlayG.fillCircle(800, 608, 62);
+    overlayG.fillCircle(px, py, 62);
     overlayG.lineStyle(2, PALETTE.NEON_CYAN, 0.72);
-    overlayG.strokeCircle(800, 608, 28);
+    overlayG.strokeCircle(px, py, 28);
     overlayG.lineStyle(2, PALETTE.NEON_PINK, 0.65);
-    overlayG.strokeCircle(800, 608, 44);
+    overlayG.strokeCircle(px, py, 44);
     overlayG.lineStyle(2, PALETTE.NEON_PURPLE, 0.62);
-    overlayG.strokeCircle(800, 608, 60);
+    overlayG.strokeCircle(px, py, 60);
     for (let deg = 0; deg < 360; deg += 45) {
       const rad = Phaser.Math.DegToRad(deg);
       overlayG.lineStyle(1, deg % 90 === 0 ? PALETTE.NEON_CYAN : PALETTE.NEON_PINK, 0.52);
       overlayG.lineBetween(
-        800 + Math.cos(rad) * 28,
-        608 + Math.sin(rad) * 28,
-        800 + Math.cos(rad) * 60,
-        608 + Math.sin(rad) * 60
+        px + Math.cos(rad) * 28,
+        py + Math.sin(rad) * 28,
+        px + Math.cos(rad) * 60,
+        py + Math.sin(rad) * 60
       );
     }
 
     overlayG.lineStyle(1, PALETTE.NEON_PURPLE, 0.55);
     overlayG.strokeRect(16, 16, WORLD_CONFIG.WIDTH - 32, WORLD_CONFIG.HEIGHT - 32);
 
-    this.addExitMarker(1744, 240, '北跨河霓虹大桥', PALETTE.NEON_CYAN_HEX);
-    this.addExitMarker(1744, 816, '中跨河霓虹大桥', PALETTE.NEON_PINK_HEX);
-    this.addExitMarker(1744, 1552, '涡轮跨河高速桥', PALETTE.GOLD_HEX);
-    this.addExitMarker(1744, 2064, '暗港跨海大桥', PALETTE.NEON_CYAN_HEX);
-    this.addExitMarker(352, 1712, '▼ 暗港集装箱码头', PALETTE.NEON_PINK_HEX);
-    this.addExitMarker(2304, 1548, '▶ 铬铁工业区 · 涡轮高速', PALETTE.GOLD_HEX);
+    this.addExitMarker(district.exitMarkers.east.x, district.exitMarkers.east.y - 76, district.exitMarkers.east.label, PALETTE.NEON_CYAN_HEX);
+    this.addExitMarker(district.exitMarkers.south.x, district.exitMarkers.south.y - 76, district.exitMarkers.south.label, PALETTE.NEON_PINK_HEX);
+    this.addExitMarker(district.exitMarkers.farEast.x, district.exitMarkers.farEast.y - 76, district.exitMarkers.farEast.label, PALETTE.GOLD_HEX);
 
-    // Pixel Suspension Bridge Towers & Glowing Parabolic Cables (placed cleanly on north/south bridge parapets)
+    // Skyport illuminated runway strobe markers
+    for (const rw of district.runways) {
+      overlayG.lineStyle(2, PALETTE.NEON_CYAN, 0.7);
+      overlayG.strokeRect(rw.x + 2, rw.y + 2, rw.w - 4, rw.h - 4);
+      for (let rx = rw.x + 48; rx < rw.x + rw.w - 40; rx += 96) {
+        overlayG.fillStyle(PALETTE.GOLD, 0.85);
+        overlayG.fillRect(rx, rw.y + 8, 8, 4);
+        overlayG.fillRect(rx, rw.y + rw.h - 12, 8, 4);
+      }
+      this.addExitMarker(rw.x + rw.w / 2, rw.y + 28, '★ 星港超长起降主跑道 · 24R ★', PALETTE.NEON_CYAN_HEX);
+    }
+
+    // Pixel Suspension Bridge Towers & Glowing Parabolic Cables (placed cleanly on bridge edges)
     const bridgeG = this.scene.add.graphics();
     bridgeG.setDepth(14);
     for (const br of district.bridges) {
-      const accent = br.w > 150 ? PALETTE.NEON_CYAN : PALETTE.NEON_PINK;
+      const accent = br.w >= 120 ? PALETTE.NEON_CYAN : PALETTE.NEON_PINK;
       overlayG.lineStyle(2, accent, 0.8);
       overlayG.lineBetween(br.x, br.y + 2, br.x + br.w, br.y + 2);
       overlayG.lineBetween(br.x, br.y + br.h - 2, br.x + br.w, br.y + br.h - 2);
@@ -141,7 +151,7 @@ export class WorldManager {
       wfG.strokeEllipse(wf.x + wf.w / 2, wf.y + wf.h, wf.w + 22, 18);
     }
 
-    this.spawnRiverRipples();
+    this.spawnRiverRipples(district);
 
     // Turbo boost strips (animated glowing edge pulses)
     for (let i = 0; i < district.turboStrips.length; i++) {
@@ -238,7 +248,7 @@ export class WorldManager {
     }
 
     // 8. Subtle Player Cyan Visor Glow + Ambient Neon Night Dust
-    this.playerGlow = this.scene.add.image(800, 608, 'fx_pixel_glow');
+    this.playerGlow = this.scene.add.image(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y, 'fx_pixel_glow');
     this.playerGlow.setTint(PALETTE.NEON_CYAN);
     this.playerGlow.setAlpha(0.32);
     this.playerGlow.setScale(1.65);
@@ -653,31 +663,16 @@ export class WorldManager {
     collisionManager.addPropCollider(sig.x, sig.y, 12, 12);
   }
 
-  private spawnRiverRipples(): void {
-    const riverBands = [
-      { yMin: 48, yMax: 240 },
-      { yMin: 400, yMax: 816 },
-      { yMin: 976, yMax: 1552 },
-      { yMin: 1712, yMax: 2064 },
-      { yMin: 2224, yMax: 2352 },
-    ];
-    for (const band of riverBands) {
-      for (let y = band.yMin; y <= band.yMax; y += 48) {
-        const x = 1690 + ((y * 19) % 108);
-        const rect = this.scene.add.rectangle(x, y, 3, 14, PALETTE.NEON_CYAN, 0.35);
+  private spawnRiverRipples(district: DistrictData): void {
+    for (const wc of district.waterColliders) {
+      if (wc.y > 3000 || wc.w < 120) continue;
+      // Place subtle shimmering ripples inside open river channels
+      for (let x = wc.x + 28; x <= wc.x + wc.w - 28; x += 68) {
+        const y = wc.y + 42 + ((x * 13) % Math.max(24, wc.h - 84));
+        const rect = this.scene.add.rectangle(x, y, 14, 2, PALETTE.NEON_CYAN, 0.34);
         rect.setDepth(4);
-        this.riverRipples.push({ rect, baseY: y, phase: y * 0.05 });
+        this.riverRipples.push({ rect, baseY: y, phase: x * 0.04 });
       }
-    }
-    for (let x = 532; x <= 716; x += 42) {
-      const rect = this.scene.add.rectangle(x, 1372, 12, 2, PALETTE.NEON_CYAN, 0.32);
-      rect.setDepth(4);
-      this.riverRipples.push({ rect, baseY: 1372, phase: x * 0.06 });
-    }
-    for (let x = 884; x <= 1068; x += 42) {
-      const rect = this.scene.add.rectangle(x, 1376, 12, 2, PALETTE.NEON_CYAN, 0.32);
-      rect.setDepth(4);
-      this.riverRipples.push({ rect, baseY: 1376, phase: x * 0.06 });
     }
   }
 
@@ -689,7 +684,7 @@ export class WorldManager {
     g.fillStyle(0x04070e, 0.52);
     g.fillRect(m.x + 6, m.y + 8, m.w, m.h);
 
-    if (m.id === 'mtn-se-crag') {
+    if (m.biome === 'volcano') {
       // Iconic Towering Obsidian Volcano Cone + Magma Rivers + Caldera Crater
       const cx = m.x + m.w / 2;
       const cy = m.y + m.h / 2;
@@ -789,11 +784,9 @@ export class WorldManager {
       const bgBase =
         m.biome === 'desert'
           ? 0x7c2d12
-          : m.biome === 'volcano'
-            ? 0x1a1321
-            : m.biome === 'forest'
-              ? 0x123d28
-              : 0x1e2d44;
+          : m.biome === 'forest'
+            ? 0x123d28
+            : 0x1e2d44;
       g.fillStyle(bgBase, 0.92);
       g.fillRect(m.x + 2, m.y + 2, m.w - 4, m.h - 4);
 
@@ -838,11 +831,9 @@ export class WorldManager {
             g.fillStyle(0xfdba74, 1);
             g.fillRect(px - plateauW / 2 + 2, topY + 2, plateauW - 4, 8);
           } else {
-            // Crisp Stepped Alpine / Forest / Basalt Peak Triangle
-            const leftCol =
-              m.biome === 'snow' ? 0x475569 : m.biome === 'volcano' ? 0x3b2d4a : 0x2d6a4f;
-            const rightCol =
-              m.biome === 'snow' ? 0x1e293b : m.biome === 'volcano' ? 0x1c1524 : 0x183d2c;
+            // Crisp Stepped Alpine / Forest Peak Triangle
+            const leftCol = m.biome === 'snow' ? 0x475569 : 0x2d6a4f;
+            const rightCol = m.biome === 'snow' ? 0x1e293b : 0x183d2c;
 
             // Dark outline base triangle
             g.fillStyle(0x090d16, 1);
@@ -863,12 +854,6 @@ export class WorldManager {
               g.fillTriangle(capL, capY, px, topY + 1, px, capY + 4);
               g.fillStyle(0xbae6fd, 1);
               g.fillTriangle(px, capY + 4, px, topY + 1, capR, capY);
-            } else if (m.biome === 'volcano') {
-              // Glowing orange magma crack veins along basalt peak
-              g.lineStyle(2, 0xf97316, 0.9);
-              g.lineBetween(px, topY + 4, px - 10, botY - 8);
-              g.lineStyle(1, 0xfacc15, 0.9);
-              g.lineBetween(px, topY + 6, px + 8, botY - 12);
             } else {
               // Lush forest highland highlight ridge
               const capY = topY + (botY - topY) * 0.35;

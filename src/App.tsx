@@ -1,12 +1,11 @@
 import { useEffect } from 'react';
 import { GameContainer } from './app/GameContainer';
-import { CharacterModal } from './components/CharacterModal';
 import { GameHUD } from './components/GameHUD';
 import { HordePerkModal } from './components/HordePerkModal';
-import { MapModal } from './components/MapModal';
 import { MobileControls } from './components/MobileControls';
 import { PauseMenu } from './components/PauseMenu';
 import { ServiceModal } from './components/ServiceModal';
+import { TacticalHubModal } from './components/TacticalHubModal';
 import { TitleOverlay } from './components/TitleOverlay';
 import { GAME_EVENT, gameEvents } from './game/ui/GameEvents';
 import { useGameStore } from './store/gameStore';
@@ -30,27 +29,42 @@ export default function App() {
       const state = useGameStore.getState();
       if (state.mode !== 'PLAYING') return;
 
-      if (e.code === 'KeyC') {
-        if (!state.serviceModal && !state.hordePerkOffer) {
-          state.toggleCharacterModal();
+      if (state.serviceModal || state.hordePerkOffer) return;
+
+      if (e.code === 'Escape' && state.activeHubTab !== null) {
+        e.preventDefault();
+        state.closeHub();
+        return;
+      }
+
+      if (e.code === 'KeyM') {
+        e.preventDefault();
+        state.toggleHubTab('map');
+      } else if (e.code === 'KeyL') {
+        e.preventDefault();
+        state.toggleHubTab('missions');
+      } else if (e.code === 'KeyC') {
+        e.preventDefault();
+        state.toggleHubTab('character');
+      } else if (e.code === 'KeyB') {
+        e.preventDefault();
+        state.toggleHubTab('armory');
+      } else if (e.code === 'KeyK') {
+        if (state.playMode === 'sandbox') {
+          e.preventDefault();
+          state.toggleHubTab('craft');
         }
       } else if (e.code === 'KeyH') {
-        if (
-          !state.serviceModal &&
-          !state.showCharacterModal &&
-          !state.hordePerkOffer &&
-          !state.showMap
-        ) {
+        if (state.activeHubTab === null) {
           gameEvents.emit(GAME_EVENT.TRIGGER_HACK_JAM);
         }
       } else if (e.code === 'KeyV') {
-        if (
-          !state.serviceModal &&
-          !state.showCharacterModal &&
-          !state.hordePerkOffer &&
-          !state.showMap
-        ) {
+        if (state.activeHubTab === null) {
           state.toggleHudCompact();
+        }
+      } else if (e.code === 'KeyT') {
+        if (state.activeHubTab === null) {
+          gameEvents.emit(GAME_EVENT.CYCLE_WEATHER);
         }
       }
     };
@@ -69,14 +83,14 @@ export default function App() {
         <>
           <GameHUD />
           <MobileControls />
-          <MapModal />
           <ServiceModal />
-          <CharacterModal />
           <HordePerkModal />
         </>
       )}
 
       {mode === 'PAUSED' && <PauseMenu />}
+
+      <TacticalHubModal />
     </main>
   );
 }

@@ -1,5 +1,5 @@
 export type TimePhaseId = 'dawn' | 'day' | 'dusk' | 'night';
-export type WeatherId = 'clear' | 'rain' | 'storm' | 'sandstorm';
+export type WeatherId = 'clear' | 'rain' | 'acid_rain' | 'fog' | 'storm' | 'sandstorm';
 
 export interface TimePhaseSpec {
   id: TimePhaseId;
@@ -7,6 +7,18 @@ export interface TimePhaseSpec {
   tintColor: number;
   darknessAlpha: number;
   neonBoost: number;
+}
+
+export interface WeatherPostFxSpec {
+  saturation: number;
+  contrast: number;
+  brightness: number;
+  hueShiftDeg: number;
+  vignetteColor: number;
+  vignetteRadius: number;
+  vignetteStrength: number;
+  blurStrength: number;
+  scanlineAlpha: number;
 }
 
 export interface WeatherSpec {
@@ -17,6 +29,7 @@ export interface WeatherSpec {
   vehicleGripMult: number;
   overlayColor: number;
   overlayAlpha: number;
+  postFx: WeatherPostFxSpec;
 }
 
 export const TIME_PHASE_SPECS: Record<TimePhaseId, TimePhaseSpec> = {
@@ -24,68 +37,161 @@ export const TIME_PHASE_SPECS: Record<TimePhaseId, TimePhaseSpec> = {
     id: 'dawn',
     label: '破晓清晨',
     tintColor: 0x3b2d54,
-    darknessAlpha: 0.14,
+    darknessAlpha: 0.03,
     neonBoost: 0.72,
   },
   day: {
     id: 'day',
     label: '霓虹白昼',
     tintColor: 0x0f172a,
-    darknessAlpha: 0.04,
+    darknessAlpha: 0.0,
     neonBoost: 0.45,
   },
   dusk: {
     id: 'dusk',
     label: '赛博黄昏',
     tintColor: 0x5c2444,
-    darknessAlpha: 0.18,
+    darknessAlpha: 0.05,
     neonBoost: 0.88,
   },
   night: {
     id: 'night',
     label: '霓虹深夜',
-    tintColor: 0x060b1c,
-    darknessAlpha: 0.28,
+    tintColor: 0x0b132b,
+    darknessAlpha: 0.09,
     neonBoost: 1.0,
   },
 };
+
+export const WEATHER_ORDER: WeatherId[] = [
+  'clear',
+  'rain',
+  'acid_rain',
+  'fog',
+  'storm',
+  'sandstorm',
+];
 
 export const WEATHER_SPECS: Record<WeatherId, WeatherSpec> = {
   clear: {
     id: 'clear',
     label: '晴朗夜空',
-    effectHint: '视野与路面抓地力最佳',
+    effectHint: '视野与抓地力最佳 · 霓虹高反差锐利滤镜',
     policeSightMult: 1.0,
     vehicleGripMult: 1.0,
-    overlayColor: 0x000000,
-    overlayAlpha: 0,
+    overlayColor: 0x081126,
+    overlayAlpha: 0.0,
+    postFx: {
+      saturation: 0.18,
+      contrast: 0.08,
+      brightness: 1.16,
+      hueShiftDeg: 0,
+      vignetteColor: 0x020617,
+      vignetteRadius: 0.72,
+      vignetteStrength: 0.1,
+      blurStrength: 0,
+      scanlineAlpha: 0.012,
+    },
   },
   rain: {
     id: 'rain',
     label: '霓虹暴雨',
-    effectHint: '警队视野 -22% · 湿滑路面易漂移',
+    effectHint: '警队视野 -22% · 湿滑漂移 · 霓虹高饱和湿润滤镜',
     policeSightMult: 0.78,
     vehicleGripMult: 0.84,
     overlayColor: 0x082f49,
-    overlayAlpha: 0.16,
+    overlayAlpha: 0.05,
+    postFx: {
+      saturation: 0.28,
+      contrast: 0.1,
+      brightness: 1.12,
+      hueShiftDeg: 3,
+      vignetteColor: 0x062c43,
+      vignetteRadius: 0.68,
+      vignetteStrength: 0.16,
+      blurStrength: 0,
+      scanlineAlpha: 0.02,
+    },
+  },
+  acid_rain: {
+    id: 'acid_rain',
+    label: '赛博酸雨',
+    effectHint: '警队视野 -28% · 腐蚀湿滑 · 荧光毒雾赛博滤镜',
+    policeSightMult: 0.72,
+    vehicleGripMult: 0.82,
+    overlayColor: 0x052e16,
+    overlayAlpha: 0.06,
+    postFx: {
+      saturation: 0.24,
+      contrast: 0.11,
+      brightness: 1.1,
+      hueShiftDeg: -10,
+      vignetteColor: 0x14532d,
+      vignetteRadius: 0.65,
+      vignetteStrength: 0.18,
+      blurStrength: 0.18,
+      scanlineAlpha: 0.022,
+    },
+  },
+  fog: {
+    id: 'fog',
+    label: '霓虹浓雾',
+    effectHint: '警队视野 -42% · 低能见度潜行 · 柔焦迷雾滤镜',
+    policeSightMult: 0.58,
+    vehicleGripMult: 0.94,
+    overlayColor: 0x1e293b,
+    overlayAlpha: 0.09,
+    postFx: {
+      saturation: -0.1,
+      contrast: -0.04,
+      brightness: 1.13,
+      hueShiftDeg: 0,
+      vignetteColor: 0x334155,
+      vignetteRadius: 0.62,
+      vignetteStrength: 0.22,
+      blurStrength: 0.26,
+      scanlineAlpha: 0.015,
+    },
   },
   storm: {
     id: 'storm',
     label: '电磁雷暴',
-    effectHint: '警队视野 -35% · 强侧滑漂移',
+    effectHint: '警队视野 -35% · 强侧滑漂移 · 雷暴高压脉冲滤镜',
     policeSightMult: 0.65,
     vehicleGripMult: 0.78,
     overlayColor: 0x1e1b4b,
-    overlayAlpha: 0.22,
+    overlayAlpha: 0.07,
+    postFx: {
+      saturation: 0.22,
+      contrast: 0.13,
+      brightness: 1.09,
+      hueShiftDeg: 6,
+      vignetteColor: 0x312e81,
+      vignetteRadius: 0.66,
+      vignetteStrength: 0.2,
+      blurStrength: 0,
+      scanlineAlpha: 0.025,
+    },
   },
   sandstorm: {
     id: 'sandstorm',
     label: '赤岩沙暴',
-    effectHint: '警队索敌 -38% · 轻度风阻滑移',
+    effectHint: '警队索敌 -38% · 风阻滑移 · 废土琥珀滤镜',
     policeSightMult: 0.62,
     vehicleGripMult: 0.88,
     overlayColor: 0x78350f,
-    overlayAlpha: 0.22,
+    overlayAlpha: 0.07,
+    postFx: {
+      saturation: -0.04,
+      contrast: 0.09,
+      brightness: 1.12,
+      hueShiftDeg: -14,
+      vignetteColor: 0x7c2d12,
+      vignetteRadius: 0.64,
+      vignetteStrength: 0.2,
+      blurStrength: 0.14,
+      scanlineAlpha: 0.02,
+    },
   },
 };
 

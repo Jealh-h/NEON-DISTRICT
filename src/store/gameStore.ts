@@ -10,10 +10,16 @@ import {
   WORLD_CONFIG,
   WeaponId,
 } from '../game/config/BalanceConfig';
-import type { WeaponUpgradeLevels } from '../game/ui/GameEvents';
+import type {
+  GameSettingsPayload,
+  HubTabId,
+  VehicleUpgradeLevels,
+  WeaponUpgradeLevels,
+} from '../game/ui/GameEvents';
 import {
   ActiveMissionState,
   ArcadeResultPayload,
+  CustomWaypoint,
   EnvironmentTelemetryPayload,
   ExplorationPayload,
   GAME_EVENT,
@@ -32,8 +38,11 @@ import {
   RaceTelemetryPayload,
   RadioStationPayload,
   RandomEventMarker,
+  SandboxInteractableHint,
+  SandboxSummaryPayload,
   SaveStatusPayload,
   ServiceModalPayload,
+  TerrariaTelemetryPayload,
   VehicleTelemetryPayload,
   WantedTelemetryPayload,
   WeaponTelemetryPayload,
@@ -41,15 +50,71 @@ import {
 import { DistrictData } from '../game/world/DistrictManager';
 
 export type TouchControlsMode = 'auto' | 'on' | 'off';
+export type TitleSubModal = 'modes' | 'garage' | 'settings' | null;
+
+const SETTINGS_STORAGE_KEY = 'neon_district_settings_v1';
+
+export const DEFAULT_SETTINGS: GameSettingsPayload = {
+  quality: 'high',
+  brightness: 'bright',
+  weatherFx: true,
+  screenShake: true,
+  musicVolume: 80,
+  sfxVolume: 90,
+  autoPickup: true,
+  language: 'zh-CN',
+};
+
+function loadSavedSettings(): GameSettingsPayload {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(raw) as Partial<GameSettingsPayload>;
+    return {
+      quality:
+        parsed.quality === 'high' || parsed.quality === 'medium' || parsed.quality === 'low'
+          ? parsed.quality
+          : DEFAULT_SETTINGS.quality,
+      brightness:
+        parsed.brightness === 'bright' || parsed.brightness === 'classic'
+          ? parsed.brightness
+          : DEFAULT_SETTINGS.brightness,
+      weatherFx: typeof parsed.weatherFx === 'boolean' ? parsed.weatherFx : DEFAULT_SETTINGS.weatherFx,
+      screenShake:
+        typeof parsed.screenShake === 'boolean' ? parsed.screenShake : DEFAULT_SETTINGS.screenShake,
+      musicVolume:
+        typeof parsed.musicVolume === 'number'
+          ? Math.max(0, Math.min(100, Math.round(parsed.musicVolume)))
+          : DEFAULT_SETTINGS.musicVolume,
+      sfxVolume:
+        typeof parsed.sfxVolume === 'number'
+          ? Math.max(0, Math.min(100, Math.round(parsed.sfxVolume)))
+          : DEFAULT_SETTINGS.sfxVolume,
+      autoPickup:
+        typeof parsed.autoPickup === 'boolean' ? parsed.autoPickup : DEFAULT_SETTINGS.autoPickup,
+      language: 'zh-CN',
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function persistSettings(settings: GameSettingsPayload): void {
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore storage quota / private mode failures
+  }
+}
 
 function emitModalPauseState(
   serviceModal: ServiceModalPayload | null,
-  showCharacterModal: boolean,
+  activeHubTab: HubTabId | null,
   hordePerkOffer: HordePerkOfferPayload | null
 ): void {
   gameEvents.emit(
     GAME_EVENT.SET_MODAL_PAUSED,
-    Boolean(serviceModal || showCharacterModal || hordePerkOffer)
+    Boolean(serviceModal || activeHubTab || hordePerkOffer)
   );
 }
 
@@ -84,6 +149,7 @@ interface GameUIState {
   nearbyNpc: NearbyNpcInfo | null;
   nearbyVehicle: NearbyVehicleInfo | null;
   inVehicle: boolean;
+  vehicleId: string | null;
   vehicleName: string | null;
   vehicleType: VehicleType | null;
   vehicleSpeedKmh: number;
@@ -94,15 +160,26 @@ interface GameUIState {
   vehicleFlying: boolean;
   vehicleHasTurret: boolean;
   vehicleWeaponKind: VehicleWeaponKind | null;
+  vehicleUpgrades: VehicleUpgradeLevels | null;
+  vehiclePaintColor: number | null;
   radioStation: RadioStationPayload;
   horde: HordeTelemetryPayload;
   hordePerkOffer: HordePerkOfferPayload | null;
   race: RaceTelemetryPayload;
   exploration: ExplorationPayload;
+  sandboxSummary: SandboxSummaryPayload;
+  sandboxHint: SandboxInteractableHint | null;
+  sandboxCombo: number;
+  customWaypoint: CustomWaypoint | null;
   environment: EnvironmentTelemetryPayload;
   randomEvents: RandomEventMarker[];
   progression: ProgressionTelemetryPayload;
   showCharacterModal: boolean;
+  terraria: TerrariaTelemetryPayload;
+  showCraftModal: boolean;
+  activeHubTab: HubTabId | null;
+  titleSubModal: TitleSubModal;
+  settings: GameSettingsPayload;
   interactionToast: string | null;
   weapon: WeaponTelemetryPayload;
   muted: boolean;
@@ -130,11 +207,24 @@ interface GameUIState {
   setHordePerkOffer: (offer: HordePerkOfferPayload | null) => void;
   setRaceTelemetry: (payload: RaceTelemetryPayload) => void;
   setExploration: (payload: ExplorationPayload) => void;
+  setSandboxSummary: (payload: SandboxSummaryPayload) => void;
+  setSandboxHint: (hint: SandboxInteractableHint | null) => void;
+  setSandboxCombo: (combo: number) => void;
+  setCustomWaypoint: (wp: CustomWaypoint | null) => void;
   setEnvironment: (payload: EnvironmentTelemetryPayload) => void;
   setRandomEvents: (events: RandomEventMarker[]) => void;
   setProgression: (payload: ProgressionTelemetryPayload) => void;
+  openHubTab: (tab: HubTabId) => void;
+  closeHub: () => void;
+  toggleHubTab: (tab: HubTabId) => void;
+  setTitleSubModal: (modal: TitleSubModal) => void;
+  updateSettings: (partial: Partial<GameSettingsPayload>) => void;
+  resetSettings: () => void;
   setShowCharacterModal: (open: boolean) => void;
   toggleCharacterModal: () => void;
+  setTerraria: (payload: TerrariaTelemetryPayload) => void;
+  setShowCraftModal: (open: boolean) => void;
+  toggleCraftModal: () => void;
   setMissionSync: (payload: MissionSyncPayload) => void;
   setServiceModal: (modal: ServiceModalPayload | null) => void;
   setSaveStatus: (status: SaveStatusPayload) => void;
@@ -177,6 +267,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   nearbyNpc: null,
   nearbyVehicle: null,
   inVehicle: false,
+  vehicleId: null,
   vehicleName: null,
   vehicleType: null,
   vehicleSpeedKmh: 0,
@@ -187,6 +278,8 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   vehicleFlying: false,
   vehicleHasTurret: false,
   vehicleWeaponKind: null,
+  vehicleUpgrades: null,
+  vehiclePaintColor: null,
   radioStation: {
     index: RADIO_STATIONS[1].index,
     name: RADIO_STATIONS[1].name,
@@ -225,7 +318,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   race: {
     active: false,
     checkpointIndex: 0,
-    totalCheckpoints: 14,
+    totalCheckpoints: 16,
     targetPos: null,
     targetLabel: null,
     timeRemainingSec: 0,
@@ -235,17 +328,28 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   },
   exploration: {
     chipsCollected: 0,
-    totalChips: 10,
+    totalChips: 14,
     chipMarkers: [],
   },
+  sandboxSummary: {
+    signalTowers: [],
+    metroStations: [],
+    secretVaults: [],
+    gangOutposts: [],
+    bestStuntMeters: 0,
+    stuntsCompleted: 0,
+  },
+  sandboxHint: null,
+  sandboxCombo: 0,
+  customWaypoint: null,
   environment: {
-    timePhase: 'night',
-    timeLabel: '霓虹深夜',
-    clockText: '22:00',
+    timePhase: 'day',
+    timeLabel: '霓虹白昼',
+    clockText: '10:30',
     weather: 'clear',
-    weatherLabel: '晴朗夜空',
-    weatherEffectHint: '视野与路面抓地力最佳',
-    darknessAlpha: 0.28,
+    weatherLabel: '晴空霓虹',
+    weatherEffectHint: '全城视野极佳 · 昼夜高对比赛博霓虹夜景与晴朗路面',
+    darknessAlpha: 0,
   },
   randomEvents: [],
   progression: {
@@ -282,6 +386,31 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     damageReductionPct: 0,
   },
   showCharacterModal: false,
+  terraria: {
+    resources: {
+      scrap_alloy: 2,
+      neon_crystal: 1,
+      quantum_core: 0,
+      frost_ore: 0,
+      obsidian_shard: 0,
+      abyss_pearl: 0,
+      boss_soul: 0,
+    },
+    hasPlasmaPickaxe: false,
+    unlockedAccessories: [],
+    equippedAccessories: [],
+    potions: { ironskin: 1, mining: 1, recall: 1 },
+    ironskinBuffSec: 0,
+    miningBuffSec: 0,
+    structureCounts: { campfire: 0, barricade: 0, turret: 0, pylon: 0 },
+    pylons: [],
+    defeatedBossIds: [],
+    activeBoss: null,
+  },
+  showCraftModal: false,
+  activeHubTab: null,
+  titleSubModal: null,
+  settings: loadSavedSettings(),
   interactionToast: null,
   weapon: {
     equippedId: 'pistol',
@@ -309,10 +438,13 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   setMode: (mode) =>
     set({
       mode,
+      activeHubTab: mode === 'PLAYING' ? get().activeHubTab : null,
+      titleSubModal: mode === 'TITLE' ? get().titleSubModal : null,
       showMap: mode === 'PLAYING' ? get().showMap : false,
       serviceModal: mode === 'PLAYING' ? get().serviceModal : null,
       arcadeResult: mode === 'PLAYING' ? get().arcadeResult : null,
       showCharacterModal: mode === 'PLAYING' ? get().showCharacterModal : false,
+      showCraftModal: mode === 'PLAYING' ? get().showCraftModal : false,
       hordePerkOffer: mode === 'PLAYING' ? get().hordePerkOffer : null,
     }),
   setPlayMode: (playMode) => set({ playMode }),
@@ -327,6 +459,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   setVehicleTelemetry: (payload) =>
     set({
       inVehicle: payload.inVehicle,
+      vehicleId: payload.id,
       vehicleName: payload.name,
       vehicleType: payload.type,
       vehicleSpeedKmh: payload.speedKmh,
@@ -337,6 +470,8 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       vehicleFlying: Boolean(payload.isFlying),
       vehicleHasTurret: Boolean(payload.hasTurret),
       vehicleWeaponKind: payload.weaponKind ?? null,
+      vehicleUpgrades: payload.upgrades ?? null,
+      vehiclePaintColor: payload.paintColor ?? null,
     }),
   setRadioStation: (radioStation) => set({ radioStation }),
   setOwnsSafehouse: (ownsSafehouse) => set({ ownsSafehouse }),
@@ -360,26 +495,111 @@ export const useGameStore = create<GameUIState>((set, get) => ({
   setWeaponTelemetry: (weapon) => set({ weapon }),
   setHordeTelemetry: (horde) => set({ horde }),
   setHordePerkOffer: (hordePerkOffer) => {
-    emitModalPauseState(get().serviceModal, get().showCharacterModal, hordePerkOffer);
+    emitModalPauseState(get().serviceModal, get().activeHubTab, hordePerkOffer);
     set({ hordePerkOffer });
   },
   setRaceTelemetry: (race) => set({ race }),
   setExploration: (exploration) => set({ exploration }),
+  setSandboxSummary: (sandboxSummary) => set({ sandboxSummary }),
+  setSandboxHint: (sandboxHint) => set({ sandboxHint }),
+  setSandboxCombo: (sandboxCombo) => set({ sandboxCombo }),
+  setCustomWaypoint: (customWaypoint) => set({ customWaypoint }),
   setEnvironment: (environment) => set({ environment }),
   setRandomEvents: (randomEvents) => set({ randomEvents }),
   setProgression: (progression) => set({ progression }),
-  setShowCharacterModal: (showCharacterModal) => {
-    const nextOpen = get().mode === 'PLAYING' ? showCharacterModal : false;
-    emitModalPauseState(get().serviceModal, nextOpen, get().hordePerkOffer);
-    set({ showCharacterModal: nextOpen });
+  openHubTab: (tab) => {
+    const state = get();
+    if (state.mode === 'TITLE') {
+      const nextSub: TitleSubModal =
+        tab === 'settings' ? 'settings' : 'garage';
+      set({
+        activeHubTab: tab,
+        titleSubModal: nextSub,
+        showMap: false,
+        showCharacterModal: tab === 'character',
+        showCraftModal: false,
+      });
+      return;
+    }
+    if (state.mode === 'PAUSED') {
+      gameEvents.emit(GAME_EVENT.RESUME_GAME);
+    }
+    if (state.serviceModal || state.hordePerkOffer) return;
+    emitModalPauseState(state.serviceModal, tab, state.hordePerkOffer);
+    set({
+      activeHubTab: tab,
+      showMap: tab === 'map',
+      showCharacterModal: tab === 'character',
+      showCraftModal: tab === 'craft',
+    });
   },
-  toggleCharacterModal: () => {
+  closeHub: () => {
+    const state = get();
+    if (state.mode === 'PLAYING') {
+      emitModalPauseState(state.serviceModal, null, state.hordePerkOffer);
+    }
+    set({
+      activeHubTab: null,
+      titleSubModal: state.mode === 'TITLE' ? null : state.titleSubModal,
+      showMap: false,
+      showCharacterModal: false,
+      showCraftModal: false,
+    });
+  },
+  toggleHubTab: (tab) => {
     const state = get();
     if (state.mode !== 'PLAYING') return;
     if (state.serviceModal || state.hordePerkOffer) return;
-    const nextOpen = !state.showCharacterModal;
-    emitModalPauseState(state.serviceModal, nextOpen, state.hordePerkOffer);
-    set({ showCharacterModal: nextOpen, showMap: nextOpen ? false : state.showMap });
+    if (state.activeHubTab === tab) {
+      state.closeHub();
+    } else {
+      state.openHubTab(tab);
+    }
+  },
+  setTitleSubModal: (titleSubModal) => {
+    if (titleSubModal === 'garage') {
+      set({ titleSubModal, activeHubTab: 'vehicles' });
+    } else if (titleSubModal === 'settings') {
+      set({ titleSubModal, activeHubTab: 'settings' });
+    } else {
+      set({ titleSubModal, activeHubTab: null });
+    }
+  },
+  updateSettings: (partial) => {
+    const next: GameSettingsPayload = {
+      ...get().settings,
+      ...partial,
+      language: 'zh-CN',
+    };
+    persistSettings(next);
+    gameEvents.emit(GAME_EVENT.APPLY_SETTINGS, next);
+    set({ settings: next });
+  },
+  resetSettings: () => {
+    persistSettings(DEFAULT_SETTINGS);
+    gameEvents.emit(GAME_EVENT.APPLY_SETTINGS, DEFAULT_SETTINGS);
+    set({ settings: DEFAULT_SETTINGS });
+  },
+  setShowCharacterModal: (open) => {
+    if (open) {
+      get().openHubTab('character');
+    } else if (get().activeHubTab === 'character') {
+      get().closeHub();
+    }
+  },
+  toggleCharacterModal: () => {
+    get().toggleHubTab('character');
+  },
+  setTerraria: (terraria) => set({ terraria }),
+  setShowCraftModal: (open) => {
+    if (open) {
+      get().openHubTab('craft');
+    } else if (get().activeHubTab === 'craft') {
+      get().closeHub();
+    }
+  },
+  toggleCraftModal: () => {
+    get().toggleHubTab('craft');
   },
   setMissionSync: (payload) =>
     set({
@@ -388,7 +608,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
       totalMissionEarnings: payload.totalEarnings,
     }),
   setServiceModal: (serviceModal) => {
-    emitModalPauseState(serviceModal, get().showCharacterModal, get().hordePerkOffer);
+    emitModalPauseState(serviceModal, get().activeHubTab, get().hordePerkOffer);
     set({ serviceModal, arcadeResult: serviceModal ? get().arcadeResult : null });
   },
   setSaveStatus: (saveStatus) => set({ saveStatus }),
@@ -398,8 +618,14 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     gameEvents.emit(GAME_EVENT.SET_MUTED, nextMuted);
     set({ muted: nextMuted });
   },
-  toggleMap: () => set((s) => ({ showMap: !s.showMap })),
-  setShowMap: (showMap) => set({ showMap }),
+  toggleMap: () => get().toggleHubTab('map'),
+  setShowMap: (open) => {
+    if (open) {
+      get().openHubTab('map');
+    } else if (get().activeHubTab === 'map') {
+      get().closeHub();
+    }
+  },
   toggleHudCompact: () => set((s) => ({ hudCompact: !s.hudCompact })),
   cycleTouchControlsMode: () => {
     const current = get().touchControlsMode;

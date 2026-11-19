@@ -16,6 +16,13 @@ import type {
   TimePhaseId,
   WeatherId,
 } from '../config/ExpansionConfig';
+import type {
+  TerrariaAccessoryId,
+  TerrariaBossId,
+  TerrariaPotionId,
+  TerrariaResourceId,
+  TerrariaStructureType,
+} from '../config/TerrariaConfig';
 
 export type GameMode = 'TITLE' | 'PLAYING' | 'PAUSED';
 
@@ -36,6 +43,8 @@ export interface NearbyVehicleInfo {
   health: number;
   maxHealth: number;
   accentColor: string;
+  upgrades?: VehicleUpgradeLevels;
+  paintColor?: number | null;
 }
 
 export interface NearbyNpcInfo {
@@ -119,6 +128,7 @@ export interface VehicleTelemetryPayload {
   hasTurret?: boolean;
   weaponKind?: VehicleWeaponKind;
   upgrades?: VehicleUpgradeLevels;
+  paintColor?: number | null;
 }
 
 export interface MechTelemetryPayload {
@@ -236,6 +246,104 @@ export interface ExplorationPayload {
   chipMarkers: Array<{ x: number; y: number }>;
 }
 
+export interface SignalTowerStatus {
+  id: string;
+  districtId: string;
+  districtName: string;
+  name: string;
+  x: number;
+  y: number;
+  synced: boolean;
+  accentHex: string;
+}
+
+export interface MetroStationStatus {
+  id: string;
+  districtId: string;
+  name: string;
+  x: number;
+  y: number;
+  discovered: boolean;
+  accentHex: string;
+}
+
+export interface SecretVaultStatus {
+  id: string;
+  districtId: string;
+  name: string;
+  x: number;
+  y: number;
+  opened: boolean;
+  revealed: boolean;
+}
+
+export interface GangOutpostStatus {
+  id: string;
+  districtId: string;
+  name: string;
+  faction: string;
+  x: number;
+  y: number;
+  cleared: boolean;
+  guardsAlive: number;
+  accentHex: string;
+}
+
+export interface SandboxInteractableHint {
+  kind: 'tower' | 'vault' | 'metro' | 'ore' | 'campfire' | 'pylon';
+  id: string;
+  name: string;
+  actionLabel: string;
+  accentHex: string;
+}
+
+export interface TerrariaPylonMarker {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+}
+
+export interface TerrariaActiveBossTelemetry {
+  id: TerrariaBossId;
+  name: string;
+  hp: number;
+  maxHp: number;
+  phase2: boolean;
+  x: number;
+  y: number;
+  colorHex: string;
+}
+
+export interface TerrariaTelemetryPayload {
+  resources: Record<TerrariaResourceId, number>;
+  hasPlasmaPickaxe: boolean;
+  unlockedAccessories: TerrariaAccessoryId[];
+  equippedAccessories: TerrariaAccessoryId[];
+  potions: Record<TerrariaPotionId, number>;
+  ironskinBuffSec: number;
+  miningBuffSec: number;
+  structureCounts: Record<TerrariaStructureType, number>;
+  pylons: TerrariaPylonMarker[];
+  defeatedBossIds: TerrariaBossId[];
+  activeBoss: TerrariaActiveBossTelemetry | null;
+}
+
+export interface SandboxSummaryPayload {
+  signalTowers: SignalTowerStatus[];
+  metroStations: MetroStationStatus[];
+  secretVaults: SecretVaultStatus[];
+  gangOutposts: GangOutpostStatus[];
+  bestStuntMeters: number;
+  stuntsCompleted: number;
+}
+
+export interface CustomWaypoint {
+  x: number;
+  y: number;
+  label: string;
+}
+
 export interface ActiveMissionState {
   id: string;
   title: string;
@@ -275,10 +383,10 @@ export interface ServiceModalPayload {
 }
 
 export type PurchaseServicePayload =
-  | { serviceType: 'repair'; vehicleId: string }
+  | { serviceType: 'repair'; vehicleId: string; fromHub?: boolean }
   | { serviceType: 'respray' }
-  | { serviceType: 'upgrade'; vehicleId: string; track: VehicleUpgradeTrack }
-  | { serviceType: 'paint'; vehicleId: string; colorNum: number | null; colorName: string }
+  | { serviceType: 'upgrade'; vehicleId: string; track: VehicleUpgradeTrack; fromHub?: boolean }
+  | { serviceType: 'paint'; vehicleId: string; colorNum: number | null; colorName: string; fromHub?: boolean }
   | { serviceType: 'heal' }
   | { serviceType: 'snack' }
   | { serviceType: 'ramen' }
@@ -350,6 +458,26 @@ export interface SaveStatusPayload {
   completedCount: number;
 }
 
+export type HubTabId =
+  | 'map'
+  | 'missions'
+  | 'character'
+  | 'vehicles'
+  | 'armory'
+  | 'craft'
+  | 'settings';
+
+export interface GameSettingsPayload {
+  quality: 'high' | 'medium' | 'low';
+  brightness: 'bright' | 'classic';
+  weatherFx: boolean;
+  screenShake: boolean;
+  musicVolume: number;
+  sfxVolume: number;
+  autoPickup: boolean;
+  language: 'zh-CN';
+}
+
 export const GAME_EVENT = {
   START_GAME: 'game:start',
   START_PLAY_MODE: 'game:start_play_mode',
@@ -382,14 +510,18 @@ export const GAME_EVENT = {
   ABANDON_MISSION: 'mission:abandon',
   MISSION_UPDATED: 'mission:updated',
   PURCHASE_SERVICE: 'economy:purchase_service',
+  SPAWN_GARAGE_VEHICLE: 'vehicle:spawn_garage',
   UPGRADE_SKILL: 'progression:upgrade_skill',
   BUY_CYBERWARE: 'progression:buy_cyberware',
   TRIGGER_HACK_JAM: 'progression:trigger_hack_jam',
   SELECT_HORDE_PERK: 'horde:select_perk',
   HORDE_PERK_OFFER: 'horde:perk_offer',
   ENVIRONMENT_UPDATED: 'world:environment_updated',
+  CYCLE_WEATHER: 'world:cycle_weather',
   RANDOM_EVENTS_UPDATED: 'world:random_events_updated',
   PROGRESSION_UPDATED: 'progression:updated',
+  APPLY_SETTINGS: 'settings:apply',
+  SANDBOX_COMBO_CHANGED: 'combat:sandbox_combo_changed',
   SCENE_READY: 'scene:ready',
   PLAYER_MOVED: 'player:moved',
   PLAYER_STATS: 'player:stats',
@@ -399,6 +531,16 @@ export const GAME_EVENT = {
   HORDE_UPDATED: 'horde:updated',
   RACE_UPDATED: 'race:updated',
   EXPLORATION_UPDATED: 'exploration:updated',
+  SANDBOX_HINT: 'sandbox:hint',
+  SANDBOX_UPDATED: 'sandbox:updated',
+  FAST_TRAVEL_METRO: 'sandbox:fast_travel_metro',
+  TERRARIA_UPDATED: 'terraria:updated',
+  TOGGLE_CRAFT_MODAL: 'ui:toggle_craft_modal',
+  TERRARIA_CRAFT: 'terraria:craft',
+  TERRARIA_TOGGLE_ACCESSORY: 'terraria:toggle_accessory',
+  TERRARIA_USE_POTION: 'terraria:use_potion',
+  TERRARIA_RECALL_PYLON: 'terraria:recall_pylon',
+  SET_CUSTOM_WAYPOINT: 'ui:set_custom_waypoint',
   LANDMARK_NEARBY: 'landmark:nearby',
   PROP_NEARBY: 'prop:nearby',
   NPC_NEARBY: 'npc:nearby',

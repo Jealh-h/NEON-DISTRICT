@@ -18,30 +18,37 @@ interface VehicleSpawnDef {
 }
 
 const INITIAL_VEHICLE_SPAWNS: VehicleSpawnDef[] = [
-  // East-side Plaza Parking Bay & Central Plaza
-  { id: 'veh-compact-lot1', type: 'compact', x: 1488, y: 496, angleDeg: 180 },
-  { id: 'veh-racer-lot2', type: 'racer', x: 1488, y: 560, angleDeg: 180 },
-  { id: 'veh-super-plaza', type: 'supercar', x: 800, y: 344, angleDeg: 0 },
-  { id: 'veh-moto-plaza', type: 'moto', x: 640, y: 354, angleDeg: 0 },
-  { id: 'veh-superbike-plaza', type: 'superbike', x: 1080, y: 344, angleDeg: 180 },
-  { id: 'veh-racer-synth', type: 'racer', x: 960, y: 862, angleDeg: 180 },
-  // NCPD Cruisers & Heavy SWAT APC
-  { id: 'veh-cruiser-corp', type: 'cruiser', x: 382, y: 204, angleDeg: 90 },
-  { id: 'veh-swat-ncpd', type: 'swat', x: 800, y: 944, angleDeg: 0 },
-  // Extra City Compact near Plaza Garage
-  { id: 'veh-compact-garage', type: 'compact', x: 1326, y: 1020, angleDeg: -90 },
-  // Riverside Park, Highland Overlook & Buggy Trails
-  { id: 'veh-compact-park', type: 'compact', x: 420, y: 1600, angleDeg: 0 },
-  { id: 'veh-racer-mountain', type: 'racer', x: 2212, y: 468, angleDeg: 90 },
-  { id: 'veh-buggy-highland', type: 'buggy', x: 1940, y: 740, angleDeg: 90 },
-  { id: 'veh-heli-highland', type: 'heli', x: 2216, y: 660, angleDeg: 0 },
-  // Dark Harbor Docks, Helipad & Chrome Town Tank/Foundry
-  { id: 'veh-moto-harbor', type: 'moto', x: 440, y: 1840, angleDeg: 0 },
-  { id: 'veh-buggy-harbor', type: 'buggy', x: 620, y: 1860, angleDeg: 0 },
-  { id: 'veh-heli-harbor', type: 'heli', x: 200, y: 1810, angleDeg: 0 },
-  { id: 'veh-compact-harbor', type: 'compact', x: 1220, y: 2060, angleDeg: 180 },
-  { id: 'veh-super-chrome', type: 'supercar', x: 2288, y: 1720, angleDeg: 0 },
-  { id: 'veh-tank-chrome', type: 'tank', x: 2400, y: 1840, angleDeg: 180 },
+  // Neon Plaza & Parking Lot
+  { id: 'veh-compact-lot1', type: 'compact', x: 656, y: 1120, angleDeg: 180 },
+  { id: 'veh-racer-lot2', type: 'racer', x: 656, y: 1200, angleDeg: 180 },
+  { id: 'veh-super-plaza', type: 'supercar', x: 1312, y: 1280, angleDeg: 0 },
+  { id: 'veh-moto-plaza', type: 'moto', x: 1120, y: 1088, angleDeg: 0 },
+  { id: 'veh-superbike-plaza', type: 'superbike', x: 1480, y: 1280, angleDeg: 180 },
+  { id: 'veh-racer-synth', type: 'racer', x: 1040, y: 1024, angleDeg: 180 },
+  { id: 'veh-compact-garage', type: 'compact', x: 480, y: 1056, angleDeg: -90 },
+  // NCPD HQ Patrols
+  { id: 'veh-cruiser-corp', type: 'cruiser', x: 1040, y: 464, angleDeg: 90 },
+  { id: 'veh-swat-ncpd', type: 'swat', x: 1248, y: 464, angleDeg: 0 },
+  // Quantum Tech Corridor
+  { id: 'veh-super-tech', type: 'supercar', x: 2048, y: 512, angleDeg: 0 },
+  { id: 'veh-superbike-tech', type: 'superbike', x: 2352, y: 1088, angleDeg: 180 },
+  // Riverside Park & Highlands (Snow, Canyon, Volcano)
+  { id: 'veh-compact-park', type: 'compact', x: 1584, y: 1584, angleDeg: 0 },
+  { id: 'veh-racer-mountain', type: 'racer', x: 3680, y: 704, angleDeg: 90 },
+  { id: 'veh-buggy-highland', type: 'buggy', x: 4032, y: 672, angleDeg: 90 },
+  { id: 'veh-buggy-volcano', type: 'buggy', x: 3968, y: 1280, angleDeg: 0 },
+  // Dark Harbor Docks & Helipad
+  { id: 'veh-moto-harbor', type: 'moto', x: 448, y: 2768, angleDeg: 0 },
+  { id: 'veh-buggy-harbor', type: 'buggy', x: 1120, y: 2992, angleDeg: 0 },
+  { id: 'veh-heli-harbor', type: 'heli', x: 544, y: 2432, angleDeg: 0 },
+  { id: 'veh-compact-harbor', type: 'compact', x: 768, y: 2496, angleDeg: 180 },
+  // Chrome Town Foundry, F1 Speedway & Tank Depot
+  { id: 'veh-super-chrome', type: 'supercar', x: 1976, y: 2768, angleDeg: 0 },
+  { id: 'veh-tank-chrome', type: 'tank', x: 3120, y: 2496, angleDeg: 180 },
+  // Neon Skyport Runway, Helipads & Hangar
+  { id: 'veh-heli-skyport-1', type: 'heli', x: 3680, y: 2240, angleDeg: 0 },
+  { id: 'veh-heli-skyport-2', type: 'heli', x: 4160, y: 2240, angleDeg: 180 },
+  { id: 'veh-super-skyport', type: 'supercar', x: 3648, y: 2464, angleDeg: 0 },
 ];
 
 export class VehicleManager {
@@ -153,6 +160,8 @@ export class VehicleManager {
       health: closest.getHealth(),
       maxHealth: closest.getEffectiveMaxHealth(),
       accentColor: closest.spec.accentHex,
+      upgrades: closest.getUpgrades(),
+      paintColor: closest.getPaintColor(),
     };
   }
 
@@ -252,8 +261,8 @@ export class VehicleManager {
     }
 
     target.restoreState(
-      800,
-      344,
+      1312,
+      1320,
       0,
       target.getEffectiveMaxHealth(),
       target.getUpgrades(),
@@ -282,7 +291,7 @@ export class VehicleManager {
     dtSeconds: number,
     controls: DrivingControlsState,
     district?: DistrictData,
-    onStuntLanded?: (bonus: number) => void,
+    onStuntLanded?: (bonus: number, meters: number) => void,
     onVehicleDestroyed?: (vehicle: Vehicle, wasOccupied: boolean) => void,
     modifiers?: { speedMult?: number; nitroRegenMult?: number; gripMult?: number }
   ): void {
@@ -312,10 +321,9 @@ export class VehicleManager {
         v.update(
           dtSeconds,
           controls,
-          (bonus) => {
+          (bonus, meters) => {
             this.audioManager.playPurchase();
-            gameEvents.emit(GAME_EVENT.STATUS_TOAST, `极限飞跃着陆！特技奖励 +$${bonus}`);
-            onStuntLanded?.(bonus);
+            onStuntLanded?.(bonus, meters);
           },
           handleDestroyed,
           modifiers

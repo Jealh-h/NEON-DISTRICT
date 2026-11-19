@@ -7,13 +7,17 @@ import {
   MECH_SPECS,
   PLAYER_CONFIG,
   RADIO_STATIONS,
+  VEHICLE_BUY_COSTS,
+  VEHICLE_SPECS,
   VEHICLE_UPGRADE_CONFIG,
+  VehicleType,
   WANTED_CONFIG,
   WEAPON_SPECS,
   WEAPON_UPGRADE_CONFIG,
   WORLD_CONFIG,
 } from '../config/BalanceConfig';
 import { CyberwareSlotId, SkillTrackId } from '../config/ExpansionConfig';
+import type { TerrariaPotionId } from '../config/TerrariaConfig';
 import { Player } from '../entities/Player';
 import { AudioManager } from '../systems/AudioManager';
 import { HordeManager } from '../systems/HordeManager';
@@ -26,17 +30,28 @@ import { PoliceManager } from '../systems/PoliceManager';
 import { ProgressionManager } from '../systems/ProgressionManager';
 import { RaceManager } from '../systems/RaceManager';
 import { RandomEventManager } from '../systems/RandomEventManager';
-import { SaveManager } from '../systems/SaveManager';
+import { CURRENT_MAP_LAYOUT_VERSION, SaveManager } from '../systems/SaveManager';
+import {
+  SandboxExplorationManager,
+  SandboxUpdateCallbacks,
+} from '../systems/SandboxExplorationManager';
+import {
+  TerrariaSandboxManager,
+  TerrariaTurretTarget,
+  TerrariaUpdateCallbacks,
+} from '../systems/TerrariaSandboxManager';
 import { TrafficManager } from '../systems/TrafficManager';
 import { VehicleManager } from '../systems/VehicleManager';
 import { WantedManager } from '../systems/WantedManager';
 import { WeaponManager } from '../systems/WeaponManager';
 import {
   AimFirePayload,
+  CustomWaypoint,
   DrivingInputPayload,
   GAME_EVENT,
   gameEvents,
   GameMode,
+  GameSettingsPayload,
   LandmarkInfo,
   PurchaseServicePayload,
   ServiceModalKind,
@@ -55,6 +70,7 @@ const SERVICE_LANDMARK_IDS = new Set([
   'kitsune-noodles',
   'harbor-market',
   'chrome-workshop',
+  'skyport-garage',
   'skyline-apts',
   'arcade-lounge',
   'synth-club',
@@ -80,6 +96,8 @@ export class CityScene extends Phaser.Scene {
   private progressionManager!: ProgressionManager;
   private randomEventManager!: RandomEventManager;
   private environmentManager!: EnvironmentManager;
+  private sandboxManager!: SandboxExplorationManager;
+  private terrariaManager!: TerrariaSandboxManager;
   private saveManager!: SaveManager;
   private player!: Player;
   private districtData!: DistrictData;
@@ -93,7 +111,9 @@ export class CityScene extends Phaser.Scene {
   private autoSaveTimer = 0;
   private activeLandmark: LandmarkInfo | null = null;
   private lastNearbyPropId: string | null = null;
+  private lastSandboxHintKey: string | null = null;
   private currentGarageId = 'plaza-garage';
+  private customWaypoint: CustomWaypoint | null = null;
   private ownsSafehouse = false;
   private lastStoreRobberyAt = -999999;
   private clubOverdriveTimer = 0;
@@ -103,6 +123,9 @@ export class CityScene extends Phaser.Scene {
   private playerMaxArmor: number = PLAYER_CONFIG.MAX_ARMOR;
   private playerCash: number = PLAYER_CONFIG.INITIAL_CASH;
   private lastDamageAt = 0;
+  private screenShakeEnabled = true;
+  private sandboxCombo = 0;
+  private sandboxComboTimer = 0;
   private unsubscribers: Array<() => void> = [];
 
   constructor() {
@@ -167,12 +190,24 @@ export class CityScene extends Phaser.Scene {
       this.pickupManager
     );
     this.environmentManager = new EnvironmentManager(this);
+    this.sandboxManager = new SandboxExplorationManager(this, this.audioManager);
+    this.sandboxManager.initializeWorld(this.districtData);
+    this.terrariaManager = new TerrariaSandboxManager(
+      this,
+      this.collisionManager,
+      this.audioManager
+    );
+    this.terrariaManager.initializeWorld();
     this.saveManager = new SaveManager();
 
     this.weaponManager.configureIntegrations({
       progressionManager: this.progressionManager,
       hordeManager: this.hordeManager,
       randomEventManager: this.randomEventManager,
+      sandboxExplorationManager: this.sandboxManager,
+      sandboxCallbacks: this.getSandboxCallbacks(),
+      terrariaManager: this.terrariaManager,
+      terrariaCallbacks: this.getTerrariaCallbacks(),
       getPlayerHpRatio: () => this.playerHealth / Math.max(1, this.playerMaxHealth),
       onCombatKillBonus: (healHp, healArmor, exp) => {
         if (healHp > 0) {
@@ -187,6 +222,9 @@ export class CityScene extends Phaser.Scene {
         if (exp > 0) {
           this.progressionManager.addExp(exp);
         }
+        if (this.playMode === 'sandbox') {
+          this.incrementSandboxCombo(1);
+        }
       },
     });
 
@@ -196,21 +234,27 @@ export class CityScene extends Phaser.Scene {
       this.vehicleManager.getVehicleSprites(),
       (vehSprite, _npc, speed) => {
         const activeVeh = this.vehicleManager.getActiveVehicle();
-        if (this.playMode === 'sandbox' && activeVeh && activeVeh.sprite === vehSprite && speed > 55) {
-          this.wantedManager.reportCrime('hit_pedestrian', { x: vehSprite.x, y: vehSprite.y }, true);
+        if (this.playMode === 'sandbox' && activeVeh && activeVeh.sprite === vehSprite && speed > 115) {
+          const nearbyPolice = this.policeManager.isPoliceNearby(vehSprite.x, vehSprite.y, 300);
+          this.wantedManager.reportCrime(
+            'hit_pedestrian',
+            { x: vehSprite.x, y: vehSprite.y },
+            nearbyPolice || speed > 210
+          );
         }
       }
     );
 
     this.trafficManager = new TrafficManager(this, this.audioManager);
+    this.trafficManager.setTrafficSignals(this.districtData.trafficSignals);
     this.trafficManager.spawnTraffic(
       this.player,
       this.vehicleManager.getVehicleSprites(),
       this.npcManager,
       (vehSprite, speed) => {
         const activeVeh = this.vehicleManager.getActiveVehicle();
-        if (this.playMode === 'sandbox' && activeVeh && activeVeh.sprite === vehSprite && speed > 150) {
-          const nearbyPolice = this.policeManager.isPoliceNearby(vehSprite.x, vehSprite.y, 420);
+        if (this.playMode === 'sandbox' && activeVeh && activeVeh.sprite === vehSprite && speed > 185) {
+          const nearbyPolice = this.policeManager.isPoliceNearby(vehSprite.x, vehSprite.y, 300);
           this.wantedManager.reportCrime('reckless_crash', { x: vehSprite.x, y: vehSprite.y }, nearbyPolice);
         }
       }
@@ -237,6 +281,8 @@ export class CityScene extends Phaser.Scene {
     this.hordeManager.emitTelemetry(true);
     this.raceManager.emitTelemetry(true);
     this.pickupManager.emitExploration();
+    this.sandboxManager.emitSummary(true);
+    this.terrariaManager.emitTelemetry(true);
     this.progressionManager.emitTelemetry(true);
     this.environmentManager.emitTelemetry(true);
     this.randomEventManager.emitTelemetry(true);
@@ -260,6 +306,104 @@ export class CityScene extends Phaser.Scene {
     this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor);
   }
 
+  private getSandboxCallbacks(): SandboxUpdateCallbacks {
+    return {
+      onCash: (amount) => {
+        const scaled = Math.round(amount * this.progressionManager.getRewardCashMultiplier());
+        this.playerCash += scaled;
+        this.emitPlayerStats();
+      },
+      onArmor: (amount) => {
+        this.playerArmor = Math.min(this.playerMaxArmor, this.playerArmor + amount);
+        this.emitPlayerStats();
+      },
+      onExp: (amount) => {
+        this.progressionManager.addExp(amount);
+      },
+      onDamagePlayer: (amount) => this.applyPlayerDamage(amount),
+      onMinorWantedPulse: (pos) => {
+        if (this.playMode === 'sandbox' && this.wantedManager.getWantedLevel() === 0) {
+          this.wantedManager.reportCrime('weapon_discharge', pos, false);
+        }
+      },
+      progressionManager: this.progressionManager,
+    };
+  }
+
+  private getTerrariaCallbacks(): TerrariaUpdateCallbacks {
+    const sandboxCb = this.getSandboxCallbacks();
+    return {
+      onHealPlayer: (amount) => {
+        if (this.playerHealth >= this.playerMaxHealth) return;
+        this.playerHealth = Math.min(this.playerMaxHealth, this.playerHealth + amount);
+        this.emitPlayerStats();
+      },
+      onDamagePlayer: (amount) => this.applyPlayerDamage(amount),
+      onCash: sandboxCb.onCash,
+      onExp: sandboxCb.onExp,
+      onOverdrive: (sec) => {
+        this.clubOverdriveTimer = Math.max(this.clubOverdriveTimer, sec);
+      },
+      onRecallHome: () => {
+        const dest = this.ownsSafehouse
+          ? { x: 1472, y: 1216 }
+          : { x: WORLD_CONFIG.PLAYER_SPAWN.x, y: WORLD_CONFIG.PLAYER_SPAWN.y };
+        this.teleportPlayerCleanly(dest);
+        if (this.wantedManager.getWantedLevel() > 0) {
+          this.wantedManager.reduceWanted(1);
+        }
+        gameEvents.emit(
+          GAME_EVENT.STATUS_TOAST,
+          this.ownsSafehouse
+            ? '🌀 折跃回城：已返回私人安全屋并降低 1 级通缉！'
+            : '🌀 折跃回城：已返回霓虹广场枢纽并降低 1 级通缉！'
+        );
+      },
+      getExtraTurretTargets: () => {
+        const targets: TerrariaTurretTarget[] = [];
+        for (const gt of this.sandboxManager.getActiveGuardTargets()) {
+          targets.push({
+            x: gt.x,
+            y: gt.y,
+            damage: (amt) => gt.damage(amt, sandboxCb),
+          });
+        }
+        for (const rt of this.randomEventManager.getTurretTargets()) {
+          targets.push(rt);
+        }
+        if (this.wantedManager.getWantedLevel() > 0) {
+          for (const unit of this.policeManager.getUnits()) {
+            if (unit.isDisabled()) continue;
+            targets.push({
+              x: unit.sprite.x,
+              y: unit.sprite.y,
+              damage: (amt) => unit.takeHit(amt, 0, 0).destroyed,
+            });
+          }
+        }
+        return targets;
+      },
+    };
+  }
+
+  private teleportPlayerCleanly(dest: { x: number; y: number }): void {
+    if (this.vehicleManager.getActiveVehicle()) {
+      this.vehicleManager.forceEject(this.player, dest);
+      const cam = this.cameras.main;
+      cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+      cam.setZoom(this.getTargetZoom(false));
+      this.audioManager.setRadioPlaying(false);
+      this.emitVehicleTelemetry(null);
+    } else {
+      this.player.resetPosition(dest.x, dest.y);
+    }
+    this.cameras.main.flash(220, 0, 245, 255, false);
+    this.cameras.main.centerOn(dest.x, dest.y);
+    this.audioManager.playMissionComplete();
+    this.emitTelemetry(true);
+    this.performSave(true);
+  }
+
   private getTargetZoom(isDriving: boolean): number {
     const isCompactViewport = this.scale.width < 900 || this.scale.height < 520;
     if (isDriving) {
@@ -270,6 +414,18 @@ export class CityScene extends Phaser.Scene {
 
   private configureCamera(): void {
     const cam = this.cameras.main;
+    const originalShake = cam.shake.bind(cam);
+    cam.shake = ((
+      duration?: number,
+      intensity?: number,
+      force?: boolean,
+      callback?: Phaser.Types.Cameras.Scene2D.CameraShakeCallback,
+      context?: unknown
+    ) => {
+      if (!this.screenShakeEnabled) return cam;
+      return originalShake(duration, intensity, force, callback, context);
+    }) as typeof cam.shake;
+
     cam.setZoom(this.getTargetZoom(false));
     cam.setBounds(0, 0, WORLD_CONFIG.WIDTH, WORLD_CONFIG.HEIGHT);
     cam.centerOn(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
@@ -334,6 +490,7 @@ export class CityScene extends Phaser.Scene {
       if (this.playMode === 'sandbox') {
         this.performSave(true);
       }
+      this.resetSandboxCombo();
       this.hordeManager.stop(this.player);
       this.raceManager.stop();
       this.pickupManager.clearTemporaryDrops();
@@ -369,11 +526,6 @@ export class CityScene extends Phaser.Scene {
       const activeVeh = this.vehicleManager.getActiveVehicle();
       if (!activeVeh || activeVeh.spec.weaponKind === 'driveby') {
         this.weaponManager.switchWeapon(slot ?? 'next', this.player);
-      }
-    };
-    const onOpenQuickArmory = () => {
-      if (this.mode === 'PLAYING') {
-        this.openQuickArmoryModal();
       }
     };
     const onTriggerMechAbility = () => {
@@ -439,6 +591,7 @@ export class CityScene extends Phaser.Scene {
         this.inputManager.resetAllHeldInputs();
         this.physics.world.pause();
       } else {
+        this.inputManager.consumePauseJustPressed();
         this.physics.world.resume();
         this.audioManager.setRadioPlaying(Boolean(this.vehicleManager.getActiveVehicle()));
       }
@@ -482,6 +635,140 @@ export class CityScene extends Phaser.Scene {
         },
       });
     };
+    const onCycleWeather = () => {
+      if (this.mode !== 'PLAYING') return;
+      this.environmentManager.cycleWeatherManual();
+    };
+    const onFastTravelMetro = (metroId: string) => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      if (this.wantedManager.getWantedLevel() > 0) {
+        this.audioManager.playBump(this.time.now);
+        gameEvents.emit(
+          GAME_EVENT.STATUS_TOAST,
+          '通缉追捕中无法搭乘磁悬浮传送！请先甩脱警队或前往车库喷漆消星。'
+        );
+        return;
+      }
+      const dest = this.sandboxManager.getFastTravelDestination(metroId);
+      if (!dest) {
+        this.audioManager.playBump(this.time.now);
+        gameEvents.emit(
+          GAME_EVENT.STATUS_TOAST,
+          '该磁悬浮站点尚未发现！靠近站点或黑入对应区域信号塔即可解锁。'
+        );
+        return;
+      }
+      const spawnPt = { x: dest.spawnX, y: dest.spawnY };
+      if (this.vehicleManager.getActiveVehicle()) {
+        this.vehicleManager.forceEject(this.player, spawnPt);
+        const cam = this.cameras.main;
+        cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+        cam.setZoom(this.getTargetZoom(false));
+        this.audioManager.setRadioPlaying(false);
+        this.emitVehicleTelemetry(null);
+      } else {
+        this.player.resetPosition(spawnPt.x, spawnPt.y);
+      }
+      this.cameras.main.flash(220, 0, 245, 255, false);
+      this.cameras.main.centerOn(spawnPt.x, spawnPt.y);
+      this.audioManager.playMissionComplete();
+      this.emitTelemetry(true);
+      this.performSave(true);
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, `磁悬浮快车直达：【${dest.name}】！`);
+    };
+    const onSetCustomWaypoint = (wp: CustomWaypoint | null) => {
+      this.customWaypoint = wp;
+      if (this.playMode === 'sandbox') {
+        this.performSave(true);
+      }
+    };
+    const onTerrariaCraft = (recipeId: string) => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      const pos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
+      const ang = this.player.getFacingRadians();
+      if (this.terrariaManager.craftRecipe(recipeId, pos, ang, this.getTerrariaCallbacks())) {
+        this.performSave(true);
+      }
+    };
+    const onTerrariaToggleAccessory = (accessoryId: Parameters<TerrariaSandboxManager['toggleAccessory']>[0]) => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      this.terrariaManager.toggleAccessory(accessoryId);
+      this.performSave(true);
+    };
+    const onTerrariaUsePotion = (potionId: TerrariaPotionId) => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      if (this.terrariaManager.usePotion(potionId, this.getTerrariaCallbacks())) {
+        this.performSave(true);
+      }
+    };
+    const onTerrariaRecallPylon = (pylonId: string) => {
+      if (this.mode !== 'PLAYING' || this.playMode !== 'sandbox') return;
+      if (this.wantedManager.getWantedLevel() > 0) {
+        this.audioManager.playBump(this.time.now);
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '通缉追捕中无法通过折跃晶塔传送！');
+        return;
+      }
+      const dest = this.terrariaManager.getPylonDestination(pylonId);
+      if (!dest) return;
+      this.teleportPlayerCleanly({ x: dest.x, y: dest.y });
+      gameEvents.emit(GAME_EVENT.STATUS_TOAST, `⚡ 已折跃传送至【${dest.label}】！`);
+    };
+
+    const onApplySettings = (settings: GameSettingsPayload) => {
+      this.screenShakeEnabled = settings.screenShake;
+      this.audioManager.setVolumes(settings.musicVolume, settings.sfxVolume);
+      this.environmentManager.setVisualPreferences(
+        settings.weatherFx,
+        settings.brightness,
+        settings.quality
+      );
+    };
+    const onSpawnGarageVehicle = (vehicleType: VehicleType) => {
+      if (this.mode !== 'PLAYING' || (this.playMode !== 'sandbox' && this.playMode !== 'horde')) {
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, '当前模式暂不支持空投定制载具！');
+        return;
+      }
+      const spec = VEHICLE_SPECS[vehicleType];
+      const cost = VEHICLE_BUY_COSTS[vehicleType];
+      if (!spec || cost === undefined) return;
+      if (this.playerCash < cost) {
+        this.audioManager.playBump(this.time.now);
+        gameEvents.emit(GAME_EVENT.STATUS_TOAST, `现金不足！购入【${spec.name}】需要 $${cost.toLocaleString()}。`);
+        return;
+      }
+      this.playerCash -= cost;
+      this.emitPlayerStats();
+
+      const originPos = this.vehicleManager.getActiveVehicle()?.getPosition() ?? this.player.getPosition();
+      let dropPos = originPos;
+      outer: for (const radius of [68, 92, 118]) {
+        for (let i = 0; i < 12; i++) {
+          const ang = (Math.PI * 2 * i) / 12;
+          const cx = originPos.x + Math.cos(ang) * radius;
+          const cy = originPos.y + Math.sin(ang) * radius;
+          if (this.collisionManager.isPointClearForEntity(cx, cy, 18)) {
+            dropPos = { x: cx, y: cy };
+            break outer;
+          }
+        }
+      }
+
+      const angleDeg = Math.round(this.player.getFacingDegrees());
+      this.vehicleManager.spawnDynamicVehicle(vehicleType, dropPos.x, dropPos.y, angleDeg);
+      this.audioManager.playOrbitalStrike();
+      if (!this.vehicleManager.getActiveVehicle()) {
+        const pPos = this.player.getPosition();
+        const nv = this.vehicleManager.findClosestVehicle(pPos.x, pPos.y);
+        if (nv) {
+          gameEvents.emit(GAME_EVENT.VEHICLE_NEARBY, nv);
+        }
+      }
+      this.performSave(true);
+      gameEvents.emit(
+        GAME_EVENT.STATUS_TOAST,
+        `🚁 空投完成：【${spec.name}】已降落在你附近！按 F 上车驾驶！`
+      );
+    };
 
     gameEvents.on(GAME_EVENT.START_GAME, onStart);
     gameEvents.on(GAME_EVENT.START_PLAY_MODE, onStartPlayMode);
@@ -498,7 +785,6 @@ export class CityScene extends Phaser.Scene {
     gameEvents.on(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
     gameEvents.on(GAME_EVENT.AIM_FIRE, onAimFire);
     gameEvents.on(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
-    gameEvents.on(GAME_EVENT.OPEN_QUICK_ARMORY, onOpenQuickArmory);
     gameEvents.on(GAME_EVENT.DRIVING_INPUT, onDrivingInput);
     gameEvents.on(GAME_EVENT.TRIGGER_INTERACT, onVirtualInteract);
     gameEvents.on(GAME_EVENT.TRIGGER_ENTER_EXIT, onVirtualEnterExit);
@@ -511,6 +797,15 @@ export class CityScene extends Phaser.Scene {
     gameEvents.on(GAME_EVENT.BUY_CYBERWARE, onBuyCyberware);
     gameEvents.on(GAME_EVENT.TRIGGER_HACK_JAM, onTriggerHackJam);
     gameEvents.on(GAME_EVENT.SELECT_HORDE_PERK, onSelectHordePerk);
+    gameEvents.on(GAME_EVENT.CYCLE_WEATHER, onCycleWeather);
+    gameEvents.on(GAME_EVENT.FAST_TRAVEL_METRO, onFastTravelMetro);
+    gameEvents.on(GAME_EVENT.SET_CUSTOM_WAYPOINT, onSetCustomWaypoint);
+    gameEvents.on(GAME_EVENT.TERRARIA_CRAFT, onTerrariaCraft);
+    gameEvents.on(GAME_EVENT.TERRARIA_TOGGLE_ACCESSORY, onTerrariaToggleAccessory);
+    gameEvents.on(GAME_EVENT.TERRARIA_USE_POTION, onTerrariaUsePotion);
+    gameEvents.on(GAME_EVENT.TERRARIA_RECALL_PYLON, onTerrariaRecallPylon);
+    gameEvents.on(GAME_EVENT.APPLY_SETTINGS, onApplySettings);
+    gameEvents.on(GAME_EVENT.SPAWN_GARAGE_VEHICLE, onSpawnGarageVehicle);
 
     this.unsubscribers.push(() => {
       gameEvents.off(GAME_EVENT.START_GAME, onStart);
@@ -528,7 +823,6 @@ export class CityScene extends Phaser.Scene {
       gameEvents.off(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
       gameEvents.off(GAME_EVENT.AIM_FIRE, onAimFire);
       gameEvents.off(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
-      gameEvents.off(GAME_EVENT.OPEN_QUICK_ARMORY, onOpenQuickArmory);
       gameEvents.off(GAME_EVENT.DRIVING_INPUT, onDrivingInput);
       gameEvents.off(GAME_EVENT.TRIGGER_INTERACT, onVirtualInteract);
       gameEvents.off(GAME_EVENT.TRIGGER_ENTER_EXIT, onVirtualEnterExit);
@@ -541,11 +835,21 @@ export class CityScene extends Phaser.Scene {
       gameEvents.off(GAME_EVENT.BUY_CYBERWARE, onBuyCyberware);
       gameEvents.off(GAME_EVENT.TRIGGER_HACK_JAM, onTriggerHackJam);
       gameEvents.off(GAME_EVENT.SELECT_HORDE_PERK, onSelectHordePerk);
+      gameEvents.off(GAME_EVENT.CYCLE_WEATHER, onCycleWeather);
+      gameEvents.off(GAME_EVENT.FAST_TRAVEL_METRO, onFastTravelMetro);
+      gameEvents.off(GAME_EVENT.SET_CUSTOM_WAYPOINT, onSetCustomWaypoint);
+      gameEvents.off(GAME_EVENT.TERRARIA_CRAFT, onTerrariaCraft);
+      gameEvents.off(GAME_EVENT.TERRARIA_TOGGLE_ACCESSORY, onTerrariaToggleAccessory);
+      gameEvents.off(GAME_EVENT.TERRARIA_USE_POTION, onTerrariaUsePotion);
+      gameEvents.off(GAME_EVENT.TERRARIA_RECALL_PYLON, onTerrariaRecallPylon);
+      gameEvents.off(GAME_EVENT.APPLY_SETTINGS, onApplySettings);
+      gameEvents.off(GAME_EVENT.SPAWN_GARAGE_VEHICLE, onSpawnGarageVehicle);
     });
   }
 
   private startPlayMode(nextPlayMode: GamePlayMode, useSave = false): void {
     this.playMode = nextPlayMode;
+    this.resetSandboxCombo();
     this.hitstopTimer = 0;
     this.modalPaused = false;
     this.clubOverdriveTimer = 0;
@@ -566,6 +870,8 @@ export class CityScene extends Phaser.Scene {
       this.policeManager.setPursuitEnabled(true);
       this.pickupManager.setChipsVisible(true);
       this.randomEventManager.setEnabled(true);
+      this.sandboxManager.setEnabled(true);
+      this.terrariaManager.setEnabled(true);
       if (useSave) {
         this.loadFromSave();
       } else {
@@ -576,6 +882,8 @@ export class CityScene extends Phaser.Scene {
       this.policeManager.setPursuitEnabled(false);
       this.pickupManager.setChipsVisible(false);
       this.randomEventManager.setEnabled(false);
+      this.sandboxManager.setEnabled(false);
+      this.terrariaManager.setEnabled(false);
       this.missionManager.abandonMission(true);
       this.vehicleManager.resetAllToInitial(this.player);
       this.weaponManager.resetToDefault(this.player);
@@ -594,6 +902,8 @@ export class CityScene extends Phaser.Scene {
       this.policeManager.setPursuitEnabled(false);
       this.pickupManager.setChipsVisible(false);
       this.randomEventManager.setEnabled(false);
+      this.sandboxManager.setEnabled(false);
+      this.terrariaManager.setEnabled(false);
       this.missionManager.abandonMission(true);
       this.vehicleManager.resetAllToInitial(this.player);
       this.weaponManager.resetToDefault(this.player);
@@ -671,8 +981,10 @@ export class CityScene extends Phaser.Scene {
 
     if (this.mode === 'TITLE') {
       this.titlePanAngle += dt * CAMERA_CONFIG.TITLE_PAN_SPEED;
-      const panX = 1140 + Math.cos(this.titlePanAngle) * 480;
-      const panY = 780 + Math.sin(this.titlePanAngle * 0.85) * 340;
+      const cx = this.districtData.plazaCenter?.x ?? 1312;
+      const cy = this.districtData.plazaCenter?.y ?? 1024;
+      const panX = cx + Math.cos(this.titlePanAngle) * 620;
+      const panY = cy + Math.sin(this.titlePanAngle * 0.85) * 420;
       this.cameras.main.centerOn(panX, panY);
       return;
     }
@@ -702,14 +1014,6 @@ export class CityScene extends Phaser.Scene {
       } else {
         return;
       }
-    }
-
-    if (this.inputManager.consumeMapJustPressed()) {
-      gameEvents.emit(GAME_EVENT.TOGGLE_MAP);
-    }
-
-    if (this.inputManager.consumeQuickArmoryJustPressed()) {
-      this.openQuickArmoryModal();
     }
 
     if (this.inputManager.consumeEnterExitJustPressed()) {
@@ -775,6 +1079,13 @@ export class CityScene extends Phaser.Scene {
       this.clubOverdriveTimer = Math.max(0, this.clubOverdriveTimer - dt);
     }
 
+    if (this.sandboxCombo > 0) {
+      this.sandboxComboTimer -= dt;
+      if (this.sandboxComboTimer <= 0) {
+        this.resetSandboxCombo();
+      }
+    }
+
     const currentVehicle = this.vehicleManager.getActiveVehicle();
     const rawDrivingControls = this.inputManager.getDrivingControls();
     const drivingControls =
@@ -795,10 +1106,14 @@ export class CityScene extends Phaser.Scene {
       dt,
       drivingControls,
       this.districtData,
-      (bonus) => {
-        this.playerCash += bonus;
-        this.progressionManager.addExp(30);
-        this.emitPlayerStats();
+      (bonus, meters) => {
+        if (this.playMode === 'sandbox') {
+          this.sandboxManager.recordStuntJump(meters, bonus, this.getSandboxCallbacks());
+        } else {
+          this.playerCash += bonus;
+          this.progressionManager.addExp(30);
+          this.emitPlayerStats();
+        }
       },
       (destroyedVeh, wasOccupied) => {
         if (wasOccupied) {
@@ -836,6 +1151,10 @@ export class CityScene extends Phaser.Scene {
     this.trafficManager.update(dt, timeSec, trafficObstacles);
 
     const targetPos = currentVehicle ? currentVehicle.getPosition() : this.player.getPosition();
+    const pBody = this.player.sprite.body as Phaser.Physics.Arcade.Body | undefined;
+    const playerVel = currentVehicle
+      ? currentVehicle.getVelocity()
+      : { vx: pBody?.velocity.x ?? 0, vy: pBody?.velocity.y ?? 0 };
     this.policeManager.update(
       dt,
       time,
@@ -843,7 +1162,8 @@ export class CityScene extends Phaser.Scene {
       Boolean(currentVehicle),
       (dmg) => this.applyPlayerDamage(dmg),
       this.environmentManager.getPoliceSightMultiplier(),
-      this.progressionManager.isJammerActive()
+      this.progressionManager.isJammerActive(),
+      playerVel
     );
 
     this.pickupManager.update(dt, time, targetPos, {
@@ -910,6 +1230,21 @@ export class CityScene extends Phaser.Scene {
         }
       );
 
+      this.sandboxManager.update(
+        dt,
+        targetPos,
+        Boolean(currentVehicle),
+        this.getSandboxCallbacks()
+      );
+
+      this.terrariaManager.update(
+        dt,
+        time,
+        targetPos,
+        Boolean(currentVehicle),
+        this.getTerrariaCallbacks()
+      );
+
       this.autoSaveTimer += dt;
       if (this.autoSaveTimer >= 20) {
         this.autoSaveTimer = 0;
@@ -947,7 +1282,14 @@ export class CityScene extends Phaser.Scene {
       ...this.vehicleManager.getFastVehicleData(),
       ...this.trafficManager.getFastVehicleData(),
     ];
-    this.npcManager.update(dt, fastVehicles);
+    const activeWeather = this.environmentManager.getWeather();
+    const npcWeatherSpeedMul =
+      activeWeather === 'rain' || activeWeather === 'acid_rain'
+        ? 1.24
+        : activeWeather === 'fog'
+          ? 0.92
+          : 1;
+    this.npcManager.update(dt, fastVehicles, npcWeatherSpeedMul);
 
     let isMoving = false;
     if (currentVehicle) {
@@ -1008,7 +1350,7 @@ export class CityScene extends Phaser.Scene {
           : currentVehicle.sprite.rotation
       );
       if (vehFireInput.firing) {
-        this.weaponManager.tryFireVehicleWeapon(
+        const vehFired = this.weaponManager.tryFireVehicleWeapon(
           time,
           currentVehicle,
           vehFireInput.aimAngleRad,
@@ -1022,14 +1364,26 @@ export class CityScene extends Phaser.Scene {
           },
           this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
         );
+        if (vehFired) {
+          this.trafficManager.notifyDisturbance(
+            currentVehicle.sprite.x,
+            currentVehicle.sprite.y,
+            280
+          );
+        }
       }
 
-      // Drive-in garage bay detection across both garages or Vigilante trigger in police vehicles
-      this.checkNearbyLandmarks(currentVehicle.getPosition(), 112, ['plaza-garage', 'chrome-workshop']);
+      // Drive-in garage bay detection across all 3 garages or Vigilante trigger in police vehicles
+      this.checkNearbyLandmarks(currentVehicle.getPosition(), 112, [
+        'plaza-garage',
+        'chrome-workshop',
+        'skyport-garage',
+      ]);
       if (this.inputManager.consumeInteractJustPressed()) {
         if (
           this.activeLandmark?.id === 'plaza-garage' ||
-          this.activeLandmark?.id === 'chrome-workshop'
+          this.activeLandmark?.id === 'chrome-workshop' ||
+          this.activeLandmark?.id === 'skyport-garage'
         ) {
           this.openLandmarkService(this.activeLandmark);
         } else if (
@@ -1060,7 +1414,7 @@ export class CityScene extends Phaser.Scene {
           this.audioManager.playFootstep(time);
         },
         fireInput.aiming ? fireInput.aimAngleRad : undefined,
-        this.progressionManager.getMoveSpeedMultiplier()
+        this.progressionManager.getMoveSpeedMultiplier() + this.terrariaManager.getMoveSpeedBonus()
       );
 
       if (mechKind) {
@@ -1094,7 +1448,7 @@ export class CityScene extends Phaser.Scene {
       } else {
         this.inputManager.consumeSpecialJustPressed();
         if (fireInput.firing) {
-          this.weaponManager.tryFire(
+          const fired = this.weaponManager.tryFire(
             time,
             this.player,
             fireInput.aimAngleRad,
@@ -1107,6 +1461,10 @@ export class CityScene extends Phaser.Scene {
             },
             this.hordeManager.isOverdriveActive() || this.clubOverdriveTimer > 0
           );
+          if (fired) {
+            const pPos = this.player.getPosition();
+            this.trafficManager.notifyDisturbance(pPos.x, pPos.y, 240);
+          }
         }
       }
 
@@ -1126,7 +1484,19 @@ export class CityScene extends Phaser.Scene {
 
       const isAtServiceTerminal =
         this.activeLandmark !== null && SERVICE_LANDMARK_IDS.has(this.activeLandmark.id);
-      if (isAtServiceTerminal || nearbyProp) {
+      const sandboxHintNearby =
+        this.playMode === 'sandbox'
+          ? (this.sandboxManager.getNearbyInteractable(pos) ??
+            this.terrariaManager.getNearbyInteractable(pos))
+          : null;
+      const mergedHintKey = sandboxHintNearby
+        ? `${sandboxHintNearby.kind}:${sandboxHintNearby.id}`
+        : null;
+      if (mergedHintKey !== this.lastSandboxHintKey) {
+        this.lastSandboxHintKey = mergedHintKey;
+        gameEvents.emit(GAME_EVENT.SANDBOX_HINT, sandboxHintNearby);
+      }
+      if (isAtServiceTerminal || nearbyProp || sandboxHintNearby) {
         this.npcManager.checkNearbyNpcChange(-9999, -9999);
         gameEvents.emit(GAME_EVENT.NPC_NEARBY, null);
       } else {
@@ -1139,6 +1509,16 @@ export class CityScene extends Phaser.Scene {
       if (this.inputManager.consumeInteractJustPressed()) {
         if (isAtServiceTerminal && this.activeLandmark) {
           this.openLandmarkService(this.activeLandmark);
+        } else if (
+          this.playMode === 'sandbox' &&
+          this.sandboxManager.tryInteractNearest(pos, this.getSandboxCallbacks())
+        ) {
+          // Tower hack or Secret Vault cracked!
+        } else if (
+          this.playMode === 'sandbox' &&
+          this.terrariaManager.tryInteractNearest(pos)
+        ) {
+          // Mined ore vein with pickaxe!
         } else if (nearbyProp) {
           this.interactivePropManager.interactNearest(pos.x, pos.y, {
             nowMs: time,
@@ -1175,7 +1555,11 @@ export class CityScene extends Phaser.Scene {
             },
           });
         } else {
-          const npcDialogue = this.npcManager.interactNearest(pos.x, pos.y);
+          const npcDialogue = this.npcManager.interactNearest(pos.x, pos.y, {
+            weather: this.environmentManager.getWeather(),
+            wantedLevel: this.wantedManager.getWantedLevel(),
+            syncedTowers: this.sandboxManager.getSyncedTowerCount(),
+          });
           if (npcDialogue) {
             gameEvents.emit(GAME_EVENT.STATUS_TOAST, npcDialogue);
           } else if (this.activeLandmark) {
@@ -1260,6 +1644,7 @@ export class CityScene extends Phaser.Scene {
       'nexus-ops': 'missions',
       'plaza-garage': 'garage',
       'chrome-workshop': 'garage',
+      'skyport-garage': 'garage',
       'plaza-tech': 'armory',
       'harbor-market': 'armory',
       'cyber-clinic': 'clinic',
@@ -1523,7 +1908,10 @@ export class CityScene extends Phaser.Scene {
       this.audioManager.playPurchase();
       this.emitPlayerStats();
       this.performSave(true);
-      this.emitGarageModalRefresh(veh);
+      this.syncVehicleAfterService(veh);
+      if (!payload.fromHub) {
+        this.emitGarageModalRefresh(veh);
+      }
       gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${veh.spec.name} 已更换【${payload.colorName}】喷漆！`);
       return;
     }
@@ -1540,10 +1928,10 @@ export class CityScene extends Phaser.Scene {
       this.audioManager.playPurchase();
       this.emitPlayerStats();
       this.performSave(true);
-      if (this.vehicleManager.getActiveVehicle()?.id === veh.id) {
-        this.emitVehicleTelemetry(veh);
+      this.syncVehicleAfterService(veh);
+      if (!payload.fromHub) {
+        this.emitGarageModalRefresh(veh);
       }
-      this.emitGarageModalRefresh(veh);
       gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${veh.spec.name} 已修复至最佳状态！`);
       return;
     }
@@ -1563,10 +1951,10 @@ export class CityScene extends Phaser.Scene {
       this.audioManager.playPurchase();
       this.emitPlayerStats();
       this.performSave(true);
-      if (this.vehicleManager.getActiveVehicle()?.id === veh.id) {
-        this.emitVehicleTelemetry(veh);
+      this.syncVehicleAfterService(veh);
+      if (!payload.fromHub) {
+        this.emitGarageModalRefresh(veh);
       }
-      this.emitGarageModalRefresh(veh);
       gameEvents.emit(
         GAME_EVENT.STATUS_TOAST,
         `${veh.spec.name} 完成【${trackCfg.label} Lv.${currentLvl + 1}】改装！`
@@ -1823,7 +2211,33 @@ export class CityScene extends Phaser.Scene {
       hasTurret: Boolean(vehicle.spec.hasTurret),
       weaponKind: vehicle.spec.weaponKind,
       upgrades: vehicle.getUpgrades(),
+      paintColor: vehicle.getPaintColor(),
     });
+  }
+
+  private syncVehicleAfterService(veh: NonNullable<ReturnType<VehicleManager['getVehicleById']>>): void {
+    if (this.vehicleManager.getActiveVehicle()?.id === veh.id) {
+      this.emitVehicleTelemetry(veh);
+    } else if (!this.vehicleManager.getActiveVehicle()) {
+      const pos = this.player.getPosition();
+      const nearby = this.vehicleManager.findClosestVehicle(pos.x, pos.y);
+      if (nearby && nearby.id === veh.id) {
+        gameEvents.emit(GAME_EVENT.VEHICLE_NEARBY, nearby);
+      }
+    }
+  }
+
+  private incrementSandboxCombo(amount = 1): void {
+    this.sandboxCombo += amount;
+    this.sandboxComboTimer = 6.0;
+    gameEvents.emit(GAME_EVENT.SANDBOX_COMBO_CHANGED, this.sandboxCombo);
+  }
+
+  private resetSandboxCombo(): void {
+    if (this.sandboxCombo === 0 && this.sandboxComboTimer === 0) return;
+    this.sandboxCombo = 0;
+    this.sandboxComboTimer = 0;
+    gameEvents.emit(GAME_EVENT.SANDBOX_COMBO_CHANGED, 0);
   }
 
   private emitTelemetry(force: boolean): void {
@@ -1853,7 +2267,8 @@ export class CityScene extends Phaser.Scene {
 
     const progDr = this.progressionManager.getDamageReduction();
     const hordeDr = this.playMode === 'horde' ? this.hordeManager.getDamageReduction() : 0;
-    const totalDr = Math.min(0.7, progDr + hordeDr);
+    const terrariaDr = this.playMode === 'sandbox' ? this.terrariaManager.getDamageReductionBonus() : 0;
+    const totalDr = Math.min(0.75, progDr + hordeDr + terrariaDr);
     const reducedAmount = Math.max(1, Math.round(amount * (1 - totalDr)));
 
     if (this.hordeManager.isActive() && this.hordeManager.isMechActive()) {
@@ -1947,6 +2362,7 @@ export class CityScene extends Phaser.Scene {
 
     const ok = this.saveManager.writeSave({
       version: 2,
+      mapLayoutVersion: CURRENT_MAP_LAYOUT_VERSION,
       savedAt: Date.now(),
       district: this.districtManager.getDistrictNameAt(playerPos.x, playerPos.y, this.districtData),
       player: {
@@ -1963,6 +2379,9 @@ export class CityScene extends Phaser.Scene {
       weapons: this.weaponManager.serialize(),
       collectedChipIds: this.pickupManager.serializeCollectedChips(),
       progression: this.progressionManager.serialize(),
+      sandbox: this.sandboxManager.getSaveState(),
+      terraria: this.terrariaManager.getSaveState(),
+      customWaypoint: this.customWaypoint,
       settings: {
         muted: this.audioManager.isMuted(),
       },
@@ -1982,16 +2401,28 @@ export class CityScene extends Phaser.Scene {
       return;
     }
 
+    const isCompatibleLayout = (save.mapLayoutVersion ?? 1) >= CURRENT_MAP_LAYOUT_VERSION;
+
     this.wantedManager.clearWanted(false);
-    this.vehicleManager.restoreAll(save.vehicles, this.player);
+    if (isCompatibleLayout) {
+      this.vehicleManager.restoreAll(save.vehicles, this.player);
+    } else {
+      this.vehicleManager.resetAllToInitial(this.player);
+    }
     this.weaponManager.restore(save.weapons, this.player);
     this.pickupManager.restoreCollectedChips(save.collectedChipIds);
     this.progressionManager.restore(save.progression);
+    this.sandboxManager.loadFromSave(save.sandbox);
+    this.terrariaManager.loadFromSave(isCompatibleLayout ? save.terraria : undefined);
+    this.customWaypoint = isCompatibleLayout ? (save.customWaypoint ?? null) : null;
+    gameEvents.emit(GAME_EVENT.SET_CUSTOM_WAYPOINT, this.customWaypoint);
     this.syncProgressionCaps(false);
 
-    const spawnPos = this.collisionManager.isPointClearForEntity(save.player.x, save.player.y, 12)
-      ? { x: save.player.x, y: save.player.y }
-      : { x: WORLD_CONFIG.PLAYER_SPAWN.x, y: WORLD_CONFIG.PLAYER_SPAWN.y };
+    const spawnPos =
+      isCompatibleLayout &&
+      this.collisionManager.isPointClearForEntity(save.player.x, save.player.y, 12)
+        ? { x: save.player.x, y: save.player.y }
+        : { x: WORLD_CONFIG.PLAYER_SPAWN.x, y: WORLD_CONFIG.PLAYER_SPAWN.y };
     this.player.resetPosition(spawnPos.x, spawnPos.y);
 
     this.ownsSafehouse = Boolean(save.ownsSafehouse);
@@ -2006,7 +2437,12 @@ export class CityScene extends Phaser.Scene {
     this.emitPlayerStats();
     this.emitTelemetry(true);
     this.emitSaveStatus();
-    gameEvents.emit(GAME_EVENT.STATUS_TOAST, '已读取本地存档，欢迎回到霓虹特区！');
+    gameEvents.emit(
+      GAME_EVENT.STATUS_TOAST,
+      isCompatibleLayout
+        ? '已读取本地存档，欢迎回到霓虹特区！'
+        : '已同步全新七大区都市版图并保留你的全部现金、武器与天赋资产！'
+    );
   }
 
   private resetToNewGame(): void {
@@ -2015,6 +2451,10 @@ export class CityScene extends Phaser.Scene {
     this.weaponManager.resetToDefault(this.player);
     this.pickupManager.resetAllChips();
     this.progressionManager.reset();
+    this.sandboxManager.loadFromSave(undefined);
+    this.terrariaManager.loadFromSave(undefined);
+    this.customWaypoint = null;
+    gameEvents.emit(GAME_EVENT.SET_CUSTOM_WAYPOINT, null);
     this.playerMaxHealth = PLAYER_CONFIG.MAX_HEALTH;
     this.playerMaxArmor = PLAYER_CONFIG.MAX_ARMOR;
     this.player.resetPosition(WORLD_CONFIG.PLAYER_SPAWN.x, WORLD_CONFIG.PLAYER_SPAWN.y);
@@ -2052,6 +2492,8 @@ export class CityScene extends Phaser.Scene {
     this.unsubscribers = [];
     this.inputManager.destroy();
     this.environmentManager.destroy();
+    this.terrariaManager.destroy();
+    this.sandboxManager.destroy();
     this.randomEventManager.destroy();
     this.interactivePropManager.destroy();
     this.weaponManager.destroy();

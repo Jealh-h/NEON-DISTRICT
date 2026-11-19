@@ -16,6 +16,9 @@ export class WantedManager {
   private wantedLevel = 0;
   private spotted = false;
   private escapeTimer = 0;
+  private heat = 0; // 0..100 suspicion tolerance before triggering 1★
+  private lastWarnToastAt = 0;
+  private lastCrimeAtByType: Partial<Record<CrimeType, number>> = {};
   private lastKnownPos: { x: number; y: number } | null = null;
   private policeMarkers: PoliceMapMarker[] = [];
   private lastEmitTime = 0;
@@ -29,10 +32,28 @@ export class WantedManager {
     crimePos: { x: number; y: number },
     hasWitnessOrNearbyPolice = true
   ): void {
+    const now = Date.now();
+    const cooldownMs: Record<CrimeType, number> = {
+      weapon_discharge: 1500,
+      reckless_crash: 2200,
+      hit_pedestrian: 2400,
+      ram_police: 2000,
+      steal_police_car: 3000,
+      assault_police: 1600,
+      destroy_police: 1500,
+    };
+
+    const lastAt = this.lastCrimeAtByType[type] ?? 0;
+    if (now - lastAt < cooldownMs[type]) {
+      return;
+    }
+    this.lastCrimeAtByType[type] = now;
+
+    // Without witnesses/nearby patrol, minor traffic crashes or distant gunshots do not trigger police
     if (
       !hasWitnessOrNearbyPolice &&
       this.wantedLevel === 0 &&
-      (type === 'reckless_crash' || type === 'weapon_discharge')
+      (type === 'reckless_crash' || type === 'weapon_discharge' || type === 'hit_pedestrian')
     ) {
       return;
     }
@@ -40,14 +61,59 @@ export class WantedManager {
     const prevLevel = this.wantedLevel;
     let nextLevel = this.wantedLevel;
 
-    if (type === 'destroy_police') {
-      nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, Math.max(nextLevel + 1, 3));
-    } else if (type === 'ram_police' || type === 'steal_police_car' || type === 'assault_police') {
-      nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, Math.max(nextLevel + 1, 2));
-    } else if (type === 'hit_pedestrian') {
-      nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, Math.max(nextLevel + 1, 1));
-    } else if (type === 'reckless_crash' || type === 'weapon_discharge') {
-      nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, Math.max(nextLevel, 1));
+    // Heat tolerance system at 0★ so accidental scrapes or single stray shots don't punish immediately
+    if (prevLevel === 0) {
+      if (type === 'weapon_discharge' || type === 'reckless_crash') {
+        const delta = type === 'weapon_discharge' ? 30 : 28;
+        this.heat = Math.min(100, this.heat + delta);
+        if (this.heat < 100) {
+          if (this.heat >= 56 && now - this.lastWarnToastAt > 3600) {
+            this.lastWarnToastAt = now;
+            gameEvents.emit(
+              GAME_EVENT.STATUS_TOAST,
+              type === 'weapon_discharge'
+                ? '⚠ 巡警已听见附近枪声：请停火或离开以免引发通缉'
+                : '⚠ 危险驾驶引起巡逻队注意：减速行驶可消除警觉'
+            );
+          }
+          return;
+        }
+        this.heat = 0;
+        nextLevel = 1;
+      } else if (type === 'hit_pedestrian') {
+        this.heat = Math.min(100, this.heat + 55);
+        if (this.heat < 100) {
+          if (now - this.lastWarnToastAt > 3000) {
+            this.lastWarnToastAt = now;
+            gameEvents.emit(
+              GAME_EVENT.STATUS_TOAST,
+              '⚠ 擦碰市民！减速避让以避免引发特区通缉'
+            );
+          }
+          return;
+        }
+        this.heat = 0;
+        nextLevel = 1;
+      } else if (type === 'ram_police' || type === 'steal_police_car' || type === 'assault_police') {
+        this.heat = 0;
+        nextLevel = 1;
+      } else if (type === 'destroy_police') {
+        this.heat = 0;
+        nextLevel = 2;
+      }
+    } else {
+      // Already wanted: more measured escalation
+      if (type === 'destroy_police') {
+        nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, Math.max(nextLevel + 1, 3));
+      } else if (type === 'ram_police' || type === 'steal_police_car' || type === 'assault_police') {
+        nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, nextLevel + 1);
+      } else if (type === 'hit_pedestrian') {
+        this.heat = Math.min(100, this.heat + 50);
+        if (this.heat >= 100) {
+          this.heat = 0;
+          nextLevel = Math.min(WANTED_CONFIG.MAX_STARS, nextLevel + 1);
+        }
+      }
     }
 
     this.lastKnownPos = { x: Math.round(crimePos.x), y: Math.round(crimePos.y) };
@@ -75,12 +141,12 @@ export class WantedManager {
         );
       } else {
         const reasonMap: Record<CrimeType, string> = {
-          hit_pedestrian: '伤及市民，特区警队已发出通缉！',
-          ram_police: '袭击特区警车，通缉等级升级！',
-          reckless_crash: '危险驾驶引发事故，引起巡逻警车注意！',
-          steal_police_car: '劫持警用巡逻车，全区警力正在追捕！',
-          weapon_discharge: '城区非法开火，特区警队正在赶往现场！',
-          assault_police: '武装袭警！全区警车进入高度拦截状态！',
+          hit_pedestrian: '接连伤及市民，特区警队已发出通缉！',
+          ram_police: '猛烈撞击特区警车，通缉等级上升！',
+          reckless_crash: '连续危险驾驶引发事故，巡逻警车已介入！',
+          steal_police_car: '劫持警用巡逻车，警队正在追踪！',
+          weapon_discharge: '巡警目击连续开火，特区警队已出警！',
+          assault_police: '袭警抗法！特区警车进入拦截状态！',
           destroy_police: '击毁警用单位！特区防卫部队介入追缉！',
         };
         gameEvents.emit(GAME_EVENT.STATUS_TOAST, reasonMap[type]);
@@ -105,6 +171,11 @@ export class WantedManager {
     markers: PoliceMapMarker[]
   ): void {
     this.policeMarkers = markers;
+
+    // Suspicion heat naturally decays when avoiding incidents
+    if (this.heat > 0) {
+      this.heat = Math.max(0, this.heat - 18 * dtSeconds);
+    }
 
     if (this.wantedLevel === 0) {
       this.spotted = false;
@@ -139,6 +210,7 @@ export class WantedManager {
   }
 
   public clearWanted(escaped: boolean): void {
+    this.heat = 0;
     if (this.wantedLevel === 0) return;
     this.wantedLevel = 0;
     this.spotted = false;
@@ -155,6 +227,7 @@ export class WantedManager {
   }
 
   public reduceWanted(stars = 1): void {
+    this.heat = 0;
     if (this.wantedLevel === 0) return;
     const next = Math.max(0, this.wantedLevel - stars);
     if (next === 0) {
