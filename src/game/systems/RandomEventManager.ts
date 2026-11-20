@@ -107,7 +107,8 @@ export class RandomEventManager {
     nowMs: number,
     playerPos: { x: number; y: number },
     onPlayerDamaged: (amount: number) => void,
-    onEventCompleted: (reward: RandomEventCompletionReward) => void
+    onEventCompleted: (reward: RandomEventCompletionReward) => void,
+    inVehicle = false
   ): void {
     if (!this.enabled) return;
 
@@ -210,10 +211,12 @@ export class RandomEventManager {
           }
         }
 
+        actor.sprite.setDepth(19 + Math.min(8.4, Math.max(0, actor.y) * 0.0022));
+
         // Sync HP bar above actor
         const barY = actor.y - actor.radius - 10;
-        actor.hpBg.setPosition(actor.x, barY);
-        actor.hpFill.setPosition(actor.x - 13, barY);
+        actor.hpBg.setPosition(actor.x, barY).setDepth(38);
+        actor.hpFill.setPosition(actor.x - 13, barY).setDepth(39);
         const ratio = Math.max(0, Math.min(1, actor.hp / actor.maxHp));
         actor.hpFill.setSize(26 * ratio, 3);
       }
@@ -253,7 +256,7 @@ export class RandomEventManager {
       p.sprite.y += p.vy * dtSeconds;
 
       const hitWall = this.collisionManager.isPointBlockedByWall(p.sprite.x, p.sprite.y);
-      const hitPlayer = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, playerPos.x, playerPos.y) <= 18;
+      const hitPlayer = Phaser.Math.Distance.Between(p.sprite.x, p.sprite.y, playerPos.x, playerPos.y) <= (inVehicle ? 24 : 18);
       if (hitPlayer) {
         onPlayerDamaged(p.damage);
         p.sprite.destroy();
@@ -350,8 +353,8 @@ export class RandomEventManager {
     return results;
   }
 
-  public checkVehicleRam(vx: number, vy: number, speedPx: number): void {
-    if (!this.enabled || speedPx < 130) return;
+  public checkVehicleRam(vx: number, vy: number, speedPx: number, ramMult = 1): void {
+    if (!this.enabled || speedPx < 95) return;
     for (const ev of this.activeEvents) {
       for (let j = ev.actors.length - 1; j >= 0; j--) {
         const actor = ev.actors[j];
@@ -359,7 +362,7 @@ export class RandomEventManager {
         const dist = Phaser.Math.Distance.Between(vx, vy, actor.x, actor.y);
         if (dist <= actor.radius + 22) {
           actor.ramCooldown = 0.45;
-          const ramDmg = Math.round(speedPx * 0.22);
+          const ramDmg = Math.round(speedPx * 0.24 * ramMult);
           this.applyDamageToActor(ev, j, ramDmg);
           this.audioManager.playImpactHit(true);
         }

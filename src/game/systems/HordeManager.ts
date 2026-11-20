@@ -40,9 +40,12 @@ export interface ActiveHordeEnemy {
   glow: Phaser.GameObjects.Image;
   attackCooldown: number;
   shootCooldown: number;
+  ramCooldown: number;
   vx: number;
   vy: number;
 }
+
+const groundDepth = (y: number) => 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
 
 interface EnemyProjectile {
   sprite: Phaser.GameObjects.Image;
@@ -394,8 +397,8 @@ export class HordeManager {
     if (this.turrets.length >= HORDE_GEAR_COSTS.MAX_TURRETS) {
       return false;
     }
-    const base = this.scene.add.image(x, y, 'prop_turret').setDepth(18);
-    const gun = this.scene.add.image(x, y, 'prop_turret_gun').setDepth(19);
+    const base = this.scene.add.image(x, y, 'prop_turret').setDepth(groundDepth(y) - 0.1);
+    const gun = this.scene.add.image(x, y, 'prop_turret_gun').setDepth(groundDepth(y));
     this.turrets.push({
       base,
       gun,
@@ -570,6 +573,7 @@ export class HordeManager {
     for (const enemy of [...this.enemies]) {
       if (enemy.attackCooldown > 0) enemy.attackCooldown = Math.max(0, enemy.attackCooldown - dtSeconds);
       if (enemy.shootCooldown > 0) enemy.shootCooldown = Math.max(0, enemy.shootCooldown - dtSeconds);
+      if (enemy.ramCooldown > 0) enemy.ramCooldown = Math.max(0, enemy.ramCooldown - dtSeconds);
 
       const dx = playerPos.x - enemy.x;
       const dy = playerPos.y - enemy.y;
@@ -601,6 +605,7 @@ export class HordeManager {
       }
 
       enemy.sprite.setPosition(enemy.x, enemy.y);
+      enemy.sprite.setDepth(groundDepth(enemy.y));
       enemy.glow.setPosition(enemy.x, enemy.y);
 
       // Mech stomp crush damage against non-boss enemies
@@ -736,7 +741,7 @@ export class HordeManager {
     glow.setDepth(18);
 
     const sprite = this.scene.add.sprite(spawnX, spawnY, spec.textureKey);
-    sprite.setDepth(21);
+    sprite.setDepth(groundDepth(spawnY));
 
     this.enemies.push({
       id: `horde-${this.enemySeq}`,
@@ -757,9 +762,38 @@ export class HordeManager {
       glow,
       attackCooldown: 0.4,
       shootCooldown: 1.2 + Math.random() * 0.8,
+      ramCooldown: 0,
       vx: 0,
       vy: 0,
     });
+  }
+
+  public checkVehicleRam(
+    vx: number,
+    vy: number,
+    speedPx: number,
+    ramMult: number,
+    velX: number,
+    velY: number,
+    onCashBonus?: (cash: number) => void
+  ): void {
+    if (!this.active || speedPx < 75) return;
+    const vLen = Math.hypot(velX, velY) || 1;
+    for (const enemy of [...this.enemies]) {
+      if (enemy.ramCooldown > 0) continue;
+      const dist = Phaser.Math.Distance.Between(vx, vy, enemy.x, enemy.y);
+      if (dist <= enemy.radius + 24) {
+        enemy.ramCooldown = 0.35;
+        const dx = vLen > 1 ? velX / vLen : (enemy.x - vx) / (dist || 1);
+        const dy = vLen > 1 ? velY / vLen : (enemy.y - vy) / (dist || 1);
+        const dmg = Math.round(speedPx * 0.25 * ramMult);
+        const res = this.damageEnemy(enemy, dmg, dx, dy, true);
+        this.audioManager.playImpactHit(res.killed);
+        if (res.killed) {
+          onCashBonus?.(Math.round(res.cashDrop * this.getCashDropMultiplier()));
+        }
+      }
+    }
   }
 
   public damageEnemy(

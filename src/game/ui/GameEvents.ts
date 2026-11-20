@@ -104,6 +104,7 @@ export interface RadioStationPayload {
   index: number;
   name: string;
   genre: string;
+  playing?: boolean;
 }
 
 export interface ArcadeResultPayload {
@@ -494,6 +495,7 @@ export const GAME_EVENT = {
   SET_MODAL_PAUSED: 'game:set_modal_paused',
   SET_MUTED: 'audio:set_muted',
   CYCLE_RADIO: 'audio:cycle_radio',
+  RADIO_CONTROL: 'audio:radio_control',
   RADIO_CHANGED: 'audio:radio_changed',
   JOYSTICK_MOVE: 'input:joystick_move',
   AIM_FIRE: 'input:aim_fire',

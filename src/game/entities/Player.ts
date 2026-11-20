@@ -3,6 +3,7 @@ import { MECH_SPECS, MechKind, PALETTE, PLAYER_CONFIG, WEAPON_SPECS, WeaponId } 
 import { MovementVector } from '../systems/InputManager';
 
 const WALK_SEQUENCE = ['player_walk_1', 'player_walk_3', 'player_walk_2', 'player_walk_3'] as const;
+const groundDepth = (y: number) => 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
 
 export class Player {
   public readonly sprite: Phaser.Physics.Arcade.Sprite;
@@ -158,6 +159,7 @@ export class Player {
     }
 
     this.shadow.setPosition(this.sprite.x, this.sprite.y + 4);
+    this.sprite.setDepth(groundDepth(this.sprite.y));
     this.syncWeaponBarrel();
     return isMoving;
   }
@@ -213,6 +215,7 @@ export class Player {
       this.sprite.y + sin * forward + cos * rightSide
     );
     this.weaponBarrel.setRotation(this.facingAngle);
+    this.weaponBarrel.setDepth(this.sprite.depth + 0.02);
   }
 
   public setInVehicle(occupied: boolean, spawnPos?: { x: number; y: number }): void {
@@ -251,6 +254,7 @@ export class Player {
           ease: 'Back.easeOut',
         });
       }
+      this.sprite.setDepth(groundDepth(this.sprite.y));
       this.syncWeaponBarrel();
     }
   }
@@ -274,6 +278,7 @@ export class Player {
 
   public resetPosition(x: number, y: number): void {
     this.sprite.setPosition(x, y);
+    this.sprite.setDepth(groundDepth(y));
     this.shadow.setPosition(x, y + 4);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.reset(x, y);

@@ -16,6 +16,8 @@ export interface VehicleInitOptions {
   isTempHijacked?: boolean;
 }
 
+const groundDepth = (y: number) => 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
+
 export class Vehicle {
   public readonly id: string;
   public readonly spec: VehicleSpec;
@@ -27,7 +29,10 @@ export class Vehicle {
   private spawnOrigin: { x: number; y: number; angleDeg: number };
   private shadow: Phaser.GameObjects.Ellipse;
   private headlight: Phaser.GameObjects.Image;
+  private taillight: Phaser.GameObjects.Image | null = null;
   private lightbarGlow: Phaser.GameObjects.Image | null = null;
+  private sirenReflect: Phaser.GameObjects.Image | null = null;
+  private spotlightPool: Phaser.GameObjects.Image | null = null;
   private rotorSprite: Phaser.GameObjects.Image | null = null;
   private turretSprite: Phaser.GameObjects.Image | null = null;
   private sparkEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -86,7 +91,7 @@ export class Vehicle {
     this.headlight.setDepth(19);
 
     this.sprite = scene.physics.add.sprite(x, y, this.baseTextureKey);
-    this.sprite.setDepth(21);
+    this.sprite.setDepth(this.spec.isFlying ? 21 : groundDepth(y));
     this.sprite.setCollideWorldBounds(true);
 
     const angleRad = Phaser.Math.DegToRad(angleDeg);
@@ -103,16 +108,33 @@ export class Vehicle {
       (this.sprite.height - hitboxDiameter) / 2
     );
     body.setBounce(0.25, 0.25);
-    body.setDrag(180, 180);
+    body.setDrag(320, 320);
+    body.setMass(this.getMass());
+    body.pushable = false;
     body.setMaxVelocity(this.spec.maxSpeed * 1.6, this.spec.maxSpeed * 1.6);
+
+    if (!this.spec.isFlying) {
+      this.taillight = scene.add.image(x, y, 'fx_taillight');
+      this.taillight.setOrigin(1, 0.5);
+      this.taillight.setBlendMode(Phaser.BlendModes.ADD);
+      this.taillight.setAlpha(0.24);
+      this.taillight.setDepth(19);
+    }
 
     if (this.spec.hasLightbar) {
       this.lightbarGlow = scene.add.image(x, y, 'fx_pixel_glow');
       this.lightbarGlow.setTint(PALETTE.WARNING_RED);
-      this.lightbarGlow.setAlpha(0.16);
-      this.lightbarGlow.setScale(1.1);
+      this.lightbarGlow.setAlpha(0.24);
+      this.lightbarGlow.setScale(1.25);
       this.lightbarGlow.setBlendMode(Phaser.BlendModes.ADD);
       this.lightbarGlow.setDepth(22);
+
+      this.sirenReflect = scene.add.image(x, y, 'fx_wet_reflect');
+      this.sirenReflect.setTint(PALETTE.WARNING_RED);
+      this.sirenReflect.setAlpha(0.18);
+      this.sirenReflect.setScale(1.75, 1.35);
+      this.sirenReflect.setBlendMode(Phaser.BlendModes.ADD);
+      this.sirenReflect.setDepth(4.7);
     }
 
     if (this.spec.hasTurret) {
@@ -125,7 +147,12 @@ export class Vehicle {
     if (this.spec.isFlying) {
       this.rotorSprite = scene.add.image(x, y, 'veh_heli_rotor');
       this.rotorSprite.setDepth(35);
-      this.headlight.setAlpha(0.08);
+      this.headlight.setAlpha(0.1);
+      this.spotlightPool = scene.add.image(x, y, 'fx_spotlight_pool');
+      this.spotlightPool.setBlendMode(Phaser.BlendModes.ADD);
+      this.spotlightPool.setAlpha(0.22);
+      this.spotlightPool.setScale(1.45);
+      this.spotlightPool.setDepth(5.5);
     }
 
     this.sparkEmitter = scene.add.particles(0, 0, 'pixel_spark', {
@@ -166,13 +193,21 @@ export class Vehicle {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
 
     if (occupied) {
-      this.headlight.setAlpha(this.spec.isFlying ? 0.45 : 0.84);
+      this.headlight.setAlpha(this.spec.isFlying ? 0.58 : 0.88);
+      if (this.taillight) this.taillight.setAlpha(0.68);
+      if (this.spotlightPool) this.spotlightPool.setAlpha(0.62);
+      body.pushable = true;
+      body.setMass(this.getMass());
       body.setDrag(0, 0);
       body.setImmovable(false);
     } else {
       this.isBoosting = false;
-      this.headlight.setAlpha(this.spec.isFlying ? 0.08 : 0.18);
-      body.setDrag(240, 240);
+      this.headlight.setAlpha(this.spec.isFlying ? 0.1 : 0.18);
+      if (this.taillight) this.taillight.setAlpha(0.24);
+      if (this.spotlightPool) this.spotlightPool.setAlpha(0.18);
+      body.pushable = false;
+      body.setMass(this.getMass());
+      body.setDrag(320, 320);
     }
   }
 
@@ -275,7 +310,7 @@ export class Vehicle {
         this.airTimer = 0;
         this.airDuration = 0;
         this.sprite.setScale(1);
-        this.sprite.setDepth(21);
+        this.sprite.setDepth(groundDepth(this.sprite.y));
         this.shadow.setScale(1);
         this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 12);
         this.scene.cameras.main.shake(95, 0.004);
@@ -390,7 +425,7 @@ export class Vehicle {
     } else {
       this.isBoosting = false;
       this.forwardSpeed = Math.hypot(body.velocity.x, body.velocity.y);
-      if (this.forwardSpeed < 6) {
+      if (this.forwardSpeed < 12) {
         body.setVelocity(0, 0);
         this.forwardSpeed = 0;
       }
@@ -544,6 +579,86 @@ export class Vehicle {
       return Math.min(1, impactSpeed / this.spec.maxSpeed);
     }
     return 0;
+  }
+
+  public getMass(): number {
+    switch (this.spec.type) {
+      case 'moto':
+        return 55;
+      case 'superbike':
+        return 65;
+      case 'racer':
+        return 230;
+      case 'compact':
+        return 240;
+      case 'supercar':
+        return 250;
+      case 'cruiser':
+        return 300;
+      case 'buggy':
+        return 340;
+      case 'heli':
+        return 420;
+      case 'swat':
+        return 620;
+      case 'tank':
+        return 1800;
+    }
+  }
+
+  public getRamDamageMultiplier(): number {
+    switch (this.spec.type) {
+      case 'tank':
+        return 3.2;
+      case 'swat':
+        return 2.2;
+      case 'buggy':
+        return 1.55;
+      case 'cruiser':
+        return 1.45;
+      case 'supercar':
+        return 1.35;
+      case 'racer':
+        return 1.3;
+      case 'compact':
+        return 1.15;
+      case 'heli':
+        return 1.0;
+      case 'superbike':
+        return 0.9;
+      case 'moto':
+        return 0.8;
+    }
+  }
+
+  public getRamSpeedThreshold(): number {
+    if (this.spec.type === 'tank') return 55;
+    if (this.spec.type === 'swat') return 75;
+    if (this.spec.type === 'buggy') return 85;
+    return 95;
+  }
+
+  public applyIncomingDamage(rawDamage: number): { finalDamage: number; destroyedNow: boolean } {
+    if (this.destroyed) {
+      return { finalDamage: 0, destroyedNow: false };
+    }
+    let typeScale = 0.92;
+    if (this.spec.type === 'tank') typeScale = 0.38;
+    else if (this.spec.type === 'swat') typeScale = 0.55;
+    else if (this.spec.type === 'cruiser' || this.spec.type === 'buggy') typeScale = 0.76;
+    else if (this.spec.type === 'moto' || this.spec.type === 'superbike') typeScale = 1.0;
+
+    const upgradeMitigation = Math.max(0.7, 1 - this.upgrades.armor * 0.08);
+    const finalDamage = Math.max(1, Math.round(rawDamage * typeScale * upgradeMitigation));
+    this.health = Math.max(0, this.health - finalDamage);
+
+    this.sparkEmitter.emitParticleAt(this.sprite.x, this.sprite.y, 7);
+    this.sprite.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+    this.scene.time.delayedCall(65, () => {
+      if (this.sprite.active && !this.destroyed) this.applyBaseTint();
+    });
+
+    return { finalDamage, destroyedNow: this.health <= 0 };
   }
 
   public applyBulletHit(damage: number, allowOccupiedDamage = false): boolean {
@@ -734,7 +849,7 @@ export class Vehicle {
     this.flightLift = 0;
     this.rotorSpinSpeed = 0;
     this.sprite.setScale(1);
-    this.sprite.setDepth(21);
+    this.sprite.setDepth(this.spec.isFlying ? 21 : groundDepth(y));
     if (this.rotorSprite) this.rotorSprite.setAlpha(1);
     if (this.turretSprite) this.turretSprite.clearTint();
 
@@ -745,6 +860,8 @@ export class Vehicle {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
     body.reset(x, y);
+    body.setMass(this.getMass());
+    body.pushable = this.occupied;
     body.setMaxVelocity(this.getEffectiveMaxSpeed() * 1.5, this.getEffectiveMaxSpeed() * 1.5);
     this.syncAttachments();
   }
@@ -774,6 +891,10 @@ export class Vehicle {
         ? Math.sin((1 - Math.max(0, this.airTimer) / this.airDuration) * Math.PI) * 14
         : 0;
 
+    if (!this.spec.isFlying && this.airTimer <= 0) {
+      this.sprite.setDepth(this.destroyed ? groundDepth(y) - 0.1 : groundDepth(y));
+    }
+
     this.shadow.setPosition(x + 3 + airOffset, y + 5 + airOffset);
     this.shadow.setRotation(rot);
 
@@ -784,13 +905,54 @@ export class Vehicle {
     );
     this.headlight.setRotation(rot);
 
+    if (this.taillight) {
+      const rearOffset = this.spec.width * 0.45;
+      this.taillight.setPosition(
+        x - Math.cos(rot) * rearOffset,
+        y - Math.sin(rot) * rearOffset
+      );
+      this.taillight.setRotation(rot);
+      if (this.occupied && !this.destroyed) {
+        const speedMag = Math.abs(this.forwardSpeed);
+        this.taillight.setAlpha(speedMag > 60 ? 0.86 : 0.58);
+      } else if (this.destroyed) {
+        this.taillight.setAlpha(0);
+      }
+    }
+
     if (this.lightbarGlow) {
       this.lightbarGlow.setPosition(x, y);
+      this.lightbarGlow.setDepth(this.sprite.depth + 0.3);
+      if (this.sirenReflect) {
+        this.sirenReflect.setPosition(x, y + 6);
+        const sirenFlash = Math.floor(this.scene.time.now / 140) % 2 === 0;
+        if (!this.destroyed && this.occupied) {
+          this.sirenReflect.setTint(sirenFlash ? 0xff2e54 : 0x00f5ff);
+          this.sirenReflect.setAlpha(0.45);
+          this.lightbarGlow.setTint(sirenFlash ? PALETTE.WARNING_RED : PALETTE.NEON_CYAN);
+          this.lightbarGlow.setAlpha(0.65);
+        } else if (!this.destroyed) {
+          this.sirenReflect.setTint(sirenFlash ? 0xff2e54 : 0x38bdf8);
+          this.sirenReflect.setAlpha(0.16);
+        } else {
+          this.sirenReflect.setAlpha(0);
+        }
+      }
+    }
+
+    if (this.spotlightPool) {
+      const beamDist = 56 + this.flightLift * 24;
+      this.spotlightPool.setPosition(
+        x + Math.cos(rot) * beamDist,
+        y + Math.sin(rot) * beamDist + 16
+      );
+      this.spotlightPool.setAlpha(this.destroyed ? 0 : this.occupied ? 0.55 : 0.16);
     }
 
     if (this.turretSprite) {
       this.turretSprite.setPosition(x, y);
       this.turretSprite.setRotation(this.turretAngleRad);
+      this.turretSprite.setDepth(this.sprite.depth + 0.4);
     }
 
     if (this.rotorSprite) {
@@ -807,8 +969,17 @@ export class Vehicle {
     this.smokeEmitter.destroy();
     this.shadow.destroy();
     this.headlight.destroy();
+    if (this.taillight) {
+      this.taillight.destroy();
+    }
     if (this.lightbarGlow) {
       this.lightbarGlow.destroy();
+    }
+    if (this.sirenReflect) {
+      this.sirenReflect.destroy();
+    }
+    if (this.spotlightPool) {
+      this.spotlightPool.destroy();
     }
     if (this.turretSprite) {
       this.turretSprite.destroy();

@@ -304,9 +304,11 @@ export class NPC {
   }
 
   private syncAttachments(): void {
+    this.sprite.setDepth(19 + Math.min(8.4, Math.max(0, this.sprite.y) * 0.0022));
     this.shadow.setPosition(this.sprite.x, this.sprite.y + 3);
     if (this.alertMark.visible) {
       this.alertMark.setPosition(this.sprite.x, this.sprite.y - 18);
+      this.alertMark.setDepth(28);
     }
   }
 

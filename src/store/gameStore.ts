@@ -284,6 +284,7 @@ export const useGameStore = create<GameUIState>((set, get) => ({
     index: RADIO_STATIONS[1].index,
     name: RADIO_STATIONS[1].name,
     genre: RADIO_STATIONS[1].genre,
+    playing: false,
   },
   horde: {
     active: false,

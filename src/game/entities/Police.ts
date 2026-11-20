@@ -14,7 +14,10 @@ export class Police {
   private scene: Phaser.Scene;
   private shadow: Phaser.GameObjects.Ellipse;
   private headlight: Phaser.GameObjects.Image;
+  private taillight: Phaser.GameObjects.Image | null = null;
   private lightbarGlow: Phaser.GameObjects.Image;
+  private sirenPool: Phaser.GameObjects.Image | null = null;
+  private spotlightPool: Phaser.GameObjects.Image | null = null;
   private rotorOverlay: Phaser.GameObjects.Image | null = null;
   private turretOverlay: Phaser.GameObjects.Image | null = null;
   private smokeEmitter: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -112,19 +115,47 @@ export class Police {
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setCircle(14, (this.sprite.width - 28) / 2, (this.sprite.height - 28) / 2);
     body.setBounce(0.25, 0.25);
+    body.setMass(unitKind === 'tank' ? 1800 : unitKind === 'swat' ? 620 : unitKind === 'heli' ? 400 : 300);
+    body.pushable = false;
 
     this.lightbarGlow = scene.add.image(start.x, start.y, 'fx_pixel_glow');
     this.lightbarGlow.setTint(PALETTE.NEON_CYAN);
-    this.lightbarGlow.setAlpha(0.18);
-    this.lightbarGlow.setScale(unitKind === 'heli' ? 1.4 : 1.15);
+    this.lightbarGlow.setAlpha(0.24);
+    this.lightbarGlow.setScale(unitKind === 'heli' ? 1.5 : 1.3);
     this.lightbarGlow.setBlendMode(Phaser.BlendModes.ADD);
     this.lightbarGlow.setDepth(unitKind === 'heli' ? 35 : 22);
+
+    if (unitKind !== 'heli') {
+      this.taillight = scene.add.image(start.x, start.y, 'fx_taillight');
+      this.taillight.setOrigin(1, 0.5);
+      this.taillight.setBlendMode(Phaser.BlendModes.ADD);
+      this.taillight.setAlpha(0.42);
+      this.taillight.setDepth(19);
+
+      this.sirenPool = scene.add.image(start.x, start.y + 4, 'fx_wet_reflect');
+      this.sirenPool.setTint(PALETTE.NEON_CYAN);
+      this.sirenPool.setAlpha(0.22);
+      this.sirenPool.setScale(1.85, 1.4);
+      this.sirenPool.setBlendMode(Phaser.BlendModes.ADD);
+      this.sirenPool.setDepth(4.7);
+    }
 
     if (unitKind === 'heli') {
       this.rotorOverlay = scene.add.image(start.x, start.y, 'veh_heli_rotor');
       this.rotorOverlay.setDepth(36);
       this.sprite.setScale(1.15);
       this.rotorOverlay.setScale(1.15);
+
+      this.headlight.setScale(2.8, 1.9);
+      this.headlight.setTint(0xbae6fd);
+      this.headlight.setAlpha(0.62);
+      this.headlight.setDepth(33);
+
+      this.spotlightPool = scene.add.image(start.x, start.y, 'fx_spotlight_pool');
+      this.spotlightPool.setBlendMode(Phaser.BlendModes.ADD);
+      this.spotlightPool.setAlpha(0.68);
+      this.spotlightPool.setScale(1.6);
+      this.spotlightPool.setDepth(5.5);
     } else if (unitKind === 'tank') {
       this.turretOverlay = scene.add.image(start.x, start.y, 'veh_tank_turret');
       this.turretOverlay.setOrigin(18 / 58, 0.5);
@@ -232,6 +263,9 @@ export class Police {
       this.sprite.setTint(0x475569).setTintMode(Phaser.TintModes.MULTIPLY);
       this.headlight.setAlpha(0);
       this.lightbarGlow.setAlpha(0);
+      if (this.taillight) this.taillight.setAlpha(0);
+      if (this.sirenPool) this.sirenPool.setAlpha(0);
+      if (this.spotlightPool) this.spotlightPool.setAlpha(0);
       return { destroyed: true, cashBonus: this.bounty };
     }
 
@@ -468,6 +502,9 @@ export class Police {
     this.shadow.setVisible(visible);
     this.headlight.setVisible(visible);
     this.lightbarGlow.setVisible(visible);
+    if (this.taillight) this.taillight.setVisible(visible);
+    if (this.sirenPool) this.sirenPool.setVisible(visible);
+    if (this.spotlightPool) this.spotlightPool.setVisible(visible);
     if (this.rotorOverlay) this.rotorOverlay.setVisible(visible);
     if (this.turretOverlay) this.turretOverlay.setVisible(visible);
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
@@ -506,17 +543,28 @@ export class Police {
 
   private updateLightbar(dtSeconds: number): void {
     if (this.state === 'PATROL') {
-      this.lightbarGlow.setAlpha(0.14);
+      this.lightbarGlow.setAlpha(0.2);
       this.lightbarGlow.setTint(PALETTE.NEON_CYAN);
-      this.headlight.setAlpha(0.45);
+      if (this.sirenPool) {
+        this.sirenPool.setTint(0x38bdf8);
+        this.sirenPool.setAlpha(0.2);
+      }
+      this.headlight.setAlpha(this.unitKind === 'heli' ? 0.52 : 0.45);
+      if (this.spotlightPool) this.spotlightPool.setAlpha(0.45);
       return;
     }
 
     this.lightbarTimer += dtSeconds;
     const flash = Math.floor(this.lightbarTimer * 9) % 2 === 0;
-    this.lightbarGlow.setTint(flash ? PALETTE.WARNING_RED : PALETTE.NEON_CYAN);
-    this.lightbarGlow.setAlpha(0.72);
-    this.headlight.setAlpha(0.8);
+    const flashCol = flash ? PALETTE.WARNING_RED : PALETTE.NEON_CYAN;
+    this.lightbarGlow.setTint(flashCol);
+    this.lightbarGlow.setAlpha(0.8);
+    if (this.sirenPool) {
+      this.sirenPool.setTint(flash ? 0xff2e54 : 0x00f5ff);
+      this.sirenPool.setAlpha(0.54);
+    }
+    this.headlight.setAlpha(this.unitKind === 'heli' ? 0.72 : 0.82);
+    if (this.spotlightPool) this.spotlightPool.setAlpha(0.75);
   }
 
   public freeze(): void {
@@ -531,13 +579,40 @@ export class Police {
     const rot = this.sprite.rotation;
     const airOffset = this.unitKind === 'heli' ? 18 : 0;
 
+    if (!this.isFlying()) {
+      this.sprite.setDepth(19 + Math.min(8.4, Math.max(0, y) * 0.0022));
+    }
+
     this.shadow.setPosition(x + 3 + airOffset, y + 4 + airOffset);
     this.shadow.setRotation(rot);
 
-    this.headlight.setPosition(x + Math.cos(rot) * 20, y + Math.sin(rot) * 20);
-    this.headlight.setRotation(rot);
+    if (this.unitKind === 'heli') {
+      const sweepOffset = Math.sin(this.scene.time.now * 0.0022) * 0.35;
+      const beamRot = rot + sweepOffset;
+      this.headlight.setPosition(x + Math.cos(beamRot) * 14, y + Math.sin(beamRot) * 14);
+      this.headlight.setRotation(beamRot);
+      if (this.spotlightPool) {
+        this.spotlightPool.setPosition(
+          x + Math.cos(beamRot) * 116,
+          y + Math.sin(beamRot) * 116 + 18
+        );
+      }
+    } else {
+      this.headlight.setPosition(x + Math.cos(rot) * 20, y + Math.sin(rot) * 20);
+      this.headlight.setRotation(rot);
+    }
+
+    if (this.taillight) {
+      this.taillight.setPosition(x - Math.cos(rot) * 20, y - Math.sin(rot) * 20);
+      this.taillight.setRotation(rot);
+      this.taillight.setAlpha(this.state === 'DISABLED' ? 0 : 0.65);
+    }
 
     this.lightbarGlow.setPosition(x, y);
+    this.lightbarGlow.setDepth(this.sprite.depth + 0.3);
+    if (this.sirenPool) {
+      this.sirenPool.setPosition(x, y + 6);
+    }
 
     if (this.rotorOverlay) {
       this.rotorOverlay.setPosition(x, y);
@@ -545,6 +620,7 @@ export class Police {
     }
     if (this.turretOverlay) {
       this.turretOverlay.setPosition(x, y);
+      this.turretOverlay.setDepth(this.sprite.depth + 0.4);
     }
   }
 
@@ -553,6 +629,9 @@ export class Police {
     this.shadow.destroy();
     this.headlight.destroy();
     this.lightbarGlow.destroy();
+    if (this.taillight) this.taillight.destroy();
+    if (this.sirenPool) this.sirenPool.destroy();
+    if (this.spotlightPool) this.spotlightPool.destroy();
     if (this.rotorOverlay) this.rotorOverlay.destroy();
     if (this.turretOverlay) this.turretOverlay.destroy();
     this.sprite.destroy();

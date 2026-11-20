@@ -8,8 +8,9 @@ interface MiniMapProps {
   onClick?: () => void;
 }
 
-export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
+export function MiniMap({ width = 168, height = 114, onClick }: MiniMapProps) {
   const playMode = useGameStore((s) => s.playMode);
+  const districtName = useGameStore((s) => s.districtName);
   const districtData = useGameStore((s) => s.districtData);
   const playerX = useGameStore((s) => s.playerX);
   const playerY = useGameStore((s) => s.playerY);
@@ -39,15 +40,28 @@ export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
       type="button"
       onClick={onClick}
       aria-label="打开区域地图"
-      className="pointer-events-auto block border border-[#00F5FF]/45 bg-[#080D18]/92 p-1 transition-colors hover:border-[#00F5FF] focus-visible:outline-2 focus-visible:outline-[#00F5FF]"
+      className="pointer-events-auto relative block border border-[#00F5FF]/65 bg-[#070B18]/92 p-1 text-left transition-colors hover:border-[#00F5FF] focus-visible:outline-2 focus-visible:outline-[#00F5FF]"
+      style={{ boxShadow: '0 4px 0 rgba(3, 6, 12, 0.9), 0 0 18px rgba(0, 245, 255, 0.16)' }}
     >
-      <svg
-        width={width}
-        height={height}
-        viewBox={`${vx} ${vy} ${viewW} ${viewH}`}
-        className="block bg-[#080D18]"
-      >
-        <MapTerrainSvg districtData={districtData} showLabels={false} />
+      {/* Top District Banner Header (Matches Reference Top-Right Radar Header) */}
+      <div className="mb-1 flex items-center justify-between gap-1.5 border-b border-[#00F5FF]/35 bg-[#0C142B]/95 px-1.5 py-0.5">
+        <span className="flex items-center gap-1 truncate text-[10px] font-bold tracking-wider text-slate-100">
+          <span className="inline-block h-1.5 w-1.5 shrink-0 bg-[#FFD166]" />
+          <span className="truncate">{districtName}</span>
+        </span>
+        <span className="shrink-0 font-mono-tabular text-[8px] font-bold text-[#00F5FF]">
+          [M]
+        </span>
+      </div>
+
+      <div className="relative">
+        <svg
+          width={width}
+          height={height}
+          viewBox={`${vx} ${vy} ${viewW} ${viewH}`}
+          className="block bg-[#070D1D]"
+        >
+          <MapTerrainSvg districtData={districtData} showLabels={false} />
 
         {/* Landmarks */}
         {districtData.landmarks.map((lm) => (
@@ -297,11 +311,17 @@ export function MiniMap({ width = 156, height = 114, onClick }: MiniMapProps) {
           </g>
         )}
 
-        {/* Player Position & Heading */}
-        <g transform={`translate(${playerX}, ${playerY}) rotate(${facingDeg})`}>
-          <polygon points="36,0 -22,-22 -11,0 -22,22" fill="#00F5FF" stroke="#080D18" strokeWidth={6} />
-        </g>
-      </svg>
+          {/* Player Position & Heading */}
+          <g transform={`translate(${playerX}, ${playerY}) rotate(${facingDeg})`}>
+            <polygon points="36,0 -22,-22 -11,0 -22,22" fill="#00F5FF" stroke="#080D18" strokeWidth={6} />
+          </g>
+        </svg>
+
+        {/* Crisp Top-Center Compass N Indicator */}
+        <span className="pointer-events-none absolute top-0.5 left-1/2 -translate-x-1/2 bg-[#070B18]/85 px-1 font-mono-tabular text-[9px] font-black leading-none text-slate-100">
+          N
+        </span>
+      </div>
     </button>
   );
 }

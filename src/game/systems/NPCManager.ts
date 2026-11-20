@@ -296,16 +296,33 @@ export class NPCManager {
 
   public registerVehicleColliders(
     vehicleSprites: Phaser.Physics.Arcade.Sprite[],
-    onVehicleHitNpc?: (vehSprite: Phaser.Physics.Arcade.Sprite, npc: NPC, speed: number) => void
+    onVehicleHitNpc?: (
+      vehSprite: Phaser.Physics.Arcade.Sprite,
+      npc: NPC,
+      speed: number,
+      res: { killed: boolean; cashDrop: number }
+    ) => void
   ): void {
+    if (!this.npcGroup) return;
     for (const vehSprite of vehicleSprites) {
       this.scene.physics.add.collider(vehSprite, this.npcGroup, (_veh, npcObj) => {
         const npc = this.npcs.find((n) => n.sprite === npcObj);
         const body = vehSprite.body as Phaser.Physics.Arcade.Body;
-        if (npc && body && body.speed > 35) {
+        if (!npc || !body) return;
+        const speed = body.speed;
+        if (speed > 95) {
+          const dx = npc.sprite.x - vehSprite.x;
+          const dy = npc.sprite.y - vehSprite.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const dmg = Math.round((speed - 60) * 0.35);
+          const res = npc.takeHit(dmg, dx / dist, dy / dist, Math.min(340, speed));
+          this.audioManager.playImpactHit(res.killed);
+          this.triggerAreaPanic(npc.sprite.x, npc.sprite.y);
+          onVehicleHitNpc?.(vehSprite, npc, speed, res);
+        } else if (speed > 35) {
           npc.triggerPanic(vehSprite.x, vehSprite.y);
           this.audioManager.playBump(this.scene.time.now);
-          onVehicleHitNpc?.(vehSprite, npc, body.speed);
+          onVehicleHitNpc?.(vehSprite, npc, speed, { killed: false, cashDrop: 0 });
         }
       });
     }

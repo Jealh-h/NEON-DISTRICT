@@ -398,12 +398,17 @@ export function generateCityTilemap(district: DistrictData): TiledMapJson {
       }
     }
   }
-  for (let ty = 4; ty < rows - 4; ty += 7) {
-    for (let tx = 4; tx < cols - 4; tx += 9) {
+  for (let ty = 3; ty < rows - 4; ty += 3) {
+    for (let tx = 4; tx < cols - 4; tx += 4) {
       if (roadMask[idx(tx, ty)] === 1 && details[idx(tx, ty)] === 0) {
-        if ((tx + ty) % 5 === 0) details[idx(tx, ty)] = T.PUDDLE_CYAN;
-        else if ((tx + ty) % 7 === 0) details[idx(tx, ty)] = T.PUDDLE_PINK;
-        else if ((tx * 3 + ty) % 11 === 0) details[idx(tx, ty)] = T.MANHOLE_GRATE;
+        const isUrban = tx < 108 && ty < 94;
+        if (isUrban && (tx + ty) % 3 === 0) {
+          details[idx(tx, ty)] = T.PUDDLE_CYAN;
+        } else if (isUrban && (tx * 2 + ty) % 5 === 0) {
+          details[idx(tx, ty)] = T.PUDDLE_PINK;
+        } else if ((tx * 3 + ty) % 13 === 0) {
+          details[idx(tx, ty)] = T.MANHOLE_GRATE;
+        }
       }
     }
   }

@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Compass,
+  Clock,
   Crosshair,
   Flag,
   MapPin,
   Navigation,
   Siren,
-  Target,
+  Star,
   XCircle,
 } from 'lucide-react';
 import { MISSION_DEFINITIONS } from '../game/config/BalanceConfig';
@@ -20,9 +21,16 @@ export const FAR_TARGET_THRESHOLD_PX = 560; // 70m (~outside immediate viewport)
 function formatMeters(distPx: number): string {
   const meters = Math.max(0, Math.round(distPx / 8));
   if (meters >= 1000) {
-    return `${(meters / 1000).toFixed(1)}km`;
+    return `${(meters / 1000).toFixed(1)} km`;
   }
-  return `${meters}m`;
+  return `${meters} m`;
+}
+
+function formatCountdown(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
 function getCardinalDirection(dx: number, dy: number): string {
@@ -109,29 +117,6 @@ export function PixelNavPointer({
   );
 }
 
-interface ScrollingTickerProps {
-  text: string;
-  accentColor: string;
-  prefix?: string;
-}
-
-function ScrollingTicker({ text, accentColor, prefix = '▸' }: ScrollingTickerProps) {
-  const segment = `${prefix} ${text}`;
-  return (
-    <div
-      className="mt-1 w-full overflow-hidden whitespace-nowrap border-y border-slate-800/90 bg-[#050912]/90 py-0.5 text-[10px]"
-      style={{ borderColor: `${accentColor}40` }}
-    >
-      <div className="animate-cyber-marquee">
-        <span className="pr-6 font-medium text-slate-100">{segment}</span>
-        <span className="pr-6 font-medium text-slate-100" aria-hidden="true">
-          {segment}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /**
  * Floating HUD-perimeter pixel navigation pointer displayed when the active tracked
  * objective is far outside immediate camera view.
@@ -209,8 +194,8 @@ export function FarTargetPixelPointer() {
   const rad = Math.atan2(dy, dx);
   const angleDeg = (rad * 180) / Math.PI + 90;
   // Position on a safe viewport perimeter ellipse clear of HUD corners and joysticks
-  const leftPct = 50 + Math.cos(rad) * 35;
-  const topPct = 50 + Math.sin(rad) * 31;
+  const leftPct = 50 + Math.cos(rad) * 34;
+  const topPct = 50 + Math.sin(rad) * 30;
 
   return (
     <div
@@ -245,6 +230,8 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
   const policeMarkers = useGameStore((s) => s.policeMarkers);
   const randomEvents = useGameStore((s) => s.randomEvents);
   const race = useGameStore((s) => s.race);
+  const exploration = useGameStore((s) => s.exploration);
+  const sandboxSummary = useGameStore((s) => s.sandboxSummary);
   const wantedLevel = useGameStore((s) => s.wantedLevel);
   const spotted = useGameStore((s) => s.spotted);
   const escapeProgress = useGameStore((s) => s.escapeProgress);
@@ -253,14 +240,9 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
   const customWaypoint = useGameStore((s) => s.customWaypoint);
   const districtData = useGameStore((s) => s.districtData);
   const toggleMap = useGameStore((s) => s.toggleMap);
+  const openHubTab = useGameStore((s) => s.openHubTab);
 
   const [collapsed, setCollapsed] = useState(false);
-
-  const wpDx = customWaypoint ? customWaypoint.x - playerX : 0;
-  const wpDy = customWaypoint ? customWaypoint.y - playerY : 0;
-  const wpDistPx = customWaypoint ? Math.hypot(wpDx, wpDy) : 0;
-  const wpAngleDeg = customWaypoint ? (Math.atan2(wpDy, wpDx) * 180) / Math.PI + 90 : 0;
-  const wpIsFar = customWaypoint !== null && wpDistPx > FAR_TARGET_THRESHOLD_PX;
 
   const renderDirectionIcon = (
     angleDeg: number,
@@ -273,7 +255,7 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
         <PixelNavPointer
           angleDeg={angleDeg}
           color={color}
-          size={compactSize ? 13 : 16}
+          size={compactSize ? 12 : 14}
           bob
         />
       );
@@ -286,39 +268,6 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
     );
   };
 
-  const renderSlimWaypointStrip = () => {
-    if (!customWaypoint) return null;
-    return (
-      <div className="mt-1 flex w-full items-center justify-between gap-1.5 border border-[#38BDF8]/65 bg-[#080D18]/86 px-2 py-0.5 text-[10px]">
-        <button
-          type="button"
-          onClick={toggleMap}
-          className="pointer-events-auto flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left text-[#38BDF8] hover:text-[#00F5FF]"
-          title="点击打开全图调整航标"
-        >
-          {renderDirectionIcon(wpAngleDeg, wpDistPx, '#38BDF8', true)}
-          <span className="truncate font-semibold">{customWaypoint.label}</span>
-        </button>
-        <div className="flex shrink-0 items-center gap-1 font-mono-tabular">
-          {wpIsFar && (
-            <span className="border border-[#38BDF8]/50 bg-[#38BDF8]/15 px-1 text-[8px] font-bold text-[#38BDF8]">
-              远距
-            </span>
-          )}
-          <span className="font-bold text-[#00F5FF]">{formatMeters(wpDistPx)}</span>
-          <button
-            type="button"
-            onClick={() => gameEvents.emit(GAME_EVENT.SET_CUSTOM_WAYPOINT, null)}
-            title="取消自定义航标"
-            className="pointer-events-auto cursor-pointer text-slate-400 hover:text-[#FF4545]"
-          >
-            <XCircle className="h-3 w-3" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   // 1. Race mode checkpoint tracker
   if (playMode === 'race') {
     if (!race.active) return null;
@@ -327,11 +276,10 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
     const dy = race.targetPos ? race.targetPos.y - playerY : 0;
     const distPx = race.targetPos ? Math.hypot(dx, dy) : 0;
     const angleDeg = race.targetPos ? (Math.atan2(dy, dx) * 180) / Math.PI + 90 : 0;
-    const isFar = race.targetPos !== null && distPx > FAR_TARGET_THRESHOLD_PX;
 
     if (compact) {
       return (
-        <div className="flex items-center gap-1.5 border border-[#FFD166]/70 bg-[#080D18]/86 px-2 py-0.5 font-mono-tabular text-[10px] text-[#FFD166]">
+        <div className="flex items-center gap-1.5 border border-[#FFD166]/70 bg-[#070B18]/88 px-2 py-0.5 font-mono-tabular text-[10px] text-[#FFD166]">
           {race.targetPos && renderDirectionIcon(angleDeg, distPx, '#FFD166', true)}
           <span>
             CP {race.checkpointIndex + 1}/{race.totalCheckpoints} · {formatMeters(distPx)}
@@ -343,13 +291,16 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
     return (
       <div
         key={`race-cp-${race.checkpointIndex}`}
-        className="animate-mission-step w-full border border-[#FFD166]/70 bg-[#080D18]/86 px-2.5 py-1.5"
+        className="animate-mission-step w-full border border-[#00F5FF]/55 bg-[#070B18]/88 p-2"
+        style={{ boxShadow: '0 4px 0 rgba(3, 6, 12, 0.88)' }}
       >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 text-[10px] font-bold text-[#FFD166]">
-            <Flag className="h-3 w-3" />
-            <span>
-              检查点 {race.checkpointIndex + 1}/{race.totalCheckpoints}
+          <div className="flex items-center gap-1.5">
+            <span className="flex h-4 w-4 items-center justify-center bg-[#FFD166]/20 text-[#FFD166]">
+              <Flag className="h-3 w-3" />
+            </span>
+            <span className="text-[11px] font-bold text-[#FFD166]">
+              环城竞速 · 检查点 {race.checkpointIndex + 1}/{race.totalCheckpoints}
             </span>
           </div>
           <span
@@ -361,27 +312,18 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
           </span>
         </div>
 
-        {race.targetLabel && (
-          <div className="mt-1 flex items-center justify-between gap-1.5 text-[10px]">
-            <span className="truncate font-semibold text-slate-100">{race.targetLabel}</span>
-            {race.targetPos && (
-              <span className="flex shrink-0 items-center gap-1 font-mono-tabular font-bold text-[#00F5FF]">
-                {renderDirectionIcon(angleDeg, distPx, '#FFD166', true)}
-                {formatMeters(distPx)}
-              </span>
-            )}
-          </div>
-        )}
-
-        <ScrollingTicker
-          accentColor="#FFD166"
-          text={`下一检查点：${race.targetLabel ?? '终点'} · 方位 ${getCardinalDirection(dx, dy)} · 剩余 ${race.timeRemainingSec}s`}
-        />
+        <div className="mt-1 flex items-center justify-between gap-2 text-[10px]">
+          <span className="truncate text-slate-200">{race.targetLabel ?? '下一检查点'}</span>
+          {race.targetPos && (
+            <span className="flex shrink-0 items-center gap-1 font-mono-tabular font-bold text-[#FFD166]">
+              {renderDirectionIcon(angleDeg, distPx, '#FFD166', true)}
+              {formatMeters(distPx)}
+            </span>
+          )}
+        </div>
 
         <div className="mt-1 flex items-center justify-between border-t border-slate-800/80 pt-1 font-mono-tabular text-[9px] text-slate-400">
-          <span>
-            用时 {race.elapsedSec}s{isFar ? ' · 远距导引' : ''}
-          </span>
+          <span>用时 {race.elapsedSec}s</span>
           <span>最佳 {race.bestTimeSec !== null ? `${race.bestTimeSec}s` : '--'}</span>
         </div>
       </div>
@@ -390,328 +332,139 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
 
   if (playMode !== 'sandbox') return null;
 
-  // 2. Active Cyber Mission (Primary GTA-style Mission Waypoint Tracker)
-  if (activeMission) {
-    const hasPos = activeMission.objectiveType === 'reach' && activeMission.targetPos !== null;
-    const dx = hasPos && activeMission.targetPos ? activeMission.targetPos.x - playerX : 0;
-    const dy = hasPos && activeMission.targetPos ? activeMission.targetPos.y - playerY : 0;
-    const distPx = hasPos ? Math.hypot(dx, dy) : 0;
-    const angleDeg = hasPos ? (Math.atan2(dy, dx) * 180) / Math.PI + 90 : 0;
-    const dirLabel = hasPos ? getCardinalDirection(dx, dy) : '';
-    const isNear = hasPos && distPx <= 280;
-    const isFar = hasPos && distPx > FAR_TARGET_THRESHOLD_PX;
-    const proximityPct = hasPos
-      ? Math.max(8, Math.min(100, Math.round(100 - (distPx / 2800) * 100)))
-      : 0;
-
-    if (compact) {
+  // Compact single-line fallback when HUD is minimized [V] or on tiny phones
+  if (compact) {
+    if (activeMission) {
+      const hasPos = activeMission.objectiveType === 'reach' && activeMission.targetPos !== null;
+      const dx = hasPos && activeMission.targetPos ? activeMission.targetPos.x - playerX : 0;
+      const dy = hasPos && activeMission.targetPos ? activeMission.targetPos.y - playerY : 0;
+      const distPx = hasPos ? Math.hypot(dx, dy) : 0;
+      const angleDeg = hasPos ? (Math.atan2(dy, dx) * 180) / Math.PI + 90 : 0;
       return (
-        <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
-            onClick={toggleMap}
-            title="点击打开战术全图查看任务路线 (M)"
-            className="pointer-events-auto flex cursor-pointer items-center gap-1.5 border border-[#FFD166]/75 bg-[#080D18]/86 px-2 py-0.5 text-[10px] hover:border-[#00F5FF]"
-          >
-            {hasPos ? (
-              renderDirectionIcon(angleDeg, distPx, '#FFD166', true)
-            ) : (
-              <Siren className="h-3 w-3 shrink-0 text-[#FF4545]" />
-            )}
-            <span className="max-w-[96px] truncate font-bold text-[#FFD166]">
-              {activeMission.title}
-            </span>
-            <span className="font-mono-tabular font-bold text-[#00F5FF]">
-              {hasPos ? formatMeters(distPx) : `${escapeProgress}%`}
-            </span>
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full">
-        <div
-          key={`${activeMission.id}-${activeMission.stepIndex}`}
-          className="animate-mission-step w-full border border-[#FFD166]/70 bg-[#080D18]/86 px-2.5 py-1.5"
-        >
-          {/* Header Row */}
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex min-w-0 items-center gap-1">
-              <Target className="h-3 w-3 shrink-0 text-[#FFD166]" />
-              <span className="truncate text-[10px] font-bold tracking-wider text-[#FFD166]">
-                {activeMission.title}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <span className="border border-[#FFD166]/45 bg-[#FFD166]/10 px-1 font-mono-tabular text-[9px] font-bold text-[#FFD166]">
-                {activeMission.stepIndex + 1}/{activeMission.totalSteps}
-              </span>
-              <button
-                type="button"
-                onClick={() => setCollapsed((c) => !c)}
-                className="pointer-events-auto cursor-pointer text-slate-400 hover:text-[#FFD166]"
-                title={collapsed ? '展开任务追踪' : '收起任务追踪'}
-              >
-                {collapsed ? (
-                  <ChevronDown className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronUp className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Always-visible GPS Waypoint Distance Bar with Pixel Navigation Pointer when far */}
-          {hasPos && (
-            <button
-              type="button"
-              onClick={toggleMap}
-              title="点击打开战术全图定位目标 (M)"
-              className={`pointer-events-auto mt-1 flex w-full cursor-pointer items-center justify-between gap-1.5 border bg-[#0D1424]/90 px-1.5 py-1 text-left transition-colors hover:border-[#00F5FF] ${
-                isFar ? 'border-[#FFD166]/70' : 'border-[#00F5FF]/35'
-              }`}
-            >
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span
-                  className={`flex h-5 w-5 shrink-0 items-center justify-center border ${
-                    isFar
-                      ? 'border-[#FFD166] bg-[#FFD166]/20'
-                      : 'border-[#FFD166]/60 bg-[#FFD166]/15'
-                  }`}
-                >
-                  {renderDirectionIcon(angleDeg, distPx, '#FFD166')}
-                </span>
-                <div className="min-w-0">
-                  <div className="truncate text-[10px] font-bold text-slate-100">
-                    {activeMission.targetLabel ?? '目标信标'}
-                  </div>
-                  <div className="flex items-center gap-1 font-mono-tabular text-[8px] text-slate-400">
-                    <span>方位 {dirLabel}</span>
-                    {isFar && (
-                      <span className="bg-[#FFD166]/20 px-1 font-bold text-[#FFD166]">
-                        像素导引
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="shrink-0 text-right font-mono-tabular">
-                <div
-                  className={`text-[11px] font-bold leading-none ${
-                    isNear
-                      ? 'animate-pulse text-[#4ADE80]'
-                      : isFar
-                        ? 'text-[#FFD166]'
-                        : 'text-[#00F5FF]'
-                  }`}
-                >
-                  {formatMeters(distPx)}
-                </div>
-                <div className="text-[8px] text-slate-400">
-                  {isNear ? '即将抵达' : isFar ? '目标过远' : '直线距离'}
-                </div>
-              </div>
-            </button>
-          )}
-
-          {activeMission.objectiveType === 'escape_wanted' && (
-            <div className="mt-1 border border-[#FF4545]/60 bg-[#FF4545]/10 px-1.5 py-1 text-[10px]">
-              <div className="flex items-center justify-between font-bold">
-                <span className="flex items-center gap-1 text-[#FF4545]">
-                  <Siren className="h-3 w-3" />
-                  {wantedLevel > 0 ? (spotted ? '被警队锁定' : '脱离视线中') : '警星已消除'}
-                </span>
-                <span className="font-mono-tabular text-[#00F5FF]">{escapeProgress}%</span>
-              </div>
-            </div>
-          )}
-
-          {!collapsed && (
-            <>
-              {/* Dynamic Scrolling Cyber Instruction Ticker */}
-              <ScrollingTicker
-                accentColor="#FFD166"
-                text={
-                  hasPos
-                    ? `${activeMission.instruction} · 目标：${activeMission.targetLabel ?? '信标'} (${dirLabel} ${formatMeters(distPx)})`
-                    : activeMission.instruction
-                }
-              />
-
-              <p className="mt-1 text-[10px] leading-snug text-slate-300">
-                {activeMission.instruction}
-              </p>
-
-              {hasPos && (
-                <div className="relative mt-1 h-1.5 w-full overflow-hidden bg-[#151C2B]">
-                  <div
-                    className="relative h-full bg-[#FFD166] transition-all duration-150"
-                    style={{ width: `${proximityPct}%` }}
-                  >
-                    <div className="pixel-scroll-rail absolute inset-0" />
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-1 flex items-center justify-between border-t border-slate-800/80 pt-1 text-[9px]">
-                <div className="flex items-center gap-2 font-mono-tabular">
-                  <span className="font-bold text-[#00F5FF]">+${activeMission.reward}</span>
-                  {activeMission.timeRemainingSec !== null && (
-                    <span
-                      className={`font-bold ${
-                        activeMission.timeRemainingSec <= 12
-                          ? 'animate-pulse text-[#FF4545]'
-                          : 'text-[#FFD166]'
-                      }`}
-                    >
-                      限 {activeMission.timeRemainingSec}s
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => gameEvents.emit(GAME_EVENT.ABANDON_MISSION)}
-                  title="放弃当前委托"
-                  className="pointer-events-auto flex cursor-pointer items-center gap-0.5 text-slate-400 transition-colors hover:text-[#FF4545]"
-                >
-                  <XCircle className="h-2.5 w-2.5" />
-                  <span>放弃</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-        {renderSlimWaypointStrip()}
-      </div>
-    );
-  }
-
-  // 3. Vigilante Police Bounty Target (if active without main mission)
-  const vigilanteTarget = policeMarkers.find((pm) => pm.id === 'vigilante-target') ?? null;
-  if (vigilanteTarget) {
-    const dx = vigilanteTarget.x - playerX;
-    const dy = vigilanteTarget.y - playerY;
-    const distPx = Math.hypot(dx, dy);
-    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
-    const isFar = distPx > FAR_TARGET_THRESHOLD_PX;
-
-    if (compact) {
-      return (
-        <div className="flex items-center gap-1.5 border border-[#FF4545]/75 bg-[#080D18]/86 px-2 py-0.5 font-mono-tabular text-[10px] text-[#FFD166]">
-          {renderDirectionIcon(angleDeg, distPx, '#FF4545', true)}
-          <span>追缉目标 · {formatMeters(distPx)}</span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="w-full">
-        <div className="animate-mission-step w-full border border-[#FF4545]/75 bg-[#080D18]/86 px-2.5 py-1.5">
-          <div className="flex items-center justify-between text-[10px] font-bold">
-            <span className="flex items-center gap-1 text-[#FF4545]">
-              <Siren className="h-3 w-3 animate-pulse" />
-              治安追缉悬赏
-            </span>
-            <span className="font-mono-tabular text-[#FFD166]">
-              {getCardinalDirection(dx, dy)} · {formatMeters(distPx)}
-            </span>
-          </div>
-          <div className="mt-1 flex items-center justify-between gap-1.5 border border-[#FF4545]/35 bg-[#0D1424]/85 px-1.5 py-1 text-[10px]">
-            <span className="flex items-center gap-1.5 text-slate-200">
-              {renderDirectionIcon(angleDeg, distPx, '#FFD166')}
-              <span>截停并摧毁逃犯载具</span>
-            </span>
-            {isFar && (
-              <span className="bg-[#FF4545]/20 px-1 font-mono-tabular text-[8px] font-bold text-[#FF4545]">
-                远距导引
-              </span>
-            )}
-          </div>
-          <ScrollingTicker
-            accentColor="#FF4545"
-            text={`特区警讯锁定：向 ${getCardinalDirection(dx, dy)} 追击逃犯载具 · 距离 ${formatMeters(distPx)}`}
-          />
-        </div>
-        {renderSlimWaypointStrip()}
-      </div>
-    );
-  }
-
-  // 4. Custom GPS Waypoint (when idle in Sandbox, shown in both compact & expanded mode)
-  if (customWaypoint) {
-    const isNear = wpDistPx <= 200;
-    const proximityPct = Math.max(8, Math.min(100, Math.round(100 - (wpDistPx / 2800) * 100)));
-
-    if (compact) {
-      return (
-        <div className="flex items-center gap-1.5 border border-[#38BDF8]/75 bg-[#080D18]/86 px-2 py-0.5 font-mono-tabular text-[10px] text-[#38BDF8]">
-          {renderDirectionIcon(wpAngleDeg, wpDistPx, '#38BDF8', true)}
-          <span className="max-w-[84px] truncate">{customWaypoint.label}</span>
-          <span className="font-bold text-[#00F5FF]">{formatMeters(wpDistPx)}</span>
-        </div>
-      );
-    }
-
-    return (
-      <div className="animate-mission-step w-full border border-[#38BDF8]/75 bg-[#080D18]/86 px-2.5 py-1.5">
-        <div className="flex items-center justify-between gap-1 text-[10px]">
-          <span className="flex items-center gap-1 truncate font-bold text-[#38BDF8]">
-            <Crosshair className="h-3 w-3 shrink-0" />
-            <span className="truncate">{customWaypoint.label}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => gameEvents.emit(GAME_EVENT.SET_CUSTOM_WAYPOINT, null)}
-            title="取消自定义航标"
-            className="pointer-events-auto flex shrink-0 cursor-pointer items-center gap-0.5 text-slate-400 hover:text-[#FF4545]"
-          >
-            <XCircle className="h-3 w-3" />
-            <span>取消</span>
-          </button>
-        </div>
         <button
           type="button"
           onClick={toggleMap}
-          className="pointer-events-auto mt-1 flex w-full cursor-pointer items-center justify-between text-[10px]"
+          className="pointer-events-auto flex cursor-pointer items-center gap-1.5 border border-[#FF2E88]/75 bg-[#070B18]/88 px-2 py-0.5 text-[10px] hover:border-[#00F5FF]"
         >
-          <span className="flex items-center gap-1.5 text-slate-300">
-            {renderDirectionIcon(wpAngleDeg, wpDistPx, '#00F5FF')}
-            <span>方位 {getCardinalDirection(wpDx, wpDy)}</span>
-            {wpIsFar && (
-              <span className="bg-[#38BDF8]/20 px-1 font-mono-tabular text-[8px] font-bold text-[#38BDF8]">
-                远距导引
-              </span>
-            )}
+          {hasPos ? (
+            renderDirectionIcon(angleDeg, distPx, '#FF2E88', true)
+          ) : (
+            <Siren className="h-3 w-3 shrink-0 text-[#FF4545]" />
+          )}
+          <span className="max-w-[96px] truncate font-bold text-[#FF2E88]">
+            {activeMission.title}
           </span>
-          <span
-            className={`font-mono-tabular font-bold ${
-              isNear ? 'animate-pulse text-[#4ADE80]' : 'text-[#00F5FF]'
-            }`}
-          >
-            {formatMeters(wpDistPx)}
+          <span className="font-mono-tabular font-bold text-[#FFD166]">
+            {hasPos ? formatMeters(distPx) : `${escapeProgress}%`}
           </span>
         </button>
-        <ScrollingTicker
-          accentColor="#38BDF8"
-          text={`GPS 航标导航中：前往 ${customWaypoint.label} (${getCardinalDirection(wpDx, wpDy)} ${formatMeters(wpDistPx)})`}
-        />
-        <div className="relative mt-1 h-1.5 w-full overflow-hidden bg-[#151C2B]">
-          <div
-            className="relative h-full bg-[#38BDF8] transition-all duration-150"
-            style={{ width: `${proximityPct}%` }}
-          >
-            <div className="pixel-scroll-rail absolute inset-0" />
-          </div>
-        </div>
-      </div>
-    );
+      );
+    }
+
+    if (customWaypoint) {
+      const dx = customWaypoint.x - playerX;
+      const dy = customWaypoint.y - playerY;
+      const distPx = Math.hypot(dx, dy);
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
+      return (
+        <button
+          type="button"
+          onClick={toggleMap}
+          className="pointer-events-auto flex cursor-pointer items-center gap-1.5 border border-[#00F5FF]/75 bg-[#070B18]/88 px-2 py-0.5 font-mono-tabular text-[10px] text-[#00F5FF]"
+        >
+          {renderDirectionIcon(angleDeg, distPx, '#00F5FF', true)}
+          <span className="max-w-[84px] truncate">{customWaypoint.label}</span>
+          <span className="font-bold text-[#FFD166]">{formatMeters(distPx)}</span>
+        </button>
+      );
+    }
+    return null;
   }
 
-  // 5. Nearest Dynamic City Event or Hub Guidance when idle in Sandbox
-  if (compact) return null;
+  // Compute Main Card Data (Card 1: 主线任务 - Magenta Star #FF2E88)
+  const nexusHub = districtData?.landmarks.find((l) => l.id === 'nexus-ops');
+  const hubX = nexusHub?.x ?? 1480;
+  const hubY = nexusHub?.y ?? 624;
+  const hubDx = hubX - playerX;
+  const hubDy = hubY - playerY;
+  const hubDist = Math.hypot(hubDx, hubDy);
+  const hubAngle = (Math.atan2(hubDy, hubDx) * 180) / Math.PI + 90;
 
+  const mainHasPos =
+    activeMission !== null &&
+    activeMission.objectiveType === 'reach' &&
+    activeMission.targetPos !== null;
+  const mainDx =
+    mainHasPos && activeMission?.targetPos ? activeMission.targetPos.x - playerX : 0;
+  const mainDy =
+    mainHasPos && activeMission?.targetPos ? activeMission.targetPos.y - playerY : 0;
+  const mainDist = mainHasPos ? Math.hypot(mainDx, mainDy) : 0;
+  const mainAngle = mainHasPos ? (Math.atan2(mainDy, mainDx) * 180) / Math.PI + 90 : 0;
+
+  // Compute Side Card Data (Card 2: 支线任务 - Cyan Star #00F5FF)
+  const vigilanteTarget = policeMarkers.find((pm) => pm.id === 'vigilante-target') ?? null;
+  const nearestUnsyncedTower =
+    sandboxSummary.signalTowers
+      .filter((t) => !t.synced)
+      .reduce<{ tower: (typeof sandboxSummary.signalTowers)[number]; dist: number } | null>(
+        (best, tw) => {
+          const d = Math.hypot(tw.x - playerX, tw.y - playerY);
+          return !best || d < best.dist ? { tower: tw, dist: d } : best;
+        },
+        null
+      ) ?? null;
+  const nearestChip =
+    exploration.chipMarkers.reduce<{ x: number; y: number; dist: number } | null>((best, cm) => {
+      const d = Math.hypot(cm.x - playerX, cm.y - playerY);
+      return !best || d < best.dist ? { x: cm.x, y: cm.y, dist: d } : best;
+    }, null) ?? null;
+
+  type SideQuestInfo = {
+    title: string;
+    subtitle: string;
+    x: number;
+    y: number;
+    distPx: number;
+    canClearWaypoint?: boolean;
+  };
+
+  let sideQuest: SideQuestInfo | null = null;
+  if (vigilanteTarget) {
+    sideQuest = {
+      title: '治安追缉悬赏',
+      subtitle: '截停并摧毁逃犯载具',
+      x: vigilanteTarget.x,
+      y: vigilanteTarget.y,
+      distPx: Math.hypot(vigilanteTarget.x - playerX, vigilanteTarget.y - playerY),
+    };
+  } else if (customWaypoint) {
+    sideQuest = {
+      title: `GPS 航标 · ${customWaypoint.label}`,
+      subtitle: `方位 ${getCardinalDirection(customWaypoint.x - playerX, customWaypoint.y - playerY)}`,
+      x: customWaypoint.x,
+      y: customWaypoint.y,
+      distPx: Math.hypot(customWaypoint.x - playerX, customWaypoint.y - playerY),
+      canClearWaypoint: true,
+    };
+  } else if (nearestChip) {
+    sideQuest = {
+      title: `收集数据芯片 (${exploration.chipsCollected}/${exploration.totalChips})`,
+      subtitle: '扫描周边街区探索加密芯片',
+      x: nearestChip.x,
+      y: nearestChip.y,
+      distPx: nearestChip.dist,
+    };
+  } else if (nearestUnsyncedTower) {
+    sideQuest = {
+      title: `同步信号塔 · ${nearestUnsyncedTower.tower.districtName}`,
+      subtitle: `${nearestUnsyncedTower.tower.name}（按 E 同步）`,
+      x: nearestUnsyncedTower.tower.x,
+      y: nearestUnsyncedTower.tower.y,
+      distPx: nearestUnsyncedTower.dist,
+    };
+  }
+
+  // Compute Random Event Data (Card 3: 随机事件 - Gold ! #FFD166)
   const nearestEvent =
     randomEvents.length > 0
       ? randomEvents.reduce<{ ev: (typeof randomEvents)[number]; dist: number } | null>(
@@ -724,106 +477,229 @@ export function MissionTracker({ compact }: MissionTrackerProps) {
         )
       : null;
 
-  if (nearestEvent) {
-    const dx = nearestEvent.ev.x - playerX;
-    const dy = nearestEvent.ev.y - playerY;
-    const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
-    const isFar = nearestEvent.dist > FAR_TARGET_THRESHOLD_PX;
-
-    return (
-      <button
-        type="button"
-        onClick={toggleMap}
-        title="点击查看战术全图动态事件信标 (M)"
-        className="pointer-events-auto w-full cursor-pointer border bg-[#080D18]/84 px-2.5 py-1.5 text-left transition-colors hover:brightness-110"
-        style={{ borderColor: `${nearestEvent.ev.accentColor}88` }}
+  return (
+    <div className="flex w-full flex-col gap-1.5">
+      {/* CARD 1: 主线任务 (Magenta Star) */}
+      <div
+        key={activeMission ? `${activeMission.id}-${activeMission.stepIndex}` : 'main-idle'}
+        className="animate-mission-step w-full border border-[#FF2E88]/65 bg-[#070B18]/88 px-2.5 py-1.5"
+        style={{ boxShadow: '0 4px 0 rgba(3, 6, 12, 0.88), 0 0 14px rgba(255, 46, 136, 0.14)' }}
       >
-        <div className="flex items-center justify-between gap-1 text-[10px]">
-          <span
-            className="flex items-center gap-1 truncate font-bold"
-            style={{ color: nearestEvent.ev.accentColor }}
-          >
-            <Compass className="h-3 w-3 shrink-0" />
-            <span className="truncate">{nearestEvent.ev.title}</span>
-          </span>
-          <span className="shrink-0 font-mono-tabular text-[9px] text-slate-400">
-            {nearestEvent.ev.timeRemainingSec}s
-          </span>
-        </div>
-        <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-300">
-          <span className="flex items-center gap-1.5">
-            {renderDirectionIcon(angleDeg, nearestEvent.dist, nearestEvent.ev.accentColor)}
-            <span>
-              {nearestEvent.ev.district} · {getCardinalDirection(dx, dy)}
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center bg-[#FF2E88] text-white">
+              <Star className="h-2.5 w-2.5 fill-current" />
             </span>
-            {isFar && (
-              <span
-                className="px-1 font-mono-tabular text-[8px] font-bold"
-                style={{
-                  backgroundColor: `${nearestEvent.ev.accentColor}25`,
-                  color: nearestEvent.ev.accentColor,
-                }}
-              >
-                远距
+            <span className="text-[11px] font-extrabold tracking-wide text-[#FF2E88]">
+              主线任务
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {activeMission && (
+              <span className="border border-[#FF2E88]/45 bg-[#FF2E88]/15 px-1 font-mono-tabular text-[9px] font-bold text-[#FF2E88]">
+                {activeMission.stepIndex + 1}/{activeMission.totalSteps}
               </span>
             )}
-          </span>
-          <span className="font-mono-tabular font-bold text-[#00F5FF]">
-            {formatMeters(nearestEvent.dist)}
-          </span>
+            <button
+              type="button"
+              onClick={() => setCollapsed((c) => !c)}
+              className="pointer-events-auto cursor-pointer text-slate-400 hover:text-white"
+              title={collapsed ? '展开任务详情' : '收起任务详情'}
+            >
+              {collapsed ? (
+                <ChevronDown className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronUp className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
         </div>
-        <ScrollingTicker
-          accentColor={nearestEvent.ev.accentColor}
-          text={`紧急事件播报：${nearestEvent.ev.district} · ${nearestEvent.ev.description}`}
-        />
-      </button>
-    );
-  }
 
-  // Fallback idle mission hint pointing toward Nexus Ops Hub
-  const nexusHub = districtData?.landmarks.find((l) => l.id === 'nexus-ops');
-  const hubX = nexusHub?.x ?? 1480;
-  const hubY = nexusHub?.y ?? 624;
-  const hubDx = hubX - playerX;
-  const hubDy = hubY - playerY;
-  const hubDist = Math.hypot(hubDx, hubDy);
-  const hubAngle = (Math.atan2(hubDy, hubDx) * 180) / Math.PI + 90;
-  const hubIsFar = hubDist > FAR_TARGET_THRESHOLD_PX;
+        {activeMission ? (
+          <>
+            <div className="mt-1 flex items-center justify-between gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={toggleMap}
+                className="pointer-events-auto flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left font-bold text-slate-100 hover:text-[#00F5FF]"
+                title="在战术全图定位主线目标 (M)"
+              >
+                {mainHasPos && renderDirectionIcon(mainAngle, mainDist, '#FF2E88', true)}
+                <span className="truncate">{activeMission.title}</span>
+              </button>
 
-  return (
-    <button
-      type="button"
-      onClick={toggleMap}
-      title="前往霓虹广场枢纽行动终端接取赛博委托"
-      className="pointer-events-auto w-full cursor-pointer border border-slate-700/75 bg-[#080D18]/84 px-2.5 py-1 text-left transition-colors hover:border-[#00F5FF]/70"
-    >
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="flex items-center gap-1 font-bold text-slate-200">
-          <MapPin className="h-3 w-3 text-[#00F5FF]" />
-          <span>赛博委托待接取</span>
-        </span>
-        <span className="font-mono-tabular text-[9px] text-slate-400">
-          已完成 {completedMissionIds.length}/{MISSION_DEFINITIONS.length}
-        </span>
+              {mainHasPos ? (
+                <span className="flex shrink-0 items-center gap-0.5 font-mono-tabular text-[10px] font-bold text-[#FFD166]">
+                  <MapPin className="h-3 w-3 text-[#FFD166]" />
+                  {formatMeters(mainDist)}
+                </span>
+              ) : (
+                <span className="shrink-0 font-mono-tabular text-[10px] font-bold text-[#00F5FF]">
+                  {wantedLevel > 0 ? (spotted ? '被锁定' : `${escapeProgress}%`) : '已甩脱'}
+                </span>
+              )}
+            </div>
+
+            {!collapsed && (
+              <>
+                <p className="mt-0.5 truncate text-[10px] text-slate-300">
+                  {activeMission.instruction}
+                </p>
+                <div className="mt-1 flex items-center justify-between border-t border-slate-800/80 pt-1 text-[9px]">
+                  <div className="flex items-center gap-2 font-mono-tabular">
+                    <span className="font-bold text-[#00F5FF]">+${activeMission.reward}</span>
+                    {activeMission.timeRemainingSec !== null && (
+                      <span
+                        className={`font-bold ${
+                          activeMission.timeRemainingSec <= 12
+                            ? 'animate-pulse text-[#FF4545]'
+                            : 'text-[#FFD166]'
+                        }`}
+                      >
+                        限 {activeMission.timeRemainingSec}s
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => gameEvents.emit(GAME_EVENT.ABANDON_MISSION)}
+                    className="pointer-events-auto flex cursor-pointer items-center gap-0.5 text-slate-400 hover:text-[#FF4545]"
+                  >
+                    <XCircle className="h-2.5 w-2.5" />
+                    <span>放弃</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <div className="mt-1">
+            <div className="flex items-center justify-between gap-1.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => openHubTab('missions')}
+                className="pointer-events-auto flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left font-bold text-slate-100 hover:text-[#FF2E88]"
+                title="点击打开任务日志 [L]"
+              >
+                {renderDirectionIcon(hubAngle, hubDist, '#FF2E88', true)}
+                <span className="truncate">
+                  枢纽行动终端 ({completedMissionIds.length}/{MISSION_DEFINITIONS.length})
+                </span>
+              </button>
+              <span className="flex shrink-0 items-center gap-0.5 font-mono-tabular text-[10px] font-bold text-[#FFD166]">
+                <MapPin className="h-3 w-3 text-[#FFD166]" />
+                {formatMeters(hubDist)}
+              </span>
+            </div>
+            {!collapsed && (
+              <p className="mt-0.5 truncate text-[10px] text-slate-400">
+                前往霓虹广场终端按 E 或按 L 接取赛博委托
+              </p>
+            )}
+          </div>
+        )}
       </div>
-      <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-400">
-        <span className="flex items-center gap-1.5">
-          {renderDirectionIcon(hubAngle, hubDist, '#00F5FF')}
-          <span>枢纽终端 · {getCardinalDirection(hubDx, hubDy)}</span>
-          {hubIsFar && (
-            <span className="bg-[#00F5FF]/15 px-1 font-mono-tabular text-[8px] font-bold text-[#00F5FF]">
-              远距
+
+      {/* CARD 2: 支线任务 (Cyan Star) */}
+      {!collapsed && sideQuest && (
+        <div
+          className="w-full border border-[#00F5FF]/55 bg-[#070B18]/88 px-2.5 py-1.5"
+          style={{ boxShadow: '0 4px 0 rgba(3, 6, 12, 0.88), 0 0 14px rgba(0, 245, 255, 0.12)' }}
+        >
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center bg-[#00F5FF] text-[#070B18]">
+                <Star className="h-2.5 w-2.5 fill-current" />
+              </span>
+              <span className="text-[11px] font-extrabold tracking-wide text-[#00F5FF]">
+                支线任务
+              </span>
+            </div>
+            {sideQuest.canClearWaypoint && (
+              <button
+                type="button"
+                onClick={() => gameEvents.emit(GAME_EVENT.SET_CUSTOM_WAYPOINT, null)}
+                title="取消自定义航标"
+                className="pointer-events-auto cursor-pointer text-slate-400 hover:text-[#FF4545]"
+              >
+                <XCircle className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-1 flex items-center justify-between gap-1.5 text-[11px]">
+            <button
+              type="button"
+              onClick={toggleMap}
+              className="pointer-events-auto flex min-w-0 flex-1 cursor-pointer items-center gap-1 text-left font-bold text-slate-100 hover:text-[#00F5FF]"
+              title="点击查看全图探索标记 (M)"
+            >
+              {renderDirectionIcon(
+                (Math.atan2(sideQuest.y - playerY, sideQuest.x - playerX) * 180) / Math.PI + 90,
+                sideQuest.distPx,
+                '#00F5FF',
+                true
+              )}
+              <span className="truncate">{sideQuest.title}</span>
+            </button>
+            <span className="flex shrink-0 items-center gap-0.5 font-mono-tabular text-[10px] font-bold text-[#FFD166]">
+              <MapPin className="h-3 w-3 text-[#FFD166]" />
+              {formatMeters(sideQuest.distPx)}
             </span>
-          )}
-        </span>
-        <span className="font-mono-tabular font-bold text-[#00F5FF]">
-          {formatMeters(hubDist)}
-        </span>
-      </div>
-      <ScrollingTicker
-        accentColor="#00F5FF"
-        text={`前往霓虹广场「枢纽行动终端」按 E 接取赛博委托 · 按 M 点击地图放置航标`}
-      />
-    </button>
+          </div>
+
+          <p className="mt-0.5 truncate text-[10px] text-slate-300">{sideQuest.subtitle}</p>
+        </div>
+      )}
+
+      {/* CARD 3: 随机事件 (Gold Alert Badge) */}
+      {!collapsed && nearestEvent && (
+        <button
+          type="button"
+          onClick={toggleMap}
+          title="点击在战术全图查看随机事件位置 (M)"
+          className="pointer-events-auto w-full cursor-pointer border border-[#FFD166]/65 bg-[#070B18]/88 px-2.5 py-1.5 text-left transition-colors hover:border-[#FFD166]"
+          style={{ boxShadow: '0 4px 0 rgba(3, 6, 12, 0.88), 0 0 14px rgba(255, 209, 102, 0.12)' }}
+        >
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="flex h-4 w-4 shrink-0 items-center justify-center bg-[#FFD166] text-[#070B18]">
+                <AlertTriangle className="h-2.5 w-2.5" />
+              </span>
+              <span className="text-[11px] font-extrabold tracking-wide text-[#FFD166]">
+                随机事件
+              </span>
+            </div>
+            <span className="flex items-center gap-0.5 font-mono-tabular text-[10px] font-bold text-[#FFD166]">
+              <Clock className="h-2.5 w-2.5" />
+              {formatCountdown(nearestEvent.ev.timeRemainingSec)}
+            </span>
+          </div>
+
+          <div className="mt-1 flex items-center justify-between gap-1.5 text-[11px]">
+            <span className="flex min-w-0 flex-1 items-center gap-1 font-bold text-slate-100">
+              {renderDirectionIcon(
+                (Math.atan2(nearestEvent.ev.y - playerY, nearestEvent.ev.x - playerX) * 180) /
+                  Math.PI +
+                  90,
+                nearestEvent.dist,
+                nearestEvent.ev.accentColor,
+                true
+              )}
+              <span className="truncate">{nearestEvent.ev.title}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-0.5 font-mono-tabular text-[10px] font-bold text-[#FFD166]">
+              <Crosshair className="h-2.5 w-2.5" />
+              {formatMeters(nearestEvent.dist)}
+            </span>
+          </div>
+
+          <p className="mt-0.5 truncate text-[10px] text-slate-300">
+            {nearestEvent.ev.district} · {nearestEvent.ev.description}
+          </p>
+        </button>
+      )}
+    </div>
   );
 }

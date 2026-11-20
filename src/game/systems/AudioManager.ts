@@ -74,6 +74,10 @@ export class AudioManager {
     return this.radioStationIndex;
   }
 
+  public isRadioPlaying(): boolean {
+    return this.radioActive && !this.muted && this.radioStationIndex > 0;
+  }
+
   public setRadioPlaying(active: boolean): void {
     this.radioActive = active;
     if (!active || this.muted || this.radioStationIndex === 0) {
@@ -83,11 +87,39 @@ export class AudioManager {
     }
   }
 
+  public toggleRadioPlaying(): boolean {
+    this.unlock();
+    if (this.radioStationIndex === 0) {
+      this.radioStationIndex = 1;
+      this.radioActive = true;
+    } else {
+      this.radioActive = !this.radioActive;
+    }
+    this.stopRadioLoop();
+    if (this.radioActive && !this.muted && this.radioStationIndex > 0) {
+      this.startRadioLoop();
+    }
+    return this.isRadioPlaying();
+  }
+
   public cycleRadioStation(): number {
+    this.unlock();
     this.radioStationIndex = (this.radioStationIndex + 1) % RADIO_STATIONS.length;
     this.radioStep = 0;
     this.stopRadioLoop();
-    if (this.radioActive && !this.muted && this.radioStationIndex > 0) {
+    if (this.radioStationIndex > 0 && this.radioActive && !this.muted) {
+      this.startRadioLoop();
+    }
+    return this.radioStationIndex;
+  }
+
+  public prevRadioStation(): number {
+    this.unlock();
+    this.radioStationIndex =
+      (this.radioStationIndex - 1 + RADIO_STATIONS.length) % RADIO_STATIONS.length;
+    this.radioStep = 0;
+    this.stopRadioLoop();
+    if (this.radioStationIndex > 0 && this.radioActive && !this.muted) {
       this.startRadioLoop();
     }
     return this.radioStationIndex;

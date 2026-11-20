@@ -62,6 +62,7 @@ export class VehicleManager {
   private lastDrivenVehicleId: string | null = null;
   private lastNearbyId: string | null = null;
   private dynamicCounter = 0;
+  private dynamicGroundVehicleHooks: Array<(vehicle: Vehicle) => void> = [];
 
   constructor(scene: Phaser.Scene, collisionManager: CollisionManager, audioManager: AudioManager) {
     this.scene = scene;
@@ -84,6 +85,27 @@ export class VehicleManager {
       if (vA && vB && !vA.isDestroyed() && !vB.isDestroyed()) {
         const iA = vA.handleCollision(this.scene.time.now);
         const iB = vB.handleCollision(this.scene.time.now);
+
+        // Allow speeding occupied vehicle to transfer momentum knockback to parked non-pushable cars
+        const transferKnock = (mover: Vehicle, parked: Vehicle) => {
+          const mBody = mover.sprite.body as Phaser.Physics.Arcade.Body;
+          const pBody = parked.sprite.body as Phaser.Physics.Arcade.Body;
+          const spd = mBody?.speed ?? 0;
+          if (!mBody || !pBody || spd < 95) return;
+          const dx = parked.sprite.x - mover.sprite.x;
+          const dy = parked.sprite.y - mover.sprite.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const massRatio = Phaser.Math.Clamp(mover.getMass() / Math.max(80, parked.getMass()), 0.35, 2.2);
+          const knock = Math.min(260, spd * 0.55 * massRatio);
+          pBody.setVelocity((dx / dist) * knock, (dy / dist) * knock);
+        };
+
+        if (vA.isOccupied() && !vB.isOccupied()) {
+          transferKnock(vA, vB);
+        } else if (vB.isOccupied() && !vA.isOccupied()) {
+          transferKnock(vB, vA);
+        }
+
         const maxI = Math.max(iA, iB);
         if (maxI > 0 && (vA.isOccupied() || vB.isOccupied())) {
           this.audioManager.playCrash(this.scene.time.now, maxI);
@@ -91,6 +113,10 @@ export class VehicleManager {
         }
       }
     });
+  }
+
+  public registerDynamicGroundVehicleHook(cb: (vehicle: Vehicle) => void): void {
+    this.dynamicGroundVehicleHooks.push(cb);
   }
 
   private createAndRegisterVehicle(
@@ -116,8 +142,20 @@ export class VehicleManager {
     }
 
     if (this.playerRef) {
-      this.scene.physics.add.collider(this.playerRef.sprite, vehicle.sprite);
+      this.scene.physics.add.collider(this.playerRef.sprite, vehicle.sprite, () => {
+        if (!vehicle.isOccupied()) {
+          const vBody = vehicle.sprite.body as Phaser.Physics.Arcade.Body;
+          vBody?.setVelocity(0, 0);
+        }
+      });
     }
+
+    if (!vehicle.spec.isFlying && id.startsWith('dyn-')) {
+      for (const hook of this.dynamicGroundVehicleHooks) {
+        hook(vehicle);
+      }
+    }
+
     return vehicle;
   }
 
@@ -287,6 +325,17 @@ export class VehicleManager {
     player.setInVehicle(false, targetPos);
   }
 
+  public finalizeDestroyedVehicle(destroyedVeh: Vehicle): boolean {
+    const wasOccupied = this.activeVehicle === destroyedVeh;
+    this.audioManager.playExplosion();
+    this.scene.cameras.main.shake(260, 0.011);
+    if (wasOccupied) {
+      this.activeVehicle = null;
+      this.audioManager.stopEngineSound();
+    }
+    return wasOccupied;
+  }
+
   public update(
     dtSeconds: number,
     controls: DrivingControlsState,
@@ -307,13 +356,7 @@ export class VehicleManager {
       }
 
       const handleDestroyed = (destroyedVeh: Vehicle) => {
-        const wasOccupied = this.activeVehicle === destroyedVeh;
-        this.audioManager.playExplosion();
-        this.scene.cameras.main.shake(260, 0.011);
-        if (wasOccupied) {
-          this.activeVehicle = null;
-          this.audioManager.stopEngineSound();
-        }
+        const wasOccupied = this.finalizeDestroyedVehicle(destroyedVeh);
         onVehicleDestroyed?.(destroyedVeh, wasOccupied);
       };
 

@@ -101,3 +101,18 @@ canvas {
 .animate-pixel-bob {
   animation: pixel-pointer-bob 0.72s steps(2, end) infinite;
 }
+
+@keyframes cyber-eq-pulse {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.animate-eq-bar {
+  transform-origin: bottom center;
+  animation: cyber-eq-pulse 0.65s steps(4, end) infinite;
+}

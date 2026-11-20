@@ -38,6 +38,7 @@ interface OreNodeEntity {
   ring: Phaser.GameObjects.Arc;
   hpBg: Phaser.GameObjects.Rectangle;
   hpFill: Phaser.GameObjects.Rectangle;
+  ramCooldown: number;
 }
 
 interface OrePickupDrop {
@@ -77,6 +78,7 @@ interface ActiveWorldBoss {
   dashTimer: number;
   dashAngle: number;
   contactCooldown: number;
+  ramCooldown: number;
   container: Phaser.GameObjects.Container;
   corePoly: Phaser.GameObjects.Polygon;
   outerRing: Phaser.GameObjects.Arc;
@@ -189,7 +191,7 @@ export class TerrariaSandboxManager {
     for (const def of BIOME_ORE_SPAWNS) {
       const clearPos = this.findClearPointNear(def.x, def.y, 20);
       const spec = TERRARIA_RESOURCES[def.resourceId];
-      const visual = this.scene.add.container(clearPos.x, clearPos.y).setDepth(13);
+      const visual = this.scene.add.container(clearPos.x, clearPos.y).setDepth(19 + Math.min(8.4, Math.max(0, clearPos.y) * 0.0022));
 
       const ring = this.scene.add
         .circle(0, 0, 17, spec.colorNum, 0.12)
@@ -239,6 +241,7 @@ export class TerrariaSandboxManager {
         ring,
         hpBg,
         hpFill,
+        ramCooldown: 0,
       });
     }
     this.emitTelemetry(true);
@@ -300,6 +303,7 @@ export class TerrariaSandboxManager {
 
     // 2. Respawn depleted ore nodes & pulse visual
     for (const node of this.oreNodes) {
+      if (node.ramCooldown > 0) node.ramCooldown = Math.max(0, node.ramCooldown - dtSeconds);
       if (node.respawnTimerSec > 0) {
         node.respawnTimerSec -= dtSeconds;
         if (node.respawnTimerSec <= 0) {
@@ -557,6 +561,7 @@ export class TerrariaSandboxManager {
     boss.outerRing.setScale(1 + Math.sin(nowMs * 0.008) * 0.09);
 
     // Boss Contact Damage
+    if (boss.ramCooldown > 0) boss.ramCooldown = Math.max(0, boss.ramCooldown - dtSeconds);
     if (boss.contactCooldown > 0) boss.contactCooldown -= dtSeconds;
     if (distToPlayer <= boss.spec.radius + 16 && boss.contactCooldown <= 0) {
       boss.contactCooldown = 0.9;
@@ -678,6 +683,46 @@ export class TerrariaSandboxManager {
       const dist = Phaser.Math.Distance.Between(bx, by, node.x, node.y);
       if (dist <= radius + 16) {
         this.damageOreNode(node, Math.round(damage * 0.8), false);
+      }
+    }
+  }
+
+  public checkVehicleRam(
+    vx: number,
+    vy: number,
+    speedPx: number,
+    ramMult: number,
+    callbacks: TerrariaUpdateCallbacks
+  ): void {
+    if (!this.enabled || speedPx < 90) return;
+
+    if (this.activeBoss && this.activeBoss.ramCooldown <= 0) {
+      const dist = Phaser.Math.Distance.Between(vx, vy, this.activeBoss.x, this.activeBoss.y);
+      if (dist <= this.activeBoss.spec.radius + 26) {
+        this.activeBoss.ramCooldown = 0.45;
+        const dmg = Math.round(speedPx * 0.24 * ramMult);
+        this.spawnFloatingText(this.activeBoss.x, this.activeBoss.y - 24, `-${dmg}`, '#FFD166');
+        this.damageBoss(dmg, callbacks);
+        this.audioManager.playImpactHit(true);
+        this.scene.cameras.main.shake(95, 0.004);
+      }
+    }
+
+    for (const node of this.oreNodes) {
+      if (node.respawnTimerSec > 0 || node.ramCooldown > 0) continue;
+      const dist = Phaser.Math.Distance.Between(vx, vy, node.x, node.y);
+      if (dist <= 28) {
+        node.ramCooldown = 0.45;
+        const dmg = Math.round(speedPx * 0.18 * ramMult);
+        const spec = TERRARIA_RESOURCES[node.resourceId];
+        const mined = this.damageOreNode(node, dmg, false);
+        this.spawnFloatingText(
+          node.x,
+          node.y - 18,
+          mined ? '撞碎矿脉!' : `💥 -${dmg}`,
+          spec.colorHex
+        );
+        this.audioManager.playImpactHit(mined);
       }
     }
   }
@@ -969,7 +1014,8 @@ export class TerrariaSandboxManager {
   ): void {
     this.structureSeq += 1;
     const id = existingId ?? `struct-${type}-${this.structureSeq}`;
-    const container = this.scene.add.container(x, y).setDepth(16);
+    const structDepth = type === 'campfire' || type === 'pylon' ? 16 : 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
+    const container = this.scene.add.container(x, y).setDepth(structDepth);
     let turretHead: Phaser.GameObjects.Rectangle | undefined;
     let auraRing: Phaser.GameObjects.Arc | undefined;
     let label = existingLabel ?? '';
@@ -1032,7 +1078,7 @@ export class TerrariaSandboxManager {
     const spec = WORLD_BOSS_SPECS[bossId];
     const spawn = this.findClearPointNear(playerPos.x + 260, playerPos.y - 160, spec.radius + 8);
 
-    const container = this.scene.add.container(spawn.x, spawn.y).setDepth(30);
+    const container = this.scene.add.container(spawn.x, spawn.y).setDepth(35);
     const outerRing = this.scene.add
       .circle(0, 0, spec.radius + 10, spec.colorNum, 0.14)
       .setStrokeStyle(3, spec.colorNum, 0.95);
@@ -1069,6 +1115,7 @@ export class TerrariaSandboxManager {
       dashTimer: 0,
       dashAngle: 0,
       contactCooldown: 0,
+      ramCooldown: 0,
       container,
       corePoly,
       outerRing,

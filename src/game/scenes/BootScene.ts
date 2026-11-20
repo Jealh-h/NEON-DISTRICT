@@ -47,11 +47,21 @@ export class BootScene extends Phaser.Scene {
       return { ox: (idx % cols) * tile, oy: Math.floor(idx / cols) * tile };
     };
 
+    const drawComicDots = (ox: number, oy: number, color: string, step = 6) => {
+      ctx.fillStyle = color;
+      for (let dy = 3; dy < 31; dy += step) {
+        const offset = (dy / step) % 2 === 0 ? 2 : 5;
+        for (let dx = offset; dx < 31; dx += step) {
+          ctx.fillRect(ox + dx, oy + dy, 1, 1);
+        }
+      }
+    };
+
     const drawAsphaltBase = (ox: number, oy: number, dark: boolean) => {
-      ctx.fillStyle = dark ? '#182134' : '#1E283F';
+      ctx.fillStyle = dark ? '#0A0F1D' : '#0E1426';
       ctx.fillRect(ox, oy, 32, 32);
-      // Multi-tone asphalt aggregate & subtle wheel wear
-      ctx.fillStyle = dark ? '#141B2B' : '#24304B';
+      // Wet rain-slick specular aggregate & Ben-Day asphalt grain
+      ctx.fillStyle = dark ? '#121A30' : '#16203B';
       const specks = [
         [3, 5], [11, 2], [21, 9], [28, 4], [7, 15], [16, 19],
         [25, 14], [4, 26], [13, 28], [22, 24], [29, 29], [18, 8],
@@ -60,10 +70,10 @@ export class BootScene extends Phaser.Scene {
       for (const [sx, sy] of specks) {
         ctx.fillRect(ox + sx, oy + sy, 2, 1);
       }
-      ctx.fillStyle = dark ? '#222E46' : '#1A2337';
-      ctx.fillRect(ox + 6, oy + 7, 1, 1);
-      ctx.fillRect(ox + 23, oy + 16, 2, 1);
-      ctx.fillRect(ox + 12, oy + 23, 1, 1);
+      ctx.fillStyle = dark ? '#1A2747' : '#213158';
+      ctx.fillRect(ox + 5, oy + 7, 4, 1);
+      ctx.fillRect(ox + 19, oy + 16, 5, 1);
+      ctx.fillRect(ox + 10, oy + 24, 4, 1);
     };
 
     // 1: ASPHALT_PLAIN
@@ -72,65 +82,83 @@ export class BootScene extends Phaser.Scene {
       drawAsphaltBase(ox, oy, false);
     }
 
-    // 2: ASPHALT_WORN (with tar cracks & subtle curb shadow)
+    // 2: ASPHALT_WORN (with comic ink tar cracks & glossy wet tread wear)
     {
       const { ox, oy } = tileOrigin(2);
       drawAsphaltBase(ox, oy, true);
-      ctx.fillStyle = '#121A2B';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox, oy + 6, 32, 3);
       ctx.fillRect(ox, oy + 23, 32, 3);
-      ctx.fillStyle = '#0F1524';
-      ctx.fillRect(ox + 4, oy + 11, 6, 1);
-      ctx.fillRect(ox + 10, oy + 12, 4, 1);
-      ctx.fillRect(ox + 14, oy + 13, 5, 1);
+      ctx.fillStyle = '#182342';
+      ctx.fillRect(ox + 4, oy + 11, 8, 1);
+      ctx.fillRect(ox + 12, oy + 12, 6, 1);
+      ctx.fillRect(ox + 18, oy + 13, 6, 1);
     }
 
     // 3: ROAD_DASH_H
     {
       const { ox, oy } = tileOrigin(3);
       drawAsphaltBase(ox, oy, false);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 1, oy + 28, 14, 4);
+      ctx.fillRect(ox + 17, oy + 28, 14, 4);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(ox + 2, oy + 29, 12, 3);
-      ctx.fillRect(ox + 18, oy + 29, 12, 3);
+      ctx.fillRect(ox + 2, oy + 29, 12, 2);
+      ctx.fillRect(ox + 18, oy + 29, 12, 2);
     }
 
     // 4: ROAD_DASH_V
     {
       const { ox, oy } = tileOrigin(4);
       drawAsphaltBase(ox, oy, false);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 28, oy + 1, 4, 14);
+      ctx.fillRect(ox + 28, oy + 17, 4, 14);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(ox + 29, oy + 2, 3, 12);
-      ctx.fillRect(ox + 29, oy + 18, 3, 12);
+      ctx.fillRect(ox + 29, oy + 2, 2, 12);
+      ctx.fillRect(ox + 29, oy + 18, 2, 12);
     }
 
-    // 5: CROSSWALK_H (stripes along X for crossing vertical streets)
+    // 5: CROSSWALK_H (crisp bright zebra stripes w/ comic black ink edge & specular sheen)
     {
       const { ox, oy } = tileOrigin(5);
       drawAsphaltBase(ox, oy, true);
-      ctx.fillStyle = '#CBD5E1';
-      ctx.fillRect(ox + 4, oy + 6, 8, 20);
-      ctx.fillRect(ox + 20, oy + 6, 8, 20);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox + 4, oy + 6, 8, 2);
-      ctx.fillRect(ox + 20, oy + 6, 8, 2);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 3, oy + 4, 10, 24);
+      ctx.fillRect(ox + 19, oy + 4, 10, 24);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(ox + 4, oy + 5, 8, 22);
+      ctx.fillRect(ox + 20, oy + 5, 8, 22);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(ox + 4, oy + 6, 8, 18);
+      ctx.fillRect(ox + 20, oy + 6, 8, 18);
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.38)';
+      ctx.fillRect(ox + 4, oy + 9, 8, 3);
+      ctx.fillRect(ox + 20, oy + 16, 8, 3);
     }
 
-    // 6: CROSSWALK_V (stripes along Y for crossing horizontal avenues)
+    // 6: CROSSWALK_V (crisp bright zebra stripes w/ comic black ink edge & specular sheen)
     {
       const { ox, oy } = tileOrigin(6);
       drawAsphaltBase(ox, oy, true);
-      ctx.fillStyle = '#CBD5E1';
-      ctx.fillRect(ox + 6, oy + 4, 20, 8);
-      ctx.fillRect(ox + 6, oy + 20, 20, 8);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox + 6, oy + 4, 2, 8);
-      ctx.fillRect(ox + 6, oy + 20, 2, 8);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 4, oy + 3, 24, 10);
+      ctx.fillRect(ox + 4, oy + 19, 24, 10);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(ox + 5, oy + 4, 22, 8);
+      ctx.fillRect(ox + 5, oy + 20, 22, 8);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.fillRect(ox + 6, oy + 4, 19, 7);
+      ctx.fillRect(ox + 6, oy + 20, 19, 7);
+      ctx.fillStyle = 'rgba(255, 46, 136, 0.3)';
+      ctx.fillRect(ox + 10, oy + 4, 4, 8);
+      ctx.fillRect(ox + 16, oy + 20, 4, 8);
     }
 
     // 7: ROAD_ARROW_E (transparent overlay)
     {
       const { ox, oy } = tileOrigin(7);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.45)';
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.5)';
       ctx.fillRect(ox + 6, oy + 14, 14, 4);
       ctx.fillRect(ox + 16, oy + 10, 4, 12);
       ctx.fillRect(ox + 20, oy + 12, 4, 8);
@@ -140,50 +168,66 @@ export class BootScene extends Phaser.Scene {
     // 8: ROAD_ARROW_W (transparent overlay)
     {
       const { ox, oy } = tileOrigin(8);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.45)';
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.5)';
       ctx.fillRect(ox + 12, oy + 14, 14, 4);
       ctx.fillRect(ox + 12, oy + 10, 4, 12);
       ctx.fillRect(ox + 8, oy + 12, 4, 8);
       ctx.fillRect(ox + 5, oy + 14, 3, 4);
     }
 
-    // 9: SIDEWALK_BASE
+    // 9: SIDEWALK_BASE (comic-inked indigo pavers + halftone stipple & bevel gleam)
     {
       const { ox, oy } = tileOrigin(9);
-      ctx.fillStyle = '#26334C';
+      ctx.fillStyle = '#1B253E';
       ctx.fillRect(ox, oy, 32, 32);
-      // 16x16 slab seams
-      ctx.fillStyle = '#1C263B';
-      ctx.fillRect(ox, oy + 15, 32, 1);
-      ctx.fillRect(ox + 15, oy, 1, 32);
-      ctx.fillRect(ox, oy + 31, 32, 1);
-      ctx.fillRect(ox + 31, oy, 1, 32);
-      // Subtle top-left slab bevel highlights
-      ctx.fillStyle = '#314161';
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.45)', 6);
+      // 16x16 crisp black ink slab seams
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 15, 32, 2);
+      ctx.fillRect(ox + 15, oy, 2, 32);
+      ctx.fillRect(ox, oy + 30, 32, 2);
+      ctx.fillRect(ox + 30, oy, 2, 32);
+      // Top-left 2.5D slab bevel highlights + damp specular gleam
+      ctx.fillStyle = '#31436E';
       ctx.fillRect(ox + 1, oy + 1, 13, 1);
       ctx.fillRect(ox + 17, oy + 1, 13, 1);
       ctx.fillRect(ox + 1, oy + 17, 13, 1);
       ctx.fillRect(ox + 17, oy + 17, 13, 1);
+      ctx.fillRect(ox + 1, oy + 2, 1, 12);
+      ctx.fillRect(ox + 17, oy + 2, 1, 12);
+      ctx.fillStyle = '#26365B';
+      ctx.fillRect(ox + 4, oy + 5, 7, 2);
+      ctx.fillRect(ox + 20, oy + 21, 7, 2);
     }
 
-    // 10: SIDEWALK_CURB_TOP
+    // 10: SIDEWALK_CURB_TOP (2.5D raised sidewalk step lip w/ bold ink border & cyan trim)
     {
       const { ox, oy } = tileOrigin(10);
-      ctx.fillStyle = '#26334C';
+      ctx.fillStyle = '#1B253E';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#36476A';
-      ctx.fillRect(ox, oy, 32, 4);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.42)', 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy, 32, 2);
+      ctx.fillStyle = '#384D7A';
+      ctx.fillRect(ox, oy + 2, 32, 4);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox, oy, 32, 1);
+      ctx.fillRect(ox, oy + 2, 32, 2);
     }
 
-    // 11: SIDEWALK_CURB_BOTTOM
+    // 11: SIDEWALK_CURB_BOTTOM (2.5D south-facing vertical concrete curb face w/ ink shadow)
     {
       const { ox, oy } = tileOrigin(11);
-      ctx.fillStyle = '#26334C';
+      ctx.fillStyle = '#1B253E';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#36476A';
-      ctx.fillRect(ox, oy + 28, 32, 4);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.42)', 6);
+      ctx.fillStyle = '#384D7A';
+      ctx.fillRect(ox, oy + 23, 32, 3);
+      ctx.fillStyle = '#FF2E88';
+      ctx.fillRect(ox, oy + 23, 32, 1);
+      ctx.fillStyle = '#121A2E';
+      ctx.fillRect(ox, oy + 26, 32, 4);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 30, 32, 2);
     }
 
     // 12: PLAZA_TILE_DARK
@@ -191,9 +235,10 @@ export class BootScene extends Phaser.Scene {
       const { ox, oy } = tileOrigin(12);
       ctx.fillStyle = '#212D48';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#182136';
-      ctx.fillRect(ox, oy, 32, 1);
-      ctx.fillRect(ox, oy, 1, 32);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.38)', 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy, 32, 2);
+      ctx.fillRect(ox, oy, 2, 32);
       ctx.fillStyle = '#2E3E62';
       ctx.fillRect(ox + 8, oy + 8, 16, 16);
       ctx.fillStyle = '#212D48';
@@ -271,25 +316,34 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 11, oy + 19, 10, 2);
     }
 
-    // 19: PUDDLE_CYAN (transparent overlay)
+    // 19: PUDDLE_CYAN (glossy wet rain-slick cyan & violet reflection puddle)
     {
       const { ox, oy } = tileOrigin(19);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.18)';
-      ctx.fillRect(ox + 4, oy + 10, 22, 10);
-      ctx.fillRect(ox + 8, oy + 8, 14, 14);
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.48)';
-      ctx.fillRect(ox + 10, oy + 12, 8, 2);
-      ctx.fillRect(ox + 14, oy + 16, 6, 1);
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.24)';
+      ctx.fillRect(ox + 2, oy + 8, 28, 14);
+      ctx.fillRect(ox + 6, oy + 5, 20, 20);
+      ctx.fillStyle = 'rgba(192, 0, 255, 0.22)';
+      ctx.fillRect(ox + 4, oy + 14, 22, 8);
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.56)';
+      ctx.fillRect(ox + 8, oy + 11, 14, 2);
+      ctx.fillRect(ox + 12, oy + 17, 10, 2);
+      ctx.fillStyle = 'rgba(224, 255, 255, 0.65)';
+      ctx.fillRect(ox + 10, oy + 11, 6, 1);
     }
 
-    // 20: PUDDLE_PINK (transparent overlay)
+    // 20: PUDDLE_PINK (glossy wet rain-slick magenta & warm amber reflection puddle)
     {
       const { ox, oy } = tileOrigin(20);
-      ctx.fillStyle = 'rgba(255, 46, 136, 0.18)';
-      ctx.fillRect(ox + 6, oy + 8, 20, 12);
-      ctx.fillRect(ox + 10, oy + 6, 12, 16);
-      ctx.fillStyle = 'rgba(255, 46, 136, 0.45)';
-      ctx.fillRect(ox + 10, oy + 13, 10, 2);
+      ctx.fillStyle = 'rgba(255, 46, 136, 0.26)';
+      ctx.fillRect(ox + 3, oy + 7, 26, 15);
+      ctx.fillRect(ox + 7, oy + 5, 18, 20);
+      ctx.fillStyle = 'rgba(250, 204, 21, 0.18)';
+      ctx.fillRect(ox + 5, oy + 15, 20, 7);
+      ctx.fillStyle = 'rgba(255, 46, 136, 0.54)';
+      ctx.fillRect(ox + 7, oy + 12, 16, 2);
+      ctx.fillRect(ox + 11, oy + 17, 11, 2);
+      ctx.fillStyle = 'rgba(255, 228, 241, 0.62)';
+      ctx.fillRect(ox + 11, oy + 12, 6, 1);
     }
 
     // 21: SIDEWALK_DRAIN (transparent overlay)
@@ -397,57 +451,61 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 8, oy + 24, 3, 1);
     }
 
-    // 30: RIVER_SHORE (Textured seawall curb + turquoise water trim)
+    // 30: RIVER_SHORE (2.5D beveled seawall curb + bold comic ink border + turquoise rim)
     {
       const { ox, oy } = tileOrigin(30);
-      ctx.fillStyle = '#0B659E';
+      ctx.fillStyle = '#084D7A';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#2B3A55';
-      ctx.fillRect(ox + 2, oy + 2, 28, 28);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 1, oy + 1, 30, 30);
       ctx.fillStyle = '#3E5275';
-      ctx.fillRect(ox + 4, oy + 4, 24, 24);
-      ctx.fillStyle = '#64748B';
-      ctx.fillRect(ox + 4, oy + 4, 24, 2);
+      ctx.fillRect(ox + 3, oy + 3, 26, 20);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.42)', 6);
+      ctx.fillStyle = '#758AA8';
+      ctx.fillRect(ox + 4, oy + 4, 24, 3);
       ctx.fillStyle = '#22D3EE';
       ctx.fillRect(ox + 2, oy + 2, 28, 2);
-      ctx.fillRect(ox + 2, oy + 28, 28, 2);
+      ctx.fillRect(ox + 2, oy + 26, 28, 2);
     }
 
-    // 31: BRIDGE_DECK (Crisp steel deck + glowing cyan edge rails)
+    // 31: BRIDGE_DECK (2.5D steel girder deck + comic ink plate joints + glowing cyan rails)
     {
       const { ox, oy } = tileOrigin(31);
       ctx.fillStyle = '#1B253B';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#283654';
-      ctx.fillRect(ox + 1, oy + 2, 14, 28);
-      ctx.fillRect(ox + 17, oy + 2, 14, 28);
-      ctx.fillStyle = '#0E1421';
+      ctx.fillStyle = '#2C3C5E';
+      ctx.fillRect(ox + 1, oy + 2, 14, 26);
+      ctx.fillRect(ox + 17, oy + 2, 14, 26);
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox + 15, oy, 2, 32);
+      ctx.fillRect(ox, oy + 28, 32, 4);
       ctx.fillStyle = '#475569';
       ctx.fillRect(ox + 3, oy + 5, 10, 2);
-      ctx.fillRect(ox + 19, oy + 23, 10, 2);
+      ctx.fillRect(ox + 19, oy + 21, 10, 2);
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(ox, oy + 1, 32, 1);
-      ctx.fillRect(ox, oy + 30, 32, 1);
+      ctx.fillRect(ox, oy + 28, 32, 1);
     }
 
-    // 32: BRIDGE_RAIL (Heavy pixel suspension truss & gold/cyan rail)
+    // 32: BRIDGE_RAIL (2.5D elevated suspension truss & gold/cyan rail w/ ink outlines)
     {
       const { ox, oy } = tileOrigin(32);
       ctx.fillStyle = '#074B83';
       ctx.fillRect(ox, oy, 32, 32);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 4, 32, 24);
       ctx.fillStyle = '#1E293B';
-      ctx.fillRect(ox, oy + 6, 32, 20);
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(ox + 1, oy + 8, 30, 16);
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(ox + 4, oy + 11, 24, 10);
+      ctx.fillRect(ox, oy + 5, 32, 20);
+      ctx.fillStyle = '#536480';
+      ctx.fillRect(ox + 1, oy + 6, 30, 14);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 4, oy + 10, 24, 9);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(ox + 3, oy + 14, 9, 4);
-      ctx.fillRect(ox + 20, oy + 14, 9, 4);
+      ctx.fillRect(ox + 3, oy + 13, 9, 4);
+      ctx.fillRect(ox + 20, oy + 13, 9, 4);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(ox, oy + 6, 32, 2);
-      ctx.fillRect(ox, oy + 24, 32, 2);
+      ctx.fillRect(ox, oy + 5, 32, 2);
+      ctx.fillRect(ox, oy + 22, 32, 2);
     }
 
     // 33: MOUNTAIN_BASE (Lush highland grass + rocky shale foothills)
@@ -492,11 +550,12 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 9, oy + 6, 14, 6);
     }
 
-    // 36: PARK_TURF (Vibrant emerald pixel grass with leaf clusters & clover)
+    // 36: PARK_TURF (Vibrant emerald comic turf w/ cel leaf tufts & Ben-Day shadow dots)
     {
       const { ox, oy } = tileOrigin(36);
       ctx.fillStyle = '#145C39';
       ctx.fillRect(ox, oy, 32, 32);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.28)', 6);
       ctx.fillStyle = '#1E7A4B';
       ctx.fillRect(ox + 2, oy + 4, 7, 4);
       ctx.fillRect(ox + 16, oy + 12, 8, 4);
@@ -506,25 +565,25 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 4, oy + 3, 3, 2);
       ctx.fillRect(ox + 18, oy + 11, 4, 2);
       ctx.fillRect(ox + 8, oy + 21, 3, 2);
-      ctx.fillStyle = '#0D4027';
-      ctx.fillRect(ox + 12, oy + 8, 4, 2);
-      ctx.fillRect(ox + 24, oy + 20, 4, 2);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 12, oy + 8, 4, 1);
+      ctx.fillRect(ox + 24, oy + 20, 4, 1);
       ctx.fillStyle = '#86EFAC';
       ctx.fillRect(ox + 5, oy + 4, 1, 1);
       ctx.fillRect(ox + 19, oy + 12, 1, 1);
     }
 
-    // 37: WOOD_PIER (Warm sunlit boardwalk planks + iron studs)
+    // 37: WOOD_PIER (Warm sunlit boardwalk planks + comic ink gaps & iron studs)
     {
       const { ox, oy } = tileOrigin(37);
-      ctx.fillStyle = '#452A1D';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#7C4D34';
       for (let py = 1; py < 32; py += 6) {
         ctx.fillRect(ox + 1, oy + py, 30, 4);
         ctx.fillStyle = '#A16646';
         ctx.fillRect(ox + 2, oy + py, 28, 1);
-        ctx.fillStyle = '#291810';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(ox + 3, oy + py + 2, 1, 1);
         ctx.fillRect(ox + 28, oy + py + 2, 1, 1);
         ctx.fillStyle = '#7C4D34';
@@ -579,18 +638,19 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 6, oy + 20, 20, 4);
     }
 
-    // 41: DOCK_CONCRETE (Weathered Maritime Harbor Slab w/ rust & tire marks)
+    // 41: DOCK_CONCRETE (Weathered Harbor Slab w/ comic ink joints & halftone grain)
     {
       const { ox, oy } = tileOrigin(41);
       ctx.fillStyle = '#1C222D';
       ctx.fillRect(ox, oy, 32, 32);
-      ctx.fillStyle = '#12161E';
-      ctx.fillRect(ox, oy + 31, 32, 1);
-      ctx.fillRect(ox + 31, oy, 1, 32);
-      ctx.fillStyle = '#293242';
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.45)', 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 30, 32, 2);
+      ctx.fillRect(ox + 30, oy, 2, 32);
+      ctx.fillStyle = '#2F3A4D';
       ctx.fillRect(ox + 2, oy + 2, 27, 1);
       ctx.fillRect(ox + 2, oy + 2, 1, 27);
-      ctx.fillStyle = '#3B2821'; // Subtle harbor rust stain
+      ctx.fillStyle = '#3B2821';
       ctx.fillRect(ox + 6, oy + 18, 7, 4);
       ctx.fillRect(ox + 20, oy + 6, 5, 3);
       ctx.fillStyle = '#141922';
@@ -613,33 +673,34 @@ export class BootScene extends Phaser.Scene {
     // 43: CHROME_FLOOR (Industrial Brushed Steel Grating & Rivets)
     {
       const { ox, oy } = tileOrigin(43);
-      ctx.fillStyle = '#171C28';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox, oy, 32, 32);
       ctx.fillStyle = '#222A3B';
       ctx.fillRect(ox + 1, oy + 1, 30, 30);
-      ctx.fillStyle = '#2F3B52';
+      ctx.fillStyle = '#33415C';
       ctx.fillRect(ox + 2, oy + 2, 28, 2);
-      ctx.fillStyle = '#111520';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox + 6, oy + 8, 20, 2);
       ctx.fillRect(ox + 6, oy + 16, 20, 2);
       ctx.fillRect(ox + 6, oy + 24, 20, 2);
-      ctx.fillStyle = '#F59E0B'; // Corner industrial rivets
+      ctx.fillStyle = '#F59E0B';
       ctx.fillRect(ox + 3, oy + 3, 2, 2);
       ctx.fillRect(ox + 27, oy + 3, 2, 2);
       ctx.fillRect(ox + 3, oy + 27, 2, 2);
       ctx.fillRect(ox + 27, oy + 27, 2, 2);
     }
 
-    // 44: SAND_SHORE (Warm sunlit golden sand w/ pixel dune highlights)
+    // 44: SAND_SHORE (Warm sunlit golden sand w/ comic dune ink contour & halftone grain)
     {
       const { ox, oy } = tileOrigin(44);
       ctx.fillStyle = '#D99B38';
       ctx.fillRect(ox, oy, 32, 32);
+      drawComicDots(ox, oy, 'rgba(124, 45, 18, 0.35)', 6);
       ctx.fillStyle = '#F5BA4B';
       ctx.fillRect(ox + 2, oy + 4, 14, 5);
       ctx.fillRect(ox + 15, oy + 15, 14, 5);
       ctx.fillRect(ox + 4, oy + 24, 14, 4);
-      ctx.fillStyle = '#B47B24';
+      ctx.fillStyle = '#9A3412';
       ctx.fillRect(ox + 3, oy + 10, 11, 2);
       ctx.fillRect(ox + 16, oy + 21, 12, 2);
       ctx.fillStyle = '#FDE68A';
@@ -652,24 +713,24 @@ export class BootScene extends Phaser.Scene {
     {
       const { ox, oy } = tileOrigin(45);
       drawAsphaltBase(ox, oy, true);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 6, 32, 2);
       ctx.fillStyle = '#EF4444';
       ctx.fillRect(ox, oy, 16, 6);
       ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(ox + 16, oy, 16, 6);
-      ctx.fillStyle = '#991B1B';
-      ctx.fillRect(ox, oy + 6, 32, 1);
     }
 
     // 46: SPEEDWAY_CURB_S (F1 Red/White Racing Curb on south asphalt edge)
     {
       const { ox, oy } = tileOrigin(46);
       drawAsphaltBase(ox, oy, true);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox, oy + 24, 32, 2);
       ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(ox, oy + 26, 16, 6);
       ctx.fillStyle = '#EF4444';
       ctx.fillRect(ox + 16, oy + 26, 16, 6);
-      ctx.fillStyle = '#991B1B';
-      ctx.fillRect(ox, oy + 25, 32, 1);
     }
 
     // 47: HARBOR_HAZARD_EDGE (Yellow/Black Dock Safety Stripe)
@@ -680,7 +741,7 @@ export class BootScene extends Phaser.Scene {
       for (let hx = 0; hx < 32; hx += 8) {
         ctx.fillStyle = '#EAB308';
         ctx.fillRect(ox + hx, oy + 24, 4, 6);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(ox + hx + 4, oy + 24, 4, 6);
       }
       ctx.fillStyle = '#475569';
@@ -696,10 +757,10 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox, oy + 29, 32, 2);
     }
 
-    // 49: PARK_COBBLE (Warm stone park cobblestone walkway)
+    // 49: PARK_COBBLE (Warm stone park cobblestone walkway w/ crisp comic ink joints)
     {
       const { ox, oy } = tileOrigin(49);
-      ctx.fillStyle = '#242B35';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox, oy, 32, 32);
       const stones = [
         [2, 2, 12, 8], [16, 2, 14, 8],
@@ -709,7 +770,7 @@ export class BootScene extends Phaser.Scene {
       for (const [sx, sy, sw, sh] of stones) {
         ctx.fillStyle = '#333D4D';
         ctx.fillRect(ox + sx, oy + sy, sw, sh);
-        ctx.fillStyle = '#475469';
+        ctx.fillStyle = '#52627A';
         ctx.fillRect(ox + sx, oy + sy, sw, 1);
       }
     }
@@ -801,11 +862,12 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 3, oy + 23, 26, 2);
     }
 
-    // 55: FOREST_FLOOR (Rich layered emerald-jade woodland turf + ferns)
+    // 55: FOREST_FLOOR (Rich layered emerald-jade woodland turf + Ben-Day dots)
     {
       const { ox, oy } = tileOrigin(55);
       ctx.fillStyle = '#114A31';
       ctx.fillRect(ox, oy, 32, 32);
+      drawComicDots(ox, oy, 'rgba(5, 7, 14, 0.3)', 6);
       ctx.fillStyle = '#186642';
       ctx.fillRect(ox + 2, oy + 4, 10, 6);
       ctx.fillRect(ox + 16, oy + 12, 11, 6);
@@ -816,8 +878,8 @@ export class BootScene extends Phaser.Scene {
       ctx.fillStyle = '#4ADE80';
       ctx.fillRect(ox + 24, oy + 4, 3, 2);
       ctx.fillRect(ox + 11, oy + 17, 3, 2);
-      ctx.fillStyle = '#092E1E';
-      ctx.fillRect(ox + 12, oy + 25, 5, 2);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(ox + 12, oy + 25, 5, 1);
     }
 
     // 56: SNOW_PLAIN (Crisp alpine snowfield w/ bright icy drift highlights)
@@ -825,6 +887,7 @@ export class BootScene extends Phaser.Scene {
       const { ox, oy } = tileOrigin(56);
       ctx.fillStyle = '#E2EDF8';
       ctx.fillRect(ox, oy, 32, 32);
+      drawComicDots(ox, oy, 'rgba(56, 189, 248, 0.25)', 6);
       ctx.fillStyle = '#BAE6FD';
       ctx.fillRect(ox + 2, oy + 9, 13, 4);
       ctx.fillRect(ox + 16, oy + 21, 14, 4);
@@ -837,16 +900,17 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 25, oy + 6, 2, 2);
     }
 
-    // 57: DESERT_CANYON (Vivid ochre terracotta sandstone & canyon dunes)
+    // 57: DESERT_CANYON (Vivid ochre terracotta sandstone w/ bold comic ink rock cracks)
     {
       const { ox, oy } = tileOrigin(57);
       ctx.fillStyle = '#B45309';
       ctx.fillRect(ox, oy, 32, 32);
+      drawComicDots(ox, oy, 'rgba(67, 20, 7, 0.35)', 6);
       ctx.fillStyle = '#D97706';
       ctx.fillRect(ox + 2, oy + 3, 13, 8);
       ctx.fillRect(ox + 17, oy + 15, 13, 8);
       ctx.fillRect(ox + 4, oy + 21, 11, 7);
-      ctx.fillStyle = '#7C2D12';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox + 14, oy + 2, 1, 12);
       ctx.fillRect(ox + 2, oy + 14, 16, 1);
       ctx.fillRect(ox + 15, oy + 24, 15, 1);
@@ -855,7 +919,7 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 21, oy + 17, 5, 2);
     }
 
-    // 58: VOLCANIC_ROCK (Charred obsidian basalt w/ glowing magma fissures)
+    // 58: VOLCANIC_ROCK (Charred obsidian basalt w/ comic ink cracks & glowing magma fissures)
     {
       const { ox, oy } = tileOrigin(58);
       ctx.fillStyle = '#1D1824';
@@ -864,7 +928,7 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(ox + 3, oy + 4, 11, 8);
       ctx.fillRect(ox + 17, oy + 15, 12, 9);
       ctx.fillRect(ox + 6, oy + 21, 9, 7);
-      ctx.fillStyle = '#0F0B14';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(ox + 14, oy + 3, 2, 15);
       ctx.fillStyle = '#F97316';
       ctx.fillRect(ox + 14, oy + 9, 2, 6);
@@ -979,32 +1043,43 @@ export class BootScene extends Phaser.Scene {
       ctx.imageSmoothingEnabled = false;
       ctx.clearRect(0, 0, size, size);
 
-      ctx.fillStyle = '#0F172A';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(10 + frame.leftFootOffset, 6, 5, 4);
       ctx.fillRect(10 + frame.rightFootOffset, 18, 5, 4);
 
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(9 + frame.leftArmOffset, 3, 9, 6);
+      ctx.fillRect(9 + frame.rightArmOffset, 19, 9, 6);
       ctx.fillStyle = '#1E293B';
       ctx.fillRect(10 + frame.leftArmOffset, 4, 7, 4);
       ctx.fillRect(10 + frame.rightArmOffset, 20, 7, 4);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(10 + frame.leftArmOffset, 4, 6, 1);
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(15 + frame.leftArmOffset, 5, 2, 2);
       ctx.fillRect(15 + frame.rightArmOffset, 21, 2, 2);
 
-      ctx.fillStyle = '#141B2D';
-      ctx.fillRect(7, 7, 12, 14);
+      // Jacket torso with bold #05070E comic ink outline, cel armor bevel & neon trim
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(6, 6, 14, 16);
       ctx.fillStyle = '#2B3A55';
-      ctx.fillRect(8, 8, 9, 12);
+      ctx.fillRect(8, 8, 10, 12);
+      ctx.fillStyle = '#4E6B9C';
+      ctx.fillRect(8, 8, 9, 3);
       ctx.fillStyle = '#C000FF';
       ctx.fillRect(7, 9, 2, 10);
 
-      ctx.fillStyle = '#0B1120';
-      ctx.fillRect(10, 9, 9, 10);
+      // Sculpted comic-inked head/helmet with cel highlight rim
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(9, 8, 11, 12);
       ctx.fillStyle = '#334155';
       ctx.fillRect(11, 10, 7, 8);
+      ctx.fillStyle = '#94A3B8';
+      ctx.fillRect(11, 10, 6, 2);
 
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(17, 11, 3, 6);
-      ctx.fillStyle = '#E0FFFF';
+      ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(18, 12, 1, 4);
 
       tex.refresh();
@@ -1018,32 +1093,35 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Tires
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(7, 1, 9, 3);
         ctx.fillRect(28, 1, 9, 3);
         ctx.fillRect(7, 20, 9, 3);
         ctx.fillRect(28, 20, 9, 3);
-        // Body shell
-        ctx.fillStyle = '#1E293B';
-        ctx.fillRect(3, 3, 38, 18);
+        // Bold comic ink outer chassis + cel bevel
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(2, 2, 40, 20);
         ctx.fillStyle = '#2A3A54';
-        ctx.fillRect(5, 4, 34, 16);
-        // Neon cyan side trim
+        ctx.fillRect(4, 4, 36, 16);
+        ctx.fillStyle = '#46628E';
+        ctx.fillRect(6, 4, 32, 4);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(6, 3, 28, 1);
         ctx.fillRect(6, 20, 28, 1);
-        // Cabin & roof
-        ctx.fillStyle = '#141C2E';
+        // Raised 2.5D Comic Cabin + diagonal specular window slash
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(10, 6, 17, 12);
-        // Windshield & rear glass
+        ctx.fillStyle = '#3B5178';
+        ctx.fillRect(11, 7, 14, 10);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(25, 6, 6, 12);
         ctx.fillStyle = '#0F172A';
         ctx.fillRect(26, 7, 4, 10);
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(27, 8, 2, 3);
+        ctx.fillRect(28, 11, 2, 2);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(7, 7, 3, 10);
-        // Headlights & taillights
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(39, 5, 2, 4);
         ctx.fillRect(39, 15, 2, 4);
@@ -1060,36 +1138,35 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Wide slick tires
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(8, 1, 10, 3);
         ctx.fillRect(31, 1, 10, 3);
         ctx.fillRect(8, 20, 10, 3);
         ctx.fillRect(31, 20, 10, 3);
-        // Sleek aero chassis
-        ctx.fillStyle = '#151226';
-        ctx.fillRect(2, 3, 44, 18);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(1, 2, 46, 20);
         ctx.fillStyle = '#241B3E';
-        ctx.fillRect(4, 4, 40, 16);
-        // Twin racing stripes (Neon Pink + Purple)
+        ctx.fillRect(3, 4, 42, 16);
+        ctx.fillStyle = '#47367A';
+        ctx.fillRect(6, 4, 36, 4);
         ctx.fillStyle = '#FF2E88';
         ctx.fillRect(6, 8, 36, 2);
         ctx.fillRect(6, 14, 36, 2);
-        // Rear spoiler
         ctx.fillStyle = '#C000FF';
         ctx.fillRect(2, 3, 3, 18);
-        // Low cockpit canopy
-        ctx.fillStyle = '#0B1120';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(14, 6, 16, 12);
+        ctx.fillStyle = '#243454';
+        ctx.fillRect(15, 7, 10, 8);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(25, 7, 5, 10);
-        // Front splitter + headlights
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(26, 8, 2, 3);
         ctx.fillStyle = '#FF2E88';
         ctx.fillRect(44, 4, 2, 16);
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(44, 5, 2, 4);
         ctx.fillRect(44, 15, 2, 4);
-        // Taillights
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(3, 5, 2, 4);
         ctx.fillRect(3, 15, 2, 4);
@@ -1103,38 +1180,36 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Tires
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(8, 1, 10, 3);
         ctx.fillRect(30, 1, 10, 3);
         ctx.fillRect(8, 22, 10, 3);
         ctx.fillRect(30, 22, 10, 3);
-        // Heavy armored frame
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(3, 3, 42, 20);
-        // White patrol doors / roof center
-        ctx.fillStyle = '#E2E8F0';
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(2, 2, 44, 22);
+        ctx.fillStyle = '#CBD5E1';
         ctx.fillRect(14, 4, 18, 18);
-        // Dark hood & trunk
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(15, 5, 16, 14);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(32, 4, 12, 18);
         ctx.fillRect(4, 4, 10, 18);
-        // Push-bar bumper
+        ctx.fillStyle = '#3B4D6B';
+        ctx.fillRect(32, 4, 11, 4);
         ctx.fillStyle = '#94A3B8';
         ctx.fillRect(45, 6, 2, 14);
-        // Windshield
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(27, 6, 5, 14);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(28, 7, 3, 12);
-        // Rooftop Lightbar housing (red & cyan/blue)
-        ctx.fillStyle = '#0B1120';
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(28, 8, 2, 3);
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(19, 6, 4, 14);
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(19, 7, 4, 6);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(19, 13, 4, 6);
-        // Headlights & taillights
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(43, 5, 2, 4);
         ctx.fillRect(43, 17, 2, 4);
@@ -1151,24 +1226,27 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(7, 1, 9, 3);
         ctx.fillRect(28, 1, 9, 3);
         ctx.fillRect(7, 20, 9, 3);
         ctx.fillRect(28, 20, 9, 3);
-        ctx.fillStyle = '#2B2518';
-        ctx.fillRect(3, 3, 38, 18);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(2, 2, 40, 20);
         ctx.fillStyle = '#D99B26';
-        ctx.fillRect(6, 4, 32, 16);
-        ctx.fillStyle = '#141C2E';
+        ctx.fillRect(5, 4, 34, 16);
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(7, 4, 30, 4);
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(11, 6, 16, 12);
-        // Taxi roof sign
+        ctx.fillStyle = '#283654';
+        ctx.fillRect(12, 7, 13, 9);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(16, 9, 4, 6);
-        // Windshield
         ctx.fillStyle = '#0F172A';
         ctx.fillRect(25, 7, 5, 10);
-        // Lights
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(26, 8, 2, 3);
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(39, 5, 2, 4);
         ctx.fillRect(39, 15, 2, 4);
@@ -1185,29 +1263,30 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Wide rear & front slicks
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(8, 1, 11, 3);
         ctx.fillRect(31, 1, 11, 3);
         ctx.fillRect(8, 20, 11, 3);
         ctx.fillRect(31, 20, 11, 3);
-        // Hypercar wedge chassis
-        ctx.fillStyle = '#181828';
-        ctx.fillRect(2, 3, 46, 18);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(1, 2, 48, 20);
         ctx.fillStyle = '#292942';
-        ctx.fillRect(5, 4, 40, 16);
-        // Gold & Cyan aero accent lines
+        ctx.fillRect(4, 4, 42, 16);
+        ctx.fillStyle = '#474775';
+        ctx.fillRect(7, 4, 35, 4);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(4, 5, 40, 2);
         ctx.fillRect(4, 17, 40, 2);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(10, 11, 28, 2);
-        // Teardrop glass cockpit
-        ctx.fillStyle = '#090D18';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(16, 6, 17, 12);
+        ctx.fillStyle = '#1E293B';
+        ctx.fillRect(17, 7, 10, 8);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(26, 7, 6, 10);
-        // Active aero wing & exhausts
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(27, 8, 2, 4);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(1, 3, 3, 18);
         ctx.fillStyle = '#E0FFFF';
@@ -1226,23 +1305,21 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Front & rear fat tires
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(2, 4, 7, 6);
         ctx.fillRect(21, 4, 7, 6);
-        // Sleek fairing frame
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 2, 20, 10);
         ctx.fillStyle = '#23163D';
         ctx.fillRect(6, 3, 18, 8);
         ctx.fillStyle = '#C000FF';
         ctx.fillRect(7, 3, 15, 2);
         ctx.fillRect(7, 9, 15, 2);
-        // Neon cyan wheel rims + rider seat
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(4, 6, 3, 2);
         ctx.fillRect(23, 6, 3, 2);
-        ctx.fillStyle = '#0B1120';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(10, 5, 7, 4);
-        // Headlight & tail
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(26, 5, 2, 4);
         ctx.fillStyle = '#FF2E88';
@@ -1257,12 +1334,11 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(2, 5, 8, 6);
         ctx.fillRect(24, 5, 8, 6);
-        // Twin cyber exhausts & sleek nose fairing
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(5, 3, 24, 10);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(4, 2, 26, 12);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(7, 4, 20, 8);
         ctx.fillStyle = '#00F5FF';
@@ -1270,8 +1346,7 @@ export class BootScene extends Phaser.Scene {
         ctx.fillRect(8, 11, 18, 2);
         ctx.fillRect(5, 7, 4, 2);
         ctx.fillRect(26, 7, 4, 2);
-        // Rider cockpit & cyan visor aero screen
-        ctx.fillStyle = '#0B1120';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(11, 5, 8, 6);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(21, 5, 5, 6);
@@ -1289,8 +1364,7 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Exposed rugged knobby off-road wheels
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(5, 0, 11, 5);
         ctx.fillRect(29, 0, 11, 5);
         ctx.fillRect(5, 23, 11, 5);
@@ -1300,22 +1374,20 @@ export class BootScene extends Phaser.Scene {
         ctx.fillRect(31, 1, 7, 3);
         ctx.fillRect(7, 24, 7, 3);
         ctx.fillRect(31, 24, 7, 3);
-        // Roll-cage chassis
-        ctx.fillStyle = '#1E1B18';
-        ctx.fillRect(4, 5, 38, 18);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(3, 4, 40, 20);
         ctx.fillStyle = '#EA580C';
         ctx.fillRect(6, 6, 33, 16);
-        // Tubular steel roll bars
+        ctx.fillStyle = '#FDBA74';
+        ctx.fillRect(7, 6, 30, 3);
         ctx.fillStyle = '#94A3B8';
         ctx.fillRect(9, 7, 20, 2);
         ctx.fillRect(9, 19, 20, 2);
         ctx.fillRect(17, 7, 3, 14);
-        // Open cockpit & hood intake
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(11, 9, 14, 10);
         ctx.fillStyle = '#FACC15';
         ctx.fillRect(30, 10, 6, 8);
-        // Bull bar & roof spotlights
         ctx.fillStyle = '#CBD5E1';
         ctx.fillRect(41, 7, 3, 14);
         ctx.fillStyle = '#FEF08A';
@@ -1334,38 +1406,34 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // 6 heavy armored wheels
-        ctx.fillStyle = '#070B14';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(7, 1, 10, 3);
         ctx.fillRect(23, 1, 10, 3);
         ctx.fillRect(40, 1, 10, 3);
         ctx.fillRect(7, 26, 10, 3);
         ctx.fillRect(23, 26, 10, 3);
         ctx.fillRect(40, 26, 10, 3);
-        // Heavy tactical hull
-        ctx.fillStyle = '#0B1120';
-        ctx.fillRect(3, 4, 52, 22);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(2, 3, 54, 24);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(5, 5, 48, 20);
-        // Reinforced armor plating & roof hatch
         ctx.fillStyle = '#334155';
         ctx.fillRect(8, 7, 28, 16);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(15, 10, 10, 10);
         ctx.fillStyle = '#38BDF8';
         ctx.fillRect(10, 6, 20, 1);
         ctx.fillRect(10, 23, 20, 1);
-        // Armored slit windshield & ramming bumper
         ctx.fillStyle = '#38BDF8';
         ctx.fillRect(40, 8, 4, 14);
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(41, 9, 2, 4);
         ctx.fillStyle = '#94A3B8';
         ctx.fillRect(53, 6, 3, 18);
-        // Dual lightbar
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(35, 7, 3, 7);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(35, 16, 3, 7);
-        // Lights
         ctx.fillStyle = '#E0FFFF';
         ctx.fillRect(51, 6, 2, 4);
         ctx.fillRect(51, 20, 2, 4);
@@ -1382,7 +1450,6 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Landing skids
         ctx.fillStyle = '#475569';
         ctx.fillRect(20, 3, 22, 2);
         ctx.fillRect(20, 27, 22, 2);
@@ -1390,32 +1457,31 @@ export class BootScene extends Phaser.Scene {
         ctx.fillRect(35, 5, 2, 4);
         ctx.fillRect(25, 23, 2, 4);
         ctx.fillRect(35, 23, 2, 4);
-        // Tail boom & rear stabilizer
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(2, 13, 22, 6);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(1, 12, 24, 8);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(3, 14, 20, 4);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(3, 9, 3, 14);
-        // Stub weapon wings + missile pods
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(25, 3, 11, 26);
         ctx.fillStyle = '#334155';
         ctx.fillRect(26, 4, 9, 24);
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(33, 5, 4, 4);
         ctx.fillRect(33, 23, 4, 4);
-        // Fuselage & armored canopy
-        ctx.fillStyle = '#1E293B';
-        ctx.fillRect(20, 9, 28, 14);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(19, 8, 30, 16);
         ctx.fillStyle = '#334155';
         ctx.fillRect(23, 10, 21, 12);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(38, 11, 10, 10);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(39, 12, 7, 8);
-        // Nose autocannon barrel
+        ctx.fillStyle = '#E0FFFF';
+        ctx.fillRect(40, 13, 3, 3);
         ctx.fillStyle = '#94A3B8';
         ctx.fillRect(48, 15, 7, 2);
-        // Rotor hub
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(29, 14, 4, 4);
         tex.refresh();
@@ -1440,7 +1506,7 @@ export class BootScene extends Phaser.Scene {
         ctx.fillRect(57, 30, 5, 4);
         ctx.fillRect(30, 2, 4, 5);
         ctx.fillRect(30, 57, 4, 5);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(29, 29, 6, 6);
         tex.refresh();
       }
@@ -1452,8 +1518,7 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Heavy armored caterpillar treads
-        ctx.fillStyle = '#090D16';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(3, 1, 54, 7);
         ctx.fillRect(3, 28, 54, 7);
         ctx.fillStyle = '#334155';
@@ -1461,16 +1526,16 @@ export class BootScene extends Phaser.Scene {
           ctx.fillRect(tx, 2, 3, 5);
           ctx.fillRect(tx, 29, 3, 5);
         }
-        // Main hull armor
-        ctx.fillStyle = '#14261E';
-        ctx.fillRect(6, 7, 48, 22);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 6, 50, 24);
         ctx.fillStyle = '#1F3A2E';
         ctx.fillRect(9, 9, 42, 18);
-        // Neon tactical trim + rear engine louvers
+        ctx.fillStyle = '#2D5442';
+        ctx.fillRect(10, 9, 39, 4);
         ctx.fillStyle = '#4ADE80';
         ctx.fillRect(10, 8, 36, 1);
         ctx.fillRect(10, 27, 36, 1);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(10, 11, 8, 14);
         ctx.fillStyle = '#FACC15';
         ctx.fillRect(52, 9, 2, 4);
@@ -1485,21 +1550,19 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Long 120mm cannon barrel facing +X
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(26, 10, 28, 6);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(26, 9, 29, 8);
         ctx.fillStyle = '#64748B';
         ctx.fillRect(26, 11, 26, 4);
         ctx.fillStyle = '#4ADE80';
         ctx.fillRect(51, 10, 4, 6);
-        // Turret body
-        ctx.fillStyle = '#0F291E';
-        ctx.fillRect(6, 3, 24, 20);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 2, 26, 22);
         ctx.fillStyle = '#264D3B';
         ctx.fillRect(8, 5, 20, 16);
         ctx.fillStyle = '#4ADE80';
         ctx.fillRect(12, 8, 8, 10);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(14, 10, 4, 6);
         tex.refresh();
       }
@@ -1513,13 +1576,15 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 4, 15, 18);
         ctx.fillStyle = '#1E1B2E';
         ctx.fillRect(6, 5, 13, 16);
         ctx.fillStyle = '#FF2E88';
         ctx.fillRect(6, 7, 3, 12);
         ctx.fillRect(15, 4, 5, 4);
         ctx.fillRect(15, 18, 5, 4);
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(9, 8, 9, 10);
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(16, 10, 4, 6);
@@ -1533,11 +1598,12 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(4, 4, 6, 6);
         ctx.fillRect(16, 4, 6, 6);
         ctx.fillRect(4, 16, 6, 6);
         ctx.fillRect(16, 16, 6, 6);
+        ctx.fillRect(6, 6, 14, 14);
         ctx.fillStyle = '#334155';
         ctx.fillRect(7, 7, 12, 12);
         ctx.fillStyle = '#C000FF';
@@ -1554,8 +1620,8 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = '#2D1422';
-        ctx.fillRect(5, 4, 22, 26);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(4, 3, 24, 28);
         ctx.fillStyle = '#4A1D33';
         ctx.fillRect(7, 6, 18, 22);
         ctx.fillStyle = '#FF4545';
@@ -1574,20 +1640,21 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        ctx.fillStyle = '#1A1124';
-        ctx.fillRect(6, 4, 32, 38);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 3, 34, 40);
         ctx.fillStyle = '#332047';
         ctx.fillRect(9, 7, 26, 32);
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(7, 8, 5, 30);
-        // Twin shoulder cannons
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(23, 2, 20, 9);
+        ctx.fillRect(23, 35, 20, 9);
         ctx.fillStyle = '#475569';
         ctx.fillRect(24, 3, 18, 7);
         ctx.fillRect(24, 36, 18, 7);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(38, 4, 5, 5);
         ctx.fillRect(38, 37, 5, 5);
-        // Glowing core visor
         ctx.fillStyle = '#FF2E88';
         ctx.fillRect(28, 16, 8, 14);
         ctx.fillStyle = '#FFFFFF';
@@ -1616,7 +1683,7 @@ export class BootScene extends Phaser.Scene {
       if (!tex) return;
       const ctx = tex.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#080D18';
+      ctx.fillStyle = '#05070E';
       ctx.fillRect(1, 1, 16, 16);
       ctx.fillStyle = border;
       ctx.fillRect(2, 2, 14, 14);
@@ -1641,26 +1708,27 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Heavy shoulder missile pods
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(4, 1, 18, 9);
+        ctx.fillRect(4, 28, 18, 9);
         ctx.fillStyle = '#475569';
         ctx.fillRect(5, 2, 16, 7);
         ctx.fillRect(5, 29, 16, 7);
         ctx.fillStyle = '#FF4545';
         ctx.fillRect(19, 3, 3, 5);
         ctx.fillRect(19, 30, 3, 5);
-        // Twin plasma arm cannons
         ctx.fillStyle = '#334155';
         ctx.fillRect(16, 7, 19, 5);
         ctx.fillRect(16, 26, 19, 5);
         ctx.fillStyle = '#FFD166';
         ctx.fillRect(32, 8, 5, 3);
         ctx.fillRect(32, 27, 5, 3);
-        // Armored torso
-        ctx.fillStyle = '#0F172A';
-        ctx.fillRect(7, 9, 18, 20);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(6, 8, 20, 22);
         ctx.fillStyle = '#D97706';
         ctx.fillRect(9, 11, 14, 16);
-        // Glowing visor
+        ctx.fillStyle = '#FACC15';
+        ctx.fillRect(10, 11, 11, 3);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(19, 14, 6, 10);
         ctx.fillStyle = '#FFFFFF';
@@ -1675,20 +1743,20 @@ export class BootScene extends Phaser.Scene {
       if (tex) {
         const ctx = tex.getContext();
         ctx.imageSmoothingEnabled = false;
-        // Sleek cyber thrusters
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(2, 10, 4, 5);
         ctx.fillRect(2, 21, 4, 5);
-        // Dual rail arms
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(13, 4, 21, 6);
+        ctx.fillRect(13, 26, 21, 6);
         ctx.fillStyle = '#1E293B';
         ctx.fillRect(14, 5, 19, 4);
         ctx.fillRect(14, 27, 19, 4);
         ctx.fillStyle = '#00F5FF';
         ctx.fillRect(29, 6, 6, 2);
         ctx.fillRect(29, 28, 6, 2);
-        // Agile exo-chassis
-        ctx.fillStyle = '#1E1B4B';
-        ctx.fillRect(6, 9, 17, 18);
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 8, 19, 20);
         ctx.fillStyle = '#4338CA';
         ctx.fillRect(8, 11, 13, 14);
         ctx.fillStyle = '#FF2E88';
@@ -1702,9 +1770,9 @@ export class BootScene extends Phaser.Scene {
 
   private createNpcTextures(): void {
     const palettes = [
-      { coat: '#2D2042', trim: '#FF2E88', visor: '#FF2E88' }, // Neon Pink streetwalker
-      { coat: '#1A3442', trim: '#00F5FF', visor: '#FFD166' }, // Cyan/Gold courier
-      { coat: '#27293D', trim: '#C000FF', visor: '#00F5FF' }, // Purple corp tech
+      { coat: '#3B2859', trim: '#FF2E88', visor: '#FF2E88' },
+      { coat: '#1D4254', trim: '#00F5FF', visor: '#FFD166' },
+      { coat: '#2F3352', trim: '#C000FF', visor: '#00F5FF' },
     ];
 
     palettes.forEach((pal, idx) => {
@@ -1717,19 +1785,25 @@ export class BootScene extends Phaser.Scene {
         ctx.clearRect(0, 0, 24, 24);
 
         const stride = frame === 0 ? 0 : 2;
-        ctx.fillStyle = '#0F172A';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(8 + stride, 5, 4, 3);
         ctx.fillRect(8 - stride, 16, 4, 3);
 
+        ctx.fillStyle = '#05070E';
+        ctx.fillRect(5, 5, 12, 14);
         ctx.fillStyle = pal.coat;
         ctx.fillRect(6, 6, 10, 12);
+        ctx.fillStyle = '#64748B';
+        ctx.fillRect(6, 6, 9, 2);
         ctx.fillStyle = pal.trim;
         ctx.fillRect(6, 8, 2, 8);
 
-        ctx.fillStyle = '#0B1120';
+        ctx.fillStyle = '#05070E';
         ctx.fillRect(9, 8, 7, 8);
         ctx.fillStyle = '#475569';
         ctx.fillRect(10, 9, 5, 6);
+        ctx.fillStyle = '#CBD5E1';
+        ctx.fillRect(10, 9, 4, 2);
 
         ctx.fillStyle = pal.visor;
         ctx.fillRect(14, 10, 2, 4);
@@ -1740,181 +1814,232 @@ export class BootScene extends Phaser.Scene {
   }
 
   private createPropTextures(): void {
-    // Streetlamp
-    const lamp = this.textures.createCanvas('prop_lamp', 16, 16);
+    // 2.5D Upright Cyber Streetlamp (16x26)
+    const lamp = this.textures.createCanvas('prop_lamp', 16, 26);
     if (lamp) {
       const ctx = lamp.getContext();
       ctx.imageSmoothingEnabled = false;
+      // Base pedestal
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(5, 5, 6, 6);
+      ctx.fillRect(4, 19, 8, 6);
       ctx.fillStyle = '#334155';
-      ctx.fillRect(6, 6, 4, 4);
+      ctx.fillRect(5, 20, 6, 4);
+      // Vertical post shaft
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(6, 7, 4, 14);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(7, 7, 1, 13);
+      // Lantern hood & neon bulb
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(3, 2, 10, 6);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(4, 3, 8, 2);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(7, 7, 2, 2);
+      ctx.fillRect(5, 5, 6, 3);
+      ctx.fillStyle = '#E0FFFF';
+      ctx.fillRect(6, 5, 4, 2);
       lamp.refresh();
     }
 
-    // Vending Machine
-    const vending = this.textures.createCanvas('prop_vending', 24, 24);
+    // 2.5D Upright Cyber Vending Machine (24x32)
+    const vending = this.textures.createCanvas('prop_vending', 24, 32);
     if (vending) {
       const ctx = vending.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, 2, 20, 20);
-      ctx.fillStyle = '#28334A';
-      ctx.fillRect(3, 3, 18, 18);
+      ctx.fillStyle = '#090D16';
+      ctx.fillRect(2, 2, 20, 28);
+      // Top slanted bevel roof
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(3, 3, 18, 5);
+      // Front vertical body
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(3, 8, 18, 21);
+      ctx.fillStyle = '#2D3C59';
+      ctx.fillRect(4, 9, 14, 19);
+      // Glowing cyber drink display window
       ctx.fillStyle = '#FF2E88';
-      ctx.fillRect(5, 5, 14, 6);
+      ctx.fillRect(5, 10, 11, 10);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(6, 13, 12, 5);
+      ctx.fillRect(6, 12, 9, 3);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(6, 16, 9, 3);
+      // Dispenser slot
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(6, 22, 11, 5);
       ctx.fillStyle = '#F8FAFC';
-      ctx.fillRect(7, 6, 3, 2);
-      ctx.fillRect(12, 6, 3, 2);
+      ctx.fillRect(17, 11, 2, 5);
       vending.refresh();
     }
 
-    // Planter Box
+    // 2.5D Raised Neon Planter Box (28x28)
     const planter = this.textures.createCanvas('prop_planter', 28, 28);
     if (planter) {
       const ctx = planter.getContext();
       ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(2, 4, 24, 22);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(3, 5, 22, 14);
       ctx.fillStyle = '#1E293B';
-      ctx.fillRect(2, 2, 24, 24);
+      ctx.fillRect(3, 19, 22, 6);
       ctx.fillStyle = '#C000FF';
-      ctx.fillRect(2, 2, 24, 2);
-      ctx.fillRect(2, 24, 24, 2);
-      ctx.fillRect(2, 2, 2, 24);
-      ctx.fillRect(24, 2, 2, 24);
+      ctx.fillRect(2, 4, 24, 2);
+      ctx.fillRect(2, 19, 24, 1);
       ctx.fillStyle = '#0F4C5C';
-      ctx.fillRect(6, 6, 16, 16);
+      ctx.fillRect(5, 7, 18, 11);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(8, 8, 4, 4);
-      ctx.fillRect(15, 14, 5, 5);
+      ctx.fillRect(7, 8, 5, 5);
+      ctx.fillRect(15, 11, 5, 5);
       ctx.fillStyle = '#FF2E88';
-      ctx.fillRect(16, 8, 3, 3);
-      ctx.fillRect(9, 16, 3, 3);
+      ctx.fillRect(16, 7, 3, 3);
+      ctx.fillRect(9, 13, 3, 3);
       planter.refresh();
     }
 
-    // Bench
-    const bench = this.textures.createCanvas('prop_bench', 32, 16);
+    // 2.5D Park Bench (32x18)
+    const bench = this.textures.createCanvas('prop_bench', 32, 18);
     if (bench) {
       const ctx = bench.getContext();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, 3, 28, 10);
+      ctx.fillRect(2, 2, 28, 13);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(4, 3, 24, 5);
       ctx.fillStyle = '#334155';
-      ctx.fillRect(4, 4, 24, 8);
+      ctx.fillRect(4, 9, 24, 5);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(4, 4, 2, 8);
-      ctx.fillRect(26, 4, 2, 8);
+      ctx.fillRect(4, 3, 2, 11);
+      ctx.fillRect(26, 3, 2, 11);
       bench.refresh();
     }
 
-    // Kiosk
-    const kiosk = this.textures.createCanvas('prop_kiosk', 28, 28);
+    // 2.5D Upright Street Kiosk Booth (28x34)
+    const kiosk = this.textures.createCanvas('prop_kiosk', 28, 34);
     if (kiosk) {
       const ctx = kiosk.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(3, 3, 22, 22);
-      ctx.fillStyle = '#20283A';
-      ctx.fillRect(5, 5, 18, 18);
+      ctx.fillStyle = '#090D16';
+      ctx.fillRect(2, 2, 24, 30);
+      // Canopy roof
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(2, 2, 24, 8);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(5, 5, 18, 2);
-      ctx.fillRect(5, 21, 18, 2);
+      ctx.fillRect(2, 9, 24, 2);
+      // Booth vertical front wall & counter window
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(3, 11, 22, 20);
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(6, 13, 16, 9);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(11, 11, 6, 6);
+      ctx.fillRect(8, 15, 12, 5);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(5, 22, 18, 2);
+      ctx.fillStyle = '#FF2E88';
+      ctx.fillRect(5, 4, 18, 3);
       kiosk.refresh();
     }
 
-    // Bollard (12x12)
-    const bollard = this.textures.createCanvas('prop_bollard', 12, 12);
+    // Bollard (12x16)
+    const bollard = this.textures.createCanvas('prop_bollard', 12, 16);
     if (bollard) {
       const ctx = bollard.getContext();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(2, 2, 8, 8);
-      ctx.fillStyle = '#475569';
-      ctx.fillRect(3, 3, 6, 6);
+      ctx.fillRect(2, 2, 8, 12);
+      ctx.fillStyle = '#64748B';
+      ctx.fillRect(3, 3, 6, 4);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(3, 7, 6, 6);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(4, 4, 4, 2);
+      ctx.fillRect(3, 5, 6, 2);
       bollard.refresh();
     }
 
-    // Cone (12x12)
-    const cone = this.textures.createCanvas('prop_cone', 12, 12);
+    // Cone (12x14)
+    const cone = this.textures.createCanvas('prop_cone', 12, 14);
     if (cone) {
       const ctx = cone.getContext();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, 2, 8, 8);
+      ctx.fillRect(1, 9, 10, 4);
       ctx.fillStyle = '#FF2E88';
-      ctx.fillRect(3, 3, 6, 6);
+      ctx.fillRect(4, 2, 4, 9);
+      ctx.fillRect(3, 6, 6, 5);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(4, 4, 4, 4);
+      ctx.fillRect(4, 5, 4, 3);
       ctx.fillStyle = '#F8FAFC';
-      ctx.fillRect(5, 5, 2, 2);
+      ctx.fillRect(5, 2, 2, 2);
       cone.refresh();
     }
 
-    // Ramen Stool (12x12)
-    const stool = this.textures.createCanvas('prop_stool', 12, 12);
+    // Ramen Stool (12x14)
+    const stool = this.textures.createCanvas('prop_stool', 12, 14);
     if (stool) {
       const ctx = stool.getContext();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(2, 2, 8, 8);
+      ctx.fillRect(3, 8, 6, 5);
       ctx.fillStyle = '#FF2E88';
-      ctx.fillRect(3, 3, 6, 6);
+      ctx.fillRect(2, 3, 8, 6);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(4, 4, 4, 4);
+      ctx.fillRect(3, 4, 6, 3);
       stool.refresh();
     }
 
-    // Cyber Trashbin (16x16)
-    const bin = this.textures.createCanvas('prop_trashbin', 16, 16);
+    // 2.5D Cyber Trashbin (16x20)
+    const bin = this.textures.createCanvas('prop_trashbin', 16, 20);
     if (bin) {
       const ctx = bin.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, 2, 12, 12);
-      ctx.fillStyle = '#334155';
-      ctx.fillRect(3, 3, 10, 10);
-      ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(4, 4, 8, 2);
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(5, 7, 6, 4);
+      ctx.fillRect(2, 2, 12, 16);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(3, 3, 10, 4);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(3, 7, 10, 10);
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(4, 5, 8, 2);
+      ctx.fillStyle = '#0B1120';
+      ctx.fillRect(5, 9, 6, 5);
       bin.refresh();
     }
 
-    // Holo Billboard (48x16)
-    const billboard = this.textures.createCanvas('prop_billboard', 48, 16);
+    // 2.5D Raised Holo Billboard (48x24)
+    const billboard = this.textures.createCanvas('prop_billboard', 48, 24);
     if (billboard) {
       const ctx = billboard.getContext();
       ctx.imageSmoothingEnabled = false;
+      // Twin steel support posts
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(10, 14, 4, 9);
+      ctx.fillRect(34, 14, 4, 9);
+      // Raised holo screen frame
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(0, 3, 48, 10);
+      ctx.fillRect(0, 2, 48, 13);
       ctx.fillStyle = '#20283A';
-      ctx.fillRect(2, 4, 44, 8);
+      ctx.fillRect(2, 3, 44, 11);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(2, 4, 44, 2);
+      ctx.fillRect(2, 3, 44, 2);
       ctx.fillStyle = '#FF2E88';
-      ctx.fillRect(2, 10, 44, 2);
+      ctx.fillRect(2, 12, 44, 2);
       billboard.refresh();
     }
 
-    // Traffic Signal Post (14x14)
-    const signal = this.textures.createCanvas('prop_signal', 14, 14);
+    // 2.5D Upright Traffic Signal Post (14x22)
+    const signal = this.textures.createCanvas('prop_signal', 14, 22);
     if (signal) {
       const ctx = signal.getContext();
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = '#0B1120';
-      ctx.fillRect(2, 2, 10, 10);
+      ctx.fillRect(5, 11, 4, 10);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(6, 11, 2, 9);
+      ctx.fillStyle = '#0B1120';
+      ctx.fillRect(2, 1, 10, 11);
       ctx.fillStyle = '#334155';
-      ctx.fillRect(3, 3, 8, 8);
+      ctx.fillRect(3, 2, 8, 9);
       ctx.fillStyle = '#1E293B';
-      ctx.fillRect(4, 4, 6, 6);
+      ctx.fillRect(4, 3, 6, 7);
       signal.refresh();
     }
 
@@ -1933,239 +2058,245 @@ export class BootScene extends Phaser.Scene {
       fan.refresh();
     }
 
-    // Helper to paint stepped pixel canopy clusters (with dark pixel outline & trunk)
+    // Helper to paint 2.5D comic-inked stepped canopy clusters (thick #05070E ink + cel tufts)
     const drawRoundedCanopy = (
       ctx: CanvasRenderingContext2D,
       cx: number,
       cy: number,
       trunkColor: string,
-      outlineColor: string,
+      _outlineColor: string,
       darkColor: string,
       midColor: string,
       lightColor: string,
       accentColor?: string
     ) => {
-      // Ground shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
-      ctx.fillRect(cx - 8, cy + 5, 16, 8);
-      // Trunk
+      ctx.fillStyle = 'rgba(5, 7, 14, 0.52)';
+      ctx.fillRect(cx - 7, cy + 12, 14, 5);
+      // Tall 2.5D trunk with comic ink outline
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(cx - 3, cy + 1, 7, 15);
       ctx.fillStyle = trunkColor;
-      ctx.fillRect(cx - 2, cy + 2, 4, 10);
-      // Dark stepped pixel foliage silhouette
-      ctx.fillStyle = outlineColor;
-      ctx.fillRect(cx - 8, cy - 11, 16, 16);
-      ctx.fillRect(cx - 11, cy - 8, 22, 10);
-      ctx.fillRect(cx - 5, cy - 13, 10, 20);
+      ctx.fillRect(cx - 2, cy + 2, 5, 13);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(cx - 2, cy + 2, 2, 12);
+      // Bold #05070E comic ink canopy silhouette
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(cx - 10, cy - 14, 20, 20);
+      ctx.fillRect(cx - 13, cy - 10, 26, 13);
+      ctx.fillRect(cx - 7, cy - 16, 14, 23);
       // Base canopy shadow tone
       ctx.fillStyle = darkColor;
-      ctx.fillRect(cx - 7, cy - 10, 14, 14);
-      ctx.fillRect(cx - 10, cy - 7, 20, 8);
+      ctx.fillRect(cx - 8, cy - 12, 16, 16);
+      ctx.fillRect(cx - 11, cy - 8, 22, 9);
       // Midtone leaf tufts
       ctx.fillStyle = midColor;
-      ctx.fillRect(cx - 8, cy - 8, 13, 9);
-      ctx.fillRect(cx - 4, cy - 11, 9, 11);
-      // Sunlit highlights
+      ctx.fillRect(cx - 9, cy - 10, 14, 11);
+      ctx.fillRect(cx - 5, cy - 13, 10, 12);
+      // Sunlit cel top-left crown highlights
       ctx.fillStyle = lightColor;
-      ctx.fillRect(cx - 6, cy - 9, 6, 5);
-      ctx.fillRect(cx + 1, cy - 5, 4, 4);
+      ctx.fillRect(cx - 7, cy - 11, 7, 6);
+      ctx.fillRect(cx + 1, cy - 6, 4, 4);
       if (accentColor) {
         ctx.fillStyle = accentColor;
-        ctx.fillRect(cx - 5, cy - 8, 3, 2);
-        ctx.fillRect(cx + 2, cy - 3, 2, 2);
+        ctx.fillRect(cx - 6, cy - 10, 3, 2);
+        ctx.fillRect(cx + 2, cy - 4, 2, 2);
       }
     };
 
-    // Alpine Pine Tree (32x32 stepped conifer layers)
-    const pine = this.textures.createCanvas('prop_tree_pine', 32, 32);
+    // 2.5D Alpine Pine Tree (32x38 comic-inked conifer layers)
+    const pine = this.textures.createCanvas('prop_tree_pine', 32, 38);
     if (pine) {
       const ctx = pine.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(7, 17, 18, 10);
-      ctx.fillStyle = '#3B2314';
-      ctx.fillRect(14, 21, 4, 7);
-      // Tiered conifer silhouette
-      ctx.fillStyle = '#092418';
-      ctx.fillRect(6, 15, 20, 9);
-      ctx.fillRect(8, 9, 16, 8);
-      ctx.fillRect(11, 4, 10, 7);
-      ctx.fillRect(14, 2, 4, 3);
+      ctx.fillStyle = 'rgba(5, 7, 14, 0.5)';
+      ctx.fillRect(8, 30, 16, 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(13, 23, 7, 12);
+      ctx.fillStyle = '#5C3820';
+      ctx.fillRect(14, 23, 5, 11);
+      // Bold #05070E comic ink silhouette
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(5, 16, 22, 12);
+      ctx.fillRect(7, 9, 18, 11);
+      ctx.fillRect(10, 3, 12, 10);
+      ctx.fillRect(13, 0, 6, 5);
       ctx.fillStyle = '#155E3E';
-      ctx.fillRect(8, 16, 16, 6);
-      ctx.fillRect(10, 10, 12, 6);
-      ctx.fillRect(12, 5, 8, 5);
+      ctx.fillRect(8, 18, 16, 7);
+      ctx.fillRect(10, 11, 12, 7);
+      ctx.fillRect(12, 5, 8, 6);
       ctx.fillStyle = '#228B57';
-      ctx.fillRect(10, 16, 10, 4);
-      ctx.fillRect(11, 10, 8, 4);
-      ctx.fillRect(13, 6, 5, 3);
+      ctx.fillRect(9, 18, 11, 5);
+      ctx.fillRect(11, 11, 8, 5);
+      ctx.fillRect(13, 6, 5, 4);
       ctx.fillStyle = '#4ADE80';
-      ctx.fillRect(14, 4, 2, 2);
-      ctx.fillRect(12, 11, 3, 2);
+      ctx.fillRect(14, 3, 2, 3);
+      ctx.fillRect(11, 12, 3, 2);
       pine.refresh();
     }
 
-    // Park Cyber Sakura / Blossom Tree (32x32)
-    const sakura = this.textures.createCanvas('prop_tree_sakura', 32, 32);
+    // 2.5D Park Cyber Sakura / Blossom Tree (32x38)
+    const sakura = this.textures.createCanvas('prop_tree_sakura', 32, 38);
     if (sakura) {
       const ctx = sakura.getContext();
       ctx.imageSmoothingEnabled = false;
-      drawRoundedCanopy(ctx, 16, 17, '#4A1D36', '#500724', '#9D174D', '#EC4899', '#F472B6', '#FBCFE8');
+      drawRoundedCanopy(ctx, 16, 18, '#5C2544', '#05070E', '#9D174D', '#EC4899', '#F472B6', '#FBCFE8');
       sakura.refresh();
     }
 
-    // Lush Emerald Broadleaf Forest Tree (32x32)
-    const emerald = this.textures.createCanvas('prop_tree_emerald', 32, 32);
+    // 2.5D Lush Emerald Broadleaf Forest Tree (32x38)
+    const emerald = this.textures.createCanvas('prop_tree_emerald', 32, 38);
     if (emerald) {
       const ctx = emerald.getContext();
       ctx.imageSmoothingEnabled = false;
-      drawRoundedCanopy(ctx, 16, 17, '#422817', '#052E16', '#14532D', '#16A34A', '#4ADE80', '#BBF7D0');
+      drawRoundedCanopy(ctx, 16, 18, '#5C3820', '#05070E', '#14532D', '#16A34A', '#4ADE80', '#BBF7D0');
       emerald.refresh();
     }
 
-    // Autumn / Desert Gold-Amber Tree (32x32)
-    const autumn = this.textures.createCanvas('prop_tree_autumn', 32, 32);
+    // 2.5D Autumn / Desert Gold-Amber Tree (32x38)
+    const autumn = this.textures.createCanvas('prop_tree_autumn', 32, 38);
     if (autumn) {
       const ctx = autumn.getContext();
       ctx.imageSmoothingEnabled = false;
-      drawRoundedCanopy(ctx, 16, 17, '#451A03', '#431407', '#9A3412', '#EA580C', '#FACC15', '#FEF08A');
+      drawRoundedCanopy(ctx, 16, 18, '#5C2A0E', '#05070E', '#9A3412', '#EA580C', '#FACC15', '#FEF08A');
       autumn.refresh();
     }
 
-    // Snow-Dusted Alpine Pine (32x32)
-    const snowTree = this.textures.createCanvas('prop_tree_snow', 32, 32);
+    // 2.5D Snow-Dusted Alpine Pine (32x38)
+    const snowTree = this.textures.createCanvas('prop_tree_snow', 32, 38);
     if (snowTree) {
       const ctx = snowTree.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = 'rgba(0,0,0,0.42)';
-      ctx.fillRect(7, 18, 18, 10);
-      ctx.fillStyle = '#3B2314';
-      ctx.fillRect(14, 21, 4, 7);
-      ctx.fillStyle = '#0F2E28';
-      ctx.fillRect(6, 15, 20, 9);
-      ctx.fillRect(8, 9, 16, 8);
-      ctx.fillRect(11, 4, 10, 7);
+      ctx.fillStyle = 'rgba(5, 7, 14, 0.48)';
+      ctx.fillRect(8, 30, 16, 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(13, 23, 7, 12);
+      ctx.fillStyle = '#5C3820';
+      ctx.fillRect(14, 23, 5, 11);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(5, 16, 22, 12);
+      ctx.fillRect(7, 9, 18, 11);
+      ctx.fillRect(10, 3, 12, 10);
       ctx.fillStyle = '#1D5E4C';
-      ctx.fillRect(8, 16, 16, 6);
-      ctx.fillRect(10, 10, 12, 6);
-      // Heavy white snow caps on boughs
+      ctx.fillRect(8, 18, 16, 7);
+      ctx.fillRect(10, 11, 12, 7);
       ctx.fillStyle = '#BAE6FD';
-      ctx.fillRect(7, 15, 18, 3);
-      ctx.fillRect(9, 9, 14, 3);
+      ctx.fillRect(7, 17, 18, 3);
+      ctx.fillRect(9, 10, 14, 3);
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(9, 15, 12, 2);
-      ctx.fillRect(11, 9, 9, 2);
+      ctx.fillRect(9, 17, 12, 2);
+      ctx.fillRect(11, 10, 9, 2);
       ctx.fillRect(12, 4, 8, 4);
       snowTree.refresh();
     }
 
-    // Tropical Coastal Palm Tree (34x34 curved pixel fronds + coconuts)
-    const palm = this.textures.createCanvas('prop_tree_palm', 34, 34);
+    // 2.5D Tropical Coastal Palm Tree (34x40 curved trunk + high frond canopy)
+    const palm = this.textures.createCanvas('prop_tree_palm', 34, 40);
     if (palm) {
       const ctx = palm.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(10, 20, 14, 8);
-      // Curved bark trunk
-      ctx.fillStyle = '#5C3820';
-      ctx.fillRect(15, 17, 4, 11);
+      ctx.fillStyle = 'rgba(5, 7, 14, 0.42)';
+      ctx.fillRect(11, 31, 13, 6);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(14, 15, 6, 20);
       ctx.fillStyle = '#855331';
-      ctx.fillRect(16, 15, 3, 10);
-      // Dark frond outline
-      ctx.fillStyle = '#052E16';
-      ctx.fillRect(4, 11, 26, 5);
-      ctx.fillRect(14, 3, 6, 20);
-      ctx.fillRect(7, 6, 20, 14);
-      // Vivid palm fronds radiating out
+      ctx.fillRect(16, 15, 3, 18);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(3, 9, 28, 7);
+      ctx.fillRect(13, 1, 8, 22);
+      ctx.fillRect(6, 4, 22, 16);
       ctx.fillStyle = '#15803D';
-      ctx.fillRect(5, 12, 24, 3);
-      ctx.fillRect(15, 4, 4, 18);
-      ctx.fillRect(8, 7, 18, 12);
+      ctx.fillRect(5, 11, 24, 3);
+      ctx.fillRect(15, 3, 4, 18);
+      ctx.fillRect(8, 6, 18, 12);
       ctx.fillStyle = '#22C55E';
-      ctx.fillRect(7, 12, 20, 2);
-      ctx.fillRect(16, 5, 2, 15);
-      ctx.fillRect(10, 8, 14, 4);
+      ctx.fillRect(7, 11, 20, 2);
+      ctx.fillRect(16, 4, 2, 15);
+      ctx.fillRect(10, 7, 14, 4);
       ctx.fillStyle = '#86EFAC';
-      ctx.fillRect(14, 10, 6, 4);
-      // Coconuts cluster
+      ctx.fillRect(14, 9, 6, 4);
       ctx.fillStyle = '#451A03';
       ctx.fillRect(15, 14, 2, 2);
       ctx.fillRect(18, 14, 2, 2);
       palm.refresh();
     }
 
-    // Cyber ATM Terminal (20x20)
-    const atm = this.textures.createCanvas('prop_atm', 20, 20);
+    // 2.5D Upright Cyber ATM Terminal (20x26)
+    const atm = this.textures.createCanvas('prop_atm', 20, 26);
     if (atm) {
       const ctx = atm.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#090D16';
-      ctx.fillRect(2, 2, 16, 16);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(1, 1, 18, 24);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(3, 3, 14, 4);
       ctx.fillStyle = '#334155';
-      ctx.fillRect(3, 3, 14, 14);
+      ctx.fillRect(3, 7, 14, 16);
       ctx.fillStyle = '#00F5FF';
-      ctx.fillRect(5, 5, 10, 6);
-      ctx.fillStyle = '#E0FFFF';
-      ctx.fillRect(6, 6, 5, 2);
+      ctx.fillRect(5, 8, 10, 7);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(6, 9, 5, 2);
       ctx.fillStyle = '#FFD166';
-      ctx.fillRect(6, 13, 8, 2);
+      ctx.fillRect(6, 17, 8, 3);
       atm.refresh();
     }
 
-    // Explosive Red Fuel Barrel (18x18)
-    const barrel = this.textures.createCanvas('prop_barrel', 18, 18);
+    // 2.5D Upright Explosive Red Fuel Barrel (18x22)
+    const barrel = this.textures.createCanvas('prop_barrel', 18, 22);
     if (barrel) {
       const ctx = barrel.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#090D16';
-      ctx.fillRect(2, 2, 14, 14);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(1, 1, 16, 20);
+      ctx.fillStyle = '#FCA5A5';
+      ctx.fillRect(4, 3, 10, 4);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(11, 4, 2, 2);
       ctx.fillStyle = '#991B1B';
-      ctx.fillRect(3, 3, 12, 12);
+      ctx.fillRect(3, 7, 12, 12);
       ctx.fillStyle = '#EF4444';
-      ctx.fillRect(4, 4, 10, 10);
-      ctx.fillStyle = '#FACC15'; // Hazard band
-      ctx.fillRect(4, 7, 10, 3);
-      ctx.fillStyle = '#FCA5A5'; // Top rim highlight
-      ctx.fillRect(6, 5, 5, 2);
-      ctx.fillStyle = '#0F172A'; // Bung cap
-      ctx.fillRect(11, 5, 2, 2);
+      ctx.fillRect(4, 7, 8, 11);
+      ctx.fillStyle = '#FACC15';
+      ctx.fillRect(3, 11, 12, 3);
       barrel.refresh();
     }
 
-    // Destructible Supply Crate (22x22)
-    const crate = this.textures.createCanvas('prop_crate', 22, 22);
+    // 2.5D Upright Supply Crate (22x24)
+    const crate = this.textures.createCanvas('prop_crate', 22, 24);
     if (crate) {
       const ctx = crate.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#1C140D';
-      ctx.fillRect(2, 2, 18, 18);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(1, 1, 20, 22);
+      ctx.fillStyle = '#B87E4C';
+      ctx.fillRect(3, 3, 16, 6);
       ctx.fillStyle = '#784E2C';
-      ctx.fillRect(3, 3, 16, 16);
-      ctx.fillStyle = '#A16C3F';
-      ctx.fillRect(5, 5, 12, 12);
-      ctx.fillStyle = '#52341C';
-      ctx.fillRect(5, 10, 12, 2);
-      ctx.fillRect(10, 5, 2, 12);
+      ctx.fillRect(3, 9, 16, 12);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(5, 14, 12, 2);
+      ctx.fillRect(10, 9, 2, 11);
       ctx.fillStyle = '#FFD166';
       ctx.fillRect(4, 4, 2, 2);
       ctx.fillRect(16, 4, 2, 2);
-      ctx.fillRect(4, 16, 2, 2);
-      ctx.fillRect(16, 16, 2, 2);
+      ctx.fillRect(4, 18, 2, 2);
+      ctx.fillRect(16, 18, 2, 2);
       crate.refresh();
     }
 
-    // Red Street Fire Hydrant (14x14)
-    const hydrant = this.textures.createCanvas('prop_hydrant', 14, 14);
+    // 2.5D Upright Fire Hydrant (14x18)
+    const hydrant = this.textures.createCanvas('prop_hydrant', 14, 18);
     if (hydrant) {
       const ctx = hydrant.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#090D16';
-      ctx.fillRect(3, 3, 8, 8);
-      ctx.fillStyle = '#DC2626';
-      ctx.fillRect(4, 4, 6, 6);
-      ctx.fillStyle = '#CBD5E1';
-      ctx.fillRect(2, 6, 10, 2);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(2, 1, 10, 16);
       ctx.fillStyle = '#FCA5A5';
-      ctx.fillRect(6, 5, 2, 2);
+      ctx.fillRect(4, 3, 6, 3);
+      ctx.fillStyle = '#DC2626';
+      ctx.fillRect(4, 6, 6, 9);
+      ctx.fillStyle = '#CBD5E1';
+      ctx.fillRect(2, 8, 10, 2);
+      ctx.fillStyle = '#991B1B';
+      ctx.fillRect(3, 13, 8, 2);
       hydrant.refresh();
     }
 
@@ -2174,8 +2305,8 @@ export class BootScene extends Phaser.Scene {
     if (radar) {
       const ctx = radar.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(6, 6, 24, 24);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(5, 5, 26, 26);
       ctx.fillStyle = '#475569';
       ctx.fillRect(8, 8, 20, 20);
       ctx.fillStyle = '#94A3B8';
@@ -2192,15 +2323,19 @@ export class BootScene extends Phaser.Scene {
     if (barge) {
       const ctx = barge.getContext();
       ctx.imageSmoothingEnabled = false;
-      // Hull
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(4, 6, 120, 36);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(3, 5, 122, 38);
       ctx.fillStyle = '#1E293B';
       ctx.fillRect(8, 8, 112, 32);
-      ctx.fillStyle = '#B91C1C'; // Red waterline trim
+      ctx.fillStyle = '#B91C1C';
       ctx.fillRect(6, 6, 116, 3);
       ctx.fillRect(6, 39, 116, 3);
-      // Deck containers
+      // Deck containers with comic ink borders & top cel rims
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(15, 11, 38, 13);
+      ctx.fillRect(55, 11, 38, 13);
+      ctx.fillRect(15, 24, 38, 13);
+      ctx.fillRect(55, 24, 38, 13);
       ctx.fillStyle = '#0284C7';
       ctx.fillRect(16, 12, 36, 11);
       ctx.fillStyle = '#D97706';
@@ -2209,7 +2344,8 @@ export class BootScene extends Phaser.Scene {
       ctx.fillRect(16, 25, 36, 11);
       ctx.fillStyle = '#0D9488';
       ctx.fillRect(56, 25, 36, 11);
-      // Bridge cabin
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(97, 10, 20, 28);
       ctx.fillStyle = '#CBD5E1';
       ctx.fillRect(98, 11, 18, 26);
       ctx.fillStyle = '#00F5FF';
@@ -2222,12 +2358,14 @@ export class BootScene extends Phaser.Scene {
     if (boat) {
       const ctx = boat.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#0F172A';
-      ctx.fillRect(2, 3, 38, 14);
+      ctx.fillStyle = '#05070E';
+      ctx.fillRect(1, 2, 40, 16);
       ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(4, 4, 34, 12);
       ctx.fillStyle = '#00F5FF';
       ctx.fillRect(22, 6, 8, 8);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(24, 7, 3, 3);
       ctx.fillStyle = '#FF2E88';
       ctx.fillRect(6, 5, 14, 2);
       ctx.fillRect(6, 13, 14, 2);
@@ -2262,6 +2400,120 @@ export class BootScene extends Phaser.Scene {
       ctx.fillStyle = '#FFD166';
       ctx.fillRect(7, 4, 5, 6);
       turretGun.refresh();
+    }
+
+    // 2.5D Cylindrical Holographic Projection Tower (44x96)
+    const holoTower = this.textures.createCanvas('prop_holo_tower', 44, 96);
+    if (holoTower) {
+      const ctx = holoTower.getContext();
+      ctx.imageSmoothingEnabled = false;
+      // Ground shadow + base pedestal
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.fillRect(4, 80, 36, 14);
+      ctx.fillStyle = '#090D18';
+      ctx.fillRect(6, 74, 32, 18);
+      ctx.fillStyle = '#1E293B';
+      ctx.fillRect(8, 76, 28, 12);
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(10, 74, 24, 4);
+      // Glowing cyan pedestal emitter ring
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(8, 77, 28, 2);
+      ctx.fillStyle = '#E0FFFF';
+      ctx.fillRect(14, 77, 16, 1);
+
+      // Tall translucent glowing cyan hologram cylinder
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.24)';
+      ctx.fillRect(9, 12, 26, 64);
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.32)';
+      ctx.fillRect(12, 14, 20, 60);
+      // Crisp cylinder glass vertical side edges
+      ctx.fillStyle = '#00F5FF';
+      ctx.fillRect(9, 12, 2, 64);
+      ctx.fillRect(33, 12, 2, 64);
+      ctx.fillStyle = 'rgba(224, 255, 255, 0.55)';
+      ctx.fillRect(11, 14, 1, 60);
+
+      // Stylized cyber avatar silhouette inside hologram column
+      ctx.fillStyle = 'rgba(224, 255, 255, 0.88)';
+      ctx.fillRect(19, 20, 6, 7); // head
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(18, 27, 8, 3); // shoulders
+      ctx.fillStyle = 'rgba(186, 230, 253, 0.86)';
+      ctx.fillRect(17, 30, 10, 16); // torso
+      ctx.fillRect(15, 31, 2, 12); // left arm
+      ctx.fillRect(27, 31, 2, 12); // right arm
+      ctx.fillRect(18, 46, 3, 18); // left leg
+      ctx.fillRect(23, 46, 3, 18); // right leg
+      // Neon scanlines & crown ring
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.72)';
+      for (let sy = 18; sy <= 68; sy += 8) {
+        ctx.fillRect(11, sy, 22, 1);
+      }
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(7, 6, 30, 7);
+      ctx.fillStyle = '#38BDF8';
+      ctx.fillRect(8, 11, 28, 2);
+      ctx.fillStyle = '#FF2E88';
+      ctx.fillRect(15, 7, 14, 2);
+      holoTower.refresh();
+    }
+
+    // Waterfront Illuminated Neon Ferris Wheel (116x124)
+    const ferris = this.textures.createCanvas('prop_ferris_wheel', 116, 124);
+    if (ferris) {
+      const ctx = ferris.getContext();
+      ctx.imageSmoothingEnabled = false;
+      const cx = 58;
+      const cy = 54;
+      const rOuter = 44;
+      const rInner = 34;
+
+      // Support A-frame legs
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(cx - 26, 118);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + 26, 118);
+      ctx.stroke();
+
+      // Glowing outer magenta ring & inner cyan ring
+      ctx.strokeStyle = '#FF2E88';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rOuter, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#00F5FF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rInner, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Radial spokes + glowing passenger pods
+      const podCols = ['#FFD166', '#00F5FF', '#FF2E88', '#C000FF'];
+      for (let i = 0; i < 12; i++) {
+        const ang = (i / 12) * Math.PI * 2;
+        const px = Math.round(cx + Math.cos(ang) * rOuter);
+        const py = Math.round(cy + Math.sin(ang) * rOuter);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.72)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(px, py);
+        ctx.stroke();
+
+        ctx.fillStyle = podCols[i % podCols.length];
+        ctx.fillRect(px - 3, py - 3, 6, 6);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(px - 1, py - 1, 2, 2);
+      }
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(cx - 6, cy - 6, 12, 12);
+      ctx.fillStyle = '#FFD166';
+      ctx.fillRect(cx - 3, cy - 3, 6, 6);
+      ferris.refresh();
     }
   }
 
@@ -2302,7 +2554,7 @@ export class BootScene extends Phaser.Scene {
     if (beam) {
       const ctx = beam.getContext();
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = 'rgba(224, 255, 255, 0.14)';
+      ctx.fillStyle = 'rgba(224, 255, 255, 0.16)';
       ctx.beginPath();
       ctx.moveTo(0, 15);
       ctx.lineTo(72, 2);
@@ -2311,7 +2563,7 @@ export class BootScene extends Phaser.Scene {
       ctx.closePath();
       ctx.fill();
 
-      ctx.fillStyle = 'rgba(0, 245, 255, 0.12)';
+      ctx.fillStyle = 'rgba(0, 245, 255, 0.14)';
       ctx.beginPath();
       ctx.moveTo(0, 17);
       ctx.lineTo(52, 8);
@@ -2320,6 +2572,88 @@ export class BootScene extends Phaser.Scene {
       ctx.closePath();
       ctx.fill();
       beam.refresh();
+    }
+
+    // Wet-pavement specular neon reflection pool (72x36 tintable stepped oval)
+    const wetRef = this.textures.createCanvas('fx_wet_reflect', 72, 36);
+    if (wetRef) {
+      const ctx = wetRef.getContext();
+      ctx.imageSmoothingEnabled = false;
+      const drawOval = (rx: number, ry: number, alpha: number) => {
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(36, 18, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+      };
+      drawOval(35, 17, 0.12);
+      drawOval(26, 12, 0.22);
+      drawOval(16, 7, 0.34);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillRect(14, 15, 44, 2);
+      ctx.fillRect(20, 20, 32, 2);
+      wetRef.refresh();
+    }
+
+    // Glowing red taillight rear glow/streak (30x22 facing LEFT -X)
+    const tail = this.textures.createCanvas('fx_taillight', 30, 22);
+    if (tail) {
+      const ctx = tail.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(255, 45, 85, 0.24)';
+      ctx.fillRect(0, 2, 26, 6);
+      ctx.fillRect(0, 14, 26, 6);
+      ctx.fillStyle = 'rgba(255, 70, 90, 0.65)';
+      ctx.fillRect(14, 3, 14, 4);
+      ctx.fillRect(14, 15, 14, 4);
+      ctx.fillStyle = 'rgba(255, 220, 220, 0.9)';
+      ctx.fillRect(25, 4, 4, 2);
+      ctx.fillRect(25, 16, 4, 2);
+      tail.refresh();
+    }
+
+    // Police helicopter ground spotlight pool (68x42)
+    const spotPool = this.textures.createCanvas('fx_spotlight_pool', 68, 42);
+    if (spotPool) {
+      const ctx = spotPool.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = 'rgba(186, 230, 253, 0.16)';
+      ctx.beginPath();
+      ctx.ellipse(34, 21, 33, 20, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(224, 255, 255, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(34, 21, 22, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0, 245, 255, 0.55)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(34, 21, 26, 15, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      spotPool.refresh();
+    }
+
+    // V-shaped boat water wake (48x24 facing RIGHT +X)
+    const wake = this.textures.createCanvas('fx_water_wake', 48, 24);
+    if (wake) {
+      const ctx = wake.getContext();
+      ctx.imageSmoothingEnabled = false;
+      ctx.strokeStyle = 'rgba(186, 230, 253, 0.58)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(44, 12);
+      ctx.lineTo(4, 3);
+      ctx.moveTo(44, 12);
+      ctx.lineTo(4, 21);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(38, 12);
+      ctx.lineTo(10, 7);
+      ctx.moveTo(38, 12);
+      ctx.lineTo(10, 17);
+      ctx.stroke();
+      wake.refresh();
     }
 
     // Weapon projectiles (facing RIGHT +X)

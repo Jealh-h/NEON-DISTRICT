@@ -137,12 +137,14 @@ export class InteractivePropManager {
   }
 
   private spawnProps(districtData: DistrictData): void {
+    const groundDepth = (y: number) => 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
     for (const def of districtData.interactiveProps) {
       if (def.type === 'barrel') {
         const shadow = this.scene.add.ellipse(def.x + 2, def.y + 3, 18, 12, 0x000000, 0.45);
         shadow.setDepth(17);
         const sprite = this.scene.add.image(def.x, def.y, 'prop_barrel');
-        sprite.setDepth(19);
+        sprite.setOrigin(0.5, 0.65);
+        sprite.setDepth(groundDepth(def.y));
         this.barrels.push({
           id: def.id,
           x: def.x,
@@ -157,7 +159,8 @@ export class InteractivePropManager {
         const shadow = this.scene.add.ellipse(def.x + 2, def.y + 3, 22, 14, 0x000000, 0.45);
         shadow.setDepth(17);
         const sprite = this.scene.add.image(def.x, def.y, 'prop_crate');
-        sprite.setDepth(19);
+        sprite.setOrigin(0.5, 0.65);
+        sprite.setDepth(groundDepth(def.y));
         this.crates.push({
           id: def.id,
           x: def.x,
@@ -172,7 +175,8 @@ export class InteractivePropManager {
         const shadow = this.scene.add.ellipse(def.x + 1, def.y + 2, 13, 9, 0x000000, 0.4);
         shadow.setDepth(17);
         const sprite = this.scene.add.image(def.x, def.y, 'prop_hydrant');
-        sprite.setDepth(19);
+        sprite.setOrigin(0.5, 0.65);
+        sprite.setDepth(groundDepth(def.y));
         this.hydrants.push({
           id: def.id,
           x: def.x,
@@ -183,15 +187,16 @@ export class InteractivePropManager {
           shadow,
         });
       } else if (def.type === 'atm') {
-        const glow = this.scene.add.image(def.x, def.y, 'fx_pixel_glow');
+        const glow = this.scene.add.image(def.x, def.y - 4, 'fx_pixel_glow');
         glow.setTint(PALETTE.NEON_CYAN);
         glow.setAlpha(0.24);
         glow.setScale(0.75);
         glow.setBlendMode(Phaser.BlendModes.ADD);
-        glow.setDepth(16);
+        glow.setDepth(17);
 
         const sprite = this.scene.add.image(def.x, def.y, 'prop_atm');
-        sprite.setDepth(18);
+        sprite.setOrigin(0.5, 0.65);
+        sprite.setDepth(groundDepth(def.y));
         this.atms.push({
           id: def.id,
           x: def.x,

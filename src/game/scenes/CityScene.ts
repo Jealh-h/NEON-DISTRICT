@@ -123,6 +123,7 @@ export class CityScene extends Phaser.Scene {
   private playerMaxArmor: number = PLAYER_CONFIG.MAX_ARMOR;
   private playerCash: number = PLAYER_CONFIG.INITIAL_CASH;
   private lastDamageAt = 0;
+  private lastVehicleDamageAt = 0;
   private screenShakeEnabled = true;
   private sandboxCombo = 0;
   private sandboxComboTimer = 0;
@@ -230,19 +231,34 @@ export class CityScene extends Phaser.Scene {
 
     this.npcManager = new NPCManager(this, this.collisionManager, this.audioManager);
     this.npcManager.spawnInitialNpcs(this.player);
+    const onVehicleHitNpc = (
+      vehSprite: Phaser.Physics.Arcade.Sprite,
+      _npc: unknown,
+      speed: number,
+      res: { killed: boolean; cashDrop: number }
+    ) => {
+      if (res.killed && res.cashDrop > 0) {
+        this.playerCash += res.cashDrop;
+        this.emitPlayerStats();
+      }
+      const activeVeh = this.vehicleManager.getActiveVehicle();
+      if (
+        this.playMode === 'sandbox' &&
+        activeVeh &&
+        activeVeh.sprite === vehSprite &&
+        (speed > 115 || res.killed)
+      ) {
+        const nearbyPolice = this.policeManager.isPoliceNearby(vehSprite.x, vehSprite.y, 300);
+        this.wantedManager.reportCrime(
+          'hit_pedestrian',
+          { x: vehSprite.x, y: vehSprite.y },
+          nearbyPolice || speed > 210
+        );
+      }
+    };
     this.npcManager.registerVehicleColliders(
       this.vehicleManager.getVehicleSprites(),
-      (vehSprite, _npc, speed) => {
-        const activeVeh = this.vehicleManager.getActiveVehicle();
-        if (this.playMode === 'sandbox' && activeVeh && activeVeh.sprite === vehSprite && speed > 115) {
-          const nearbyPolice = this.policeManager.isPoliceNearby(vehSprite.x, vehSprite.y, 300);
-          this.wantedManager.reportCrime(
-            'hit_pedestrian',
-            { x: vehSprite.x, y: vehSprite.y },
-            nearbyPolice || speed > 210
-          );
-        }
-      }
+      onVehicleHitNpc
     );
 
     this.trafficManager = new TrafficManager(this, this.audioManager);
@@ -263,8 +279,19 @@ export class CityScene extends Phaser.Scene {
     this.policeManager.spawnPoliceUnits(
       this.player,
       this.vehicleManager.getVehicles(),
-      (amount) => this.applyPlayerDamage(amount)
+      (amount) => this.applyPlayerDamage(amount),
+      (bountyCash) => {
+        const scaled = Math.round(bountyCash * this.progressionManager.getRewardCashMultiplier());
+        this.playerCash += scaled;
+        this.emitPlayerStats();
+      }
     );
+
+    this.vehicleManager.registerDynamicGroundVehicleHook((dynVehicle) => {
+      this.trafficManager.registerPlayerVehicleSprite(dynVehicle.sprite);
+      this.policeManager.registerPlayerVehicle(dynVehicle);
+      this.npcManager.registerVehicleColliders([dynVehicle.sprite], onVehicleHitNpc);
+    });
 
     this.configureCamera();
     this.bindEvents();
@@ -509,10 +536,22 @@ export class CityScene extends Phaser.Scene {
     };
     const onSetMuted = (muted: boolean) => {
       this.audioManager.setMuted(muted);
+      this.emitRadioStation();
     };
     const onCycleRadio = () => {
-      if (this.mode === 'PLAYING' && this.vehicleManager.getActiveVehicle()) {
+      if (this.mode === 'PLAYING') {
         this.cycleCarRadio();
+      }
+    };
+    const onRadioControl = (action: 'prev' | 'next' | 'toggle') => {
+      if (this.mode !== 'PLAYING') return;
+      if (action === 'prev') {
+        this.prevCarRadio();
+      } else if (action === 'next') {
+        this.cycleCarRadio();
+      } else {
+        this.audioManager.toggleRadioPlaying();
+        this.emitRadioStation();
       }
     };
     const onJoystick = (vec: { x: number; y: number }) => {
@@ -588,12 +627,14 @@ export class CityScene extends Phaser.Scene {
         this.weaponManager.clearProjectiles();
         this.audioManager.stopSirenSound();
         this.audioManager.setRadioPlaying(false);
+        this.emitRadioStation();
         this.inputManager.resetAllHeldInputs();
         this.physics.world.pause();
       } else {
         this.inputManager.consumePauseJustPressed();
         this.physics.world.resume();
         this.audioManager.setRadioPlaying(Boolean(this.vehicleManager.getActiveVehicle()));
+        this.emitRadioStation();
       }
     };
 
@@ -782,6 +823,7 @@ export class CityScene extends Phaser.Scene {
     gameEvents.on(GAME_EVENT.RESET_POSITION, onResetPos);
     gameEvents.on(GAME_EVENT.SET_MUTED, onSetMuted);
     gameEvents.on(GAME_EVENT.CYCLE_RADIO, onCycleRadio);
+    gameEvents.on(GAME_EVENT.RADIO_CONTROL, onRadioControl);
     gameEvents.on(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
     gameEvents.on(GAME_EVENT.AIM_FIRE, onAimFire);
     gameEvents.on(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
@@ -820,6 +862,7 @@ export class CityScene extends Phaser.Scene {
       gameEvents.off(GAME_EVENT.RESET_POSITION, onResetPos);
       gameEvents.off(GAME_EVENT.SET_MUTED, onSetMuted);
       gameEvents.off(GAME_EVENT.CYCLE_RADIO, onCycleRadio);
+      gameEvents.off(GAME_EVENT.RADIO_CONTROL, onRadioControl);
       gameEvents.off(GAME_EVENT.JOYSTICK_MOVE, onJoystick);
       gameEvents.off(GAME_EVENT.AIM_FIRE, onAimFire);
       gameEvents.off(GAME_EVENT.SWITCH_WEAPON, onSwitchWeapon);
@@ -976,7 +1019,11 @@ export class CityScene extends Phaser.Scene {
     this.worldManager.update(
       timeSec,
       dt,
-      activeVehicle ? null : this.player.getPosition()
+      activeVehicle
+        ? activeVehicle.spec.isFlying
+          ? null
+          : activeVehicle.getPosition()
+        : this.player.getPosition()
     );
 
     if (this.mode === 'TITLE') {
@@ -1042,6 +1089,7 @@ export class CityScene extends Phaser.Scene {
         gameEvents.emit(GAME_EVENT.VEHICLE_NEARBY, null);
         this.emitVehicleTelemetry(result.vehicle);
         this.audioManager.setRadioPlaying(true);
+        this.emitRadioStation();
 
         if (result.action === 'hijacked') {
           gameEvents.emit(GAME_EVENT.STATUS_TOAST, '街头强行截停！已夺取过往车辆！');
@@ -1068,6 +1116,7 @@ export class CityScene extends Phaser.Scene {
         cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
         cam.zoomTo(this.getTargetZoom(false), 260, 'Sine.easeOut');
         this.audioManager.setRadioPlaying(false);
+        this.emitRadioStation();
         this.emitVehicleTelemetry(null);
       } else if (result.action === 'blocked' && result.reason) {
         this.audioManager.playBump(time);
@@ -1117,18 +1166,7 @@ export class CityScene extends Phaser.Scene {
       },
       (destroyedVeh, wasOccupied) => {
         if (wasOccupied) {
-          const dPos = destroyedVeh.getPosition();
-          const ejectPos = this.collisionManager.isPointClearForEntity(dPos.x + 30, dPos.y, 12)
-            ? { x: dPos.x + 30, y: dPos.y }
-            : WORLD_CONFIG.PLAYER_SPAWN;
-          this.vehicleManager.forceEject(this.player, ejectPos);
-          const cam = this.cameras.main;
-          cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
-          cam.zoomTo(this.getTargetZoom(false), 260, 'Sine.easeOut');
-          this.audioManager.setRadioPlaying(false);
-          this.emitVehicleTelemetry(null);
-          this.applyPlayerDamage(32);
-          gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${destroyedVeh.spec.name} 装甲摧毁爆炸！已紧急跳车！`);
+          this.handleOccupiedVehicleDestroyed(destroyedVeh);
         }
       },
       {
@@ -1227,7 +1265,8 @@ export class CityScene extends Phaser.Scene {
             GAME_EVENT.STATUS_TOAST,
             `完成动态事件【${reward.title}】！赏金 +$${scaledCash} · 经验 +${reward.exp}`
           );
-        }
+        },
+        Boolean(currentVehicle)
       );
 
       this.sandboxManager.update(
@@ -1301,15 +1340,62 @@ export class CityScene extends Phaser.Scene {
       }
 
       if (!currentVehicle.isAirborne()) {
+        const ramMult = currentVehicle.getRamDamageMultiplier();
+        const speedPx = currentVehicle.getSpeedPxPerSec();
+        const vel = currentVehicle.getVelocity();
+
         this.randomEventManager.checkVehicleRam(
           currentVehicle.sprite.x,
           currentVehicle.sprite.y,
-          currentVehicle.getSpeedPxPerSec()
+          speedPx,
+          ramMult
         );
+
+        if (this.playMode === 'horde') {
+          this.hordeManager.checkVehicleRam(
+            currentVehicle.sprite.x,
+            currentVehicle.sprite.y,
+            speedPx,
+            ramMult,
+            vel.vx,
+            vel.vy,
+            (cash) => {
+              this.playerCash += cash;
+              this.emitPlayerStats();
+            }
+          );
+        } else if (this.playMode === 'sandbox') {
+          this.sandboxManager.checkVehicleRam(
+            currentVehicle.sprite.x,
+            currentVehicle.sprite.y,
+            speedPx,
+            ramMult,
+            this.getSandboxCallbacks()
+          );
+          this.terrariaManager.checkVehicleRam(
+            currentVehicle.sprite.x,
+            currentVehicle.sprite.y,
+            speedPx,
+            ramMult,
+            this.getTerrariaCallbacks()
+          );
+          this.policeManager.checkVehicleRamFugitive(
+            currentVehicle.sprite.x,
+            currentVehicle.sprite.y,
+            speedPx,
+            ramMult,
+            (cash) => {
+              const scaled = Math.round(cash * this.progressionManager.getRewardCashMultiplier());
+              this.playerCash += scaled;
+              this.emitPlayerStats();
+            }
+          );
+        }
+
         this.interactivePropManager.checkVehicleRam(
           currentVehicle.sprite.x,
           currentVehicle.sprite.y,
-          currentVehicle.getSpeedPxPerSec(),
+          speedPx,
           {
             npcManager: this.npcManager,
             policeManager: this.policeManager,
@@ -2169,7 +2255,14 @@ export class CityScene extends Phaser.Scene {
     const idx = this.audioManager.cycleRadioStation();
     const st = RADIO_STATIONS[idx] ?? RADIO_STATIONS[0];
     this.emitRadioStation();
-    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `车载电台切换：${st.name}`);
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `赛博电台切换：${st.name}`);
+  }
+
+  private prevCarRadio(): void {
+    const idx = this.audioManager.prevRadioStation();
+    const st = RADIO_STATIONS[idx] ?? RADIO_STATIONS[0];
+    this.emitRadioStation();
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `赛博电台切换：${st.name}`);
   }
 
   private emitRadioStation(): void {
@@ -2179,6 +2272,7 @@ export class CityScene extends Phaser.Scene {
       index: st.index,
       name: st.name,
       genre: st.genre,
+      playing: this.audioManager.isRadioPlaying(),
     });
   }
 
@@ -2259,17 +2353,61 @@ export class CityScene extends Phaser.Scene {
     });
   }
 
-  private applyPlayerDamage(amount: number): void {
+  private handleOccupiedVehicleDestroyed(destroyedVeh: ReturnType<VehicleManager['getVehicles']>[number]): void {
+    const dPos = destroyedVeh.getPosition();
+    const offsets = [
+      { x: dPos.x + 32, y: dPos.y },
+      { x: dPos.x - 32, y: dPos.y },
+      { x: dPos.x, y: dPos.y + 32 },
+      { x: dPos.x, y: dPos.y - 32 },
+    ];
+    const ejectPos =
+      offsets.find((p) => this.collisionManager.isPointClearForEntity(p.x, p.y, 12)) ??
+      WORLD_CONFIG.PLAYER_SPAWN;
+
+    this.vehicleManager.forceEject(this.player, ejectPos);
+    const cam = this.cameras.main;
+    cam.startFollow(this.player.sprite, true, CAMERA_CONFIG.LERP_X, CAMERA_CONFIG.LERP_Y);
+    cam.zoomTo(this.getTargetZoom(false), 260, 'Sine.easeOut');
+    this.audioManager.setRadioPlaying(false);
+    this.emitVehicleTelemetry(null);
+    this.applyPlayerDamage(18, true);
+    gameEvents.emit(GAME_EVENT.STATUS_TOAST, `${destroyedVeh.spec.name} 装甲耐久耗尽爆炸！已紧急跳车！`);
+  }
+
+  private applyPlayerDamage(amount: number, bypassInvuln = false): void {
+    if (this.mode !== 'PLAYING') return;
     const now = this.time.now;
-    const invulnMs = this.playMode === 'horde' ? 600 : 1100;
-    if (now - this.lastDamageAt < invulnMs || this.mode !== 'PLAYING') return;
-    this.lastDamageAt = now;
 
     const progDr = this.progressionManager.getDamageReduction();
     const hordeDr = this.playMode === 'horde' ? this.hordeManager.getDamageReduction() : 0;
     const terrariaDr = this.playMode === 'sandbox' ? this.terrariaManager.getDamageReductionBonus() : 0;
     const totalDr = Math.min(0.75, progDr + hordeDr + terrariaDr);
     const reducedAmount = Math.max(1, Math.round(amount * (1 - totalDr)));
+
+    // Vehicle durability absorbs incoming damage first while driving
+    const activeVeh = this.vehicleManager.getActiveVehicle();
+    if (activeVeh && !activeVeh.isDestroyed()) {
+      if (!bypassInvuln && now - this.lastVehicleDamageAt < 220) return;
+      this.lastVehicleDamageAt = now;
+      const { destroyedNow } = activeVeh.applyIncomingDamage(reducedAmount);
+      this.audioManager.playCrash(now, 0.48);
+      this.cameras.main.shake(85, 0.003);
+      this.emitVehicleTelemetry(activeVeh);
+      if (destroyedNow) {
+        activeVeh.forceCheckDestruction((v) => {
+          const wasOccupied = this.vehicleManager.finalizeDestroyedVehicle(v);
+          if (wasOccupied) {
+            this.handleOccupiedVehicleDestroyed(v);
+          }
+        });
+      }
+      return;
+    }
+
+    const invulnMs = this.playMode === 'horde' ? 600 : 1100;
+    if (!bypassInvuln && now - this.lastDamageAt < invulnMs) return;
+    this.lastDamageAt = now;
 
     if (this.hordeManager.isActive() && this.hordeManager.isMechActive()) {
       this.hordeManager.absorbDamageByMech(reducedAmount, this.player, (cash) => {

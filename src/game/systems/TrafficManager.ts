@@ -17,6 +17,7 @@ class TrafficCar {
   public readonly sprite: Phaser.Physics.Arcade.Sprite;
   private shadow: Phaser.GameObjects.Ellipse;
   private headlight: Phaser.GameObjects.Image;
+  private taillight: Phaser.GameObjects.Image;
   private waypoints: Array<{ x: number; y: number }>;
   private wpIdx: number;
   private currentSpeed = 0;
@@ -49,13 +50,21 @@ class TrafficCar {
     this.headlight.setAlpha(0.45);
     this.headlight.setDepth(19);
 
+    this.taillight = scene.add.image(start.x, start.y, 'fx_taillight');
+    this.taillight.setOrigin(1, 0.5);
+    this.taillight.setBlendMode(Phaser.BlendModes.ADD);
+    this.taillight.setAlpha(0.42);
+    this.taillight.setDepth(18.8);
+
     this.sprite = scene.physics.add.sprite(start.x, start.y, def.textureKey);
-    this.sprite.setDepth(20);
+    this.sprite.setDepth(19 + Math.min(8.4, Math.max(0, start.y) * 0.0022));
     this.sprite.setRotation(initialAngle);
 
     const body = this.sprite.body as Phaser.Physics.Arcade.Body;
     body.setCircle(14, (this.sprite.width - 28) / 2, (this.sprite.height - 28) / 2);
     body.setBounce(0.2, 0.2);
+    body.setMass(300);
+    body.pushable = false;
     body.setImmovable(false);
 
     this.wpIdx = (this.wpIdx + 1) % this.waypoints.length;
@@ -86,6 +95,7 @@ class TrafficCar {
         this.sprite.setVisible(true);
         this.shadow.setVisible(true);
         this.headlight.setVisible(true);
+        this.taillight.setVisible(true);
       } else {
         return;
       }
@@ -240,6 +250,7 @@ class TrafficCar {
     this.sprite.setVisible(false);
     this.shadow.setVisible(false);
     this.headlight.setVisible(false);
+    this.taillight.setVisible(false);
     this.currentSpeed = 0;
     return info;
   }
@@ -253,16 +264,23 @@ class TrafficCar {
     const y = this.sprite.y;
     const rot = this.sprite.rotation;
 
+    this.sprite.setDepth(19 + Math.min(8.4, Math.max(0, y) * 0.0022));
+
     this.shadow.setPosition(x + 3, y + 4);
     this.shadow.setRotation(rot);
 
     this.headlight.setPosition(x + Math.cos(rot) * 20, y + Math.sin(rot) * 20);
     this.headlight.setRotation(rot);
+
+    this.taillight.setPosition(x - Math.cos(rot) * 18, y - Math.sin(rot) * 18);
+    this.taillight.setRotation(rot);
+    this.taillight.setAlpha(this.speedFactorAhead < 0.65 || this.pauseTimer > 0 ? 0.85 : 0.38);
   }
 
   public destroy(): void {
     this.shadow.destroy();
     this.headlight.destroy();
+    this.taillight.destroy();
     this.sprite.destroy();
   }
 }
@@ -330,6 +348,9 @@ export class TrafficManager {
   private trafficGroup!: Phaser.Physics.Arcade.Group;
   private signals: TrafficSignalDef[] = [];
 
+  private npcManagerRef: NPCManager | null = null;
+  private onVehicleCrashRef?: (vehSprite: Phaser.Physics.Arcade.Sprite, speed: number) => void;
+
   constructor(scene: Phaser.Scene, audioManager: AudioManager) {
     this.scene = scene;
     this.audioManager = audioManager;
@@ -345,6 +366,8 @@ export class TrafficManager {
     npcManager: NPCManager,
     onVehicleCrash?: (vehSprite: Phaser.Physics.Arcade.Sprite, speed: number) => void
   ): void {
+    this.npcManagerRef = npcManager;
+    this.onVehicleCrashRef = onVehicleCrash;
     this.trafficGroup = this.scene.physics.add.group();
 
     for (const def of TRAFFIC_DEFS) {
@@ -353,32 +376,33 @@ export class TrafficManager {
       this.trafficGroup.add(car.sprite);
     }
 
-    this.scene.physics.add.collider(player.sprite, this.trafficGroup, (_p, carObj) => {
-      const car = this.cars.find((c) => c.sprite === carObj);
-      if (car) {
-        car.handleBump();
-        this.audioManager.playBump(this.scene.time.now);
-      }
+    this.scene.physics.add.collider(player.sprite, this.trafficGroup, () => {
+      this.audioManager.playBump(this.scene.time.now);
     });
 
     for (const vSprite of playerVehicleSprites) {
-      this.scene.physics.add.collider(vSprite, this.trafficGroup, (_v, carObj) => {
-        const car = this.cars.find((c) => c.sprite === carObj);
-        if (car) {
-          car.handleBump();
-          const body = vSprite.body as Phaser.Physics.Arcade.Body;
-          if (body && body.speed > 110) {
-            this.audioManager.playCrash(this.scene.time.now, Math.min(1, body.speed / 350));
-            this.scene.cameras.main.shake(90, 0.003);
-            npcManager.triggerAreaPanic(vSprite.x, vSprite.y);
-            this.notifyDisturbance(vSprite.x, vSprite.y, 220);
-            onVehicleCrash?.(vSprite, body.speed);
-          }
-        }
-      });
+      this.registerPlayerVehicleSprite(vSprite);
     }
 
     npcManager.registerVehicleColliders(this.cars.map((c) => c.sprite));
+  }
+
+  public registerPlayerVehicleSprite(vSprite: Phaser.Physics.Arcade.Sprite): void {
+    if (!this.trafficGroup) return;
+    this.scene.physics.add.collider(vSprite, this.trafficGroup, (_v, carObj) => {
+      const car = this.cars.find((c) => c.sprite === carObj);
+      if (car) {
+        car.handleBump();
+        const body = vSprite.body as Phaser.Physics.Arcade.Body;
+        if (body && body.speed > 110) {
+          this.audioManager.playCrash(this.scene.time.now, Math.min(1, body.speed / 350));
+          this.scene.cameras.main.shake(90, 0.003);
+          this.npcManagerRef?.triggerAreaPanic(vSprite.x, vSprite.y);
+          this.notifyDisturbance(vSprite.x, vSprite.y, 220);
+          this.onVehicleCrashRef?.(vSprite, body.speed);
+        }
+      }
+    });
   }
 
   public notifyDisturbance(x: number, y: number, radius = 260): void {

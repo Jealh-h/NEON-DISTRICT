@@ -53,6 +53,7 @@ interface VigilanteFugitive {
   speed: number;
   angle: number;
   shootTimer: number;
+  ramCooldown: number;
 }
 
 export class PoliceManager {
@@ -69,6 +70,9 @@ export class PoliceManager {
   private fugitive: VigilanteFugitive | null = null;
   private vigilanteStreak = 0;
   private lastRamReportAt = 0;
+  private unitRamCooldowns = new Map<string, number>();
+  private onPlayerDamagedRef?: (amount: number, sourceX: number, sourceY: number) => void;
+  private onBountyCashRef?: (cash: number) => void;
 
   constructor(
     scene: Phaser.Scene,
@@ -102,8 +106,11 @@ export class PoliceManager {
   public spawnPoliceUnits(
     player: Player,
     vehicles: Vehicle[],
-    onPlayerDamaged: (amount: number, sourceX: number, sourceY: number) => void
+    onPlayerDamaged: (amount: number, sourceX: number, sourceY: number) => void,
+    onBountyCash?: (cash: number) => void
   ): void {
+    this.onPlayerDamagedRef = onPlayerDamaged;
+    this.onBountyCashRef = onBountyCash;
     const unitDefs: Array<{
       id: string;
       loop: Array<{ x: number; y: number }>;
@@ -159,34 +166,75 @@ export class PoliceManager {
             this.audioManager.playBump(this.scene.time.now);
           }
         });
-
-        for (const v of vehicles) {
-          if (v.spec.isFlying) continue;
-          this.scene.physics.add.collider(v.sprite, unit.sprite, () => {
-            if (!this.pursuitEnabled || unit.isDisabled()) return;
-            const vBody = v.sprite.body as Phaser.Physics.Arcade.Body;
-            const pBody = unit.sprite.body as Phaser.Physics.Arcade.Body;
-            const relSpeed = Math.max(vBody?.speed ?? 0, pBody?.speed ?? 0);
-            const nowMs = this.scene.time.now;
-
-            if (v.isOccupied() && relSpeed > 185 && nowMs - this.lastRamReportAt > 2000) {
-              this.lastRamReportAt = nowMs;
-              unit.triggerRamRecovery();
-              this.wantedManager.reportCrime('ram_police', { x: v.sprite.x, y: v.sprite.y }, true);
-              this.audioManager.playCrash(nowMs, Math.min(1, relSpeed / 360));
-              this.scene.cameras.main.shake(100, 0.0035);
-              if (this.wantedManager.getWantedLevel() > 0 && v.spec.type !== 'tank') {
-                onPlayerDamaged(WANTED_CONFIG.POLICE_CONTACT_DAMAGE_VEH, unit.sprite.x, unit.sprite.y);
-              }
-            } else if (v.isOccupied() && relSpeed > 65) {
-              this.audioManager.playBump(nowMs);
-            }
-          });
-        }
       }
     }
 
+    for (const v of vehicles) {
+      this.registerPlayerVehicle(v);
+    }
+
     this.scene.physics.add.collider(groundGroup, groundGroup);
+  }
+
+  public registerPlayerVehicle(v: Vehicle): void {
+    if (v.spec.isFlying) return;
+    for (const unit of this.units) {
+      if (unit.isFlying()) continue;
+      this.scene.physics.add.collider(v.sprite, unit.sprite, () => {
+        if (!this.pursuitEnabled || unit.isDisabled()) return;
+        const vBody = v.sprite.body as Phaser.Physics.Arcade.Body;
+        const pBody = unit.sprite.body as Phaser.Physics.Arcade.Body;
+        const relSpeed = Math.max(vBody?.speed ?? 0, pBody?.speed ?? 0);
+        const nowMs = this.scene.time.now;
+
+        const lastUnitRam = this.unitRamCooldowns.get(unit.id) ?? 0;
+        if (v.isOccupied() && relSpeed >= v.getRamSpeedThreshold() && nowMs - lastUnitRam >= 380) {
+          this.unitRamCooldowns.set(unit.id, nowMs);
+          unit.triggerRamRecovery();
+
+          const dx = unit.sprite.x - v.sprite.x;
+          const dy = unit.sprite.y - v.sprite.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const ramDmg = Math.round(relSpeed * 0.24 * v.getRamDamageMultiplier());
+          const res = unit.takeHit(ramDmg, dx / dist, dy / dist);
+
+          if (nowMs - this.lastRamReportAt > 1800) {
+            this.lastRamReportAt = nowMs;
+            this.wantedManager.reportCrime('ram_police', { x: v.sprite.x, y: v.sprite.y }, true);
+          }
+
+          this.audioManager.playCrash(nowMs, Math.min(1, relSpeed / 360));
+          this.scene.cameras.main.shake(105, 0.004);
+
+          if (res.destroyed) {
+            const scorch = this.scene.add.image(unit.sprite.x, unit.sprite.y, 'fx_scorch').setDepth(6);
+            this.scene.tweens.add({
+              targets: scorch,
+              alpha: 0,
+              duration: 5000,
+              onComplete: () => scorch.destroy(),
+            });
+            this.audioManager.playExplosion();
+            this.onBountyCashRef?.(res.cashBonus);
+            gameEvents.emit(GAME_EVENT.STATUS_TOAST, `撞毁特区警用载具！悬赏 +$${res.cashBonus}！`);
+          }
+
+          if (
+            this.wantedManager.getWantedLevel() > 0 &&
+            v.spec.type !== 'tank' &&
+            v.spec.type !== 'swat'
+          ) {
+            const counterDmg = Math.max(
+              4,
+              Math.round(WANTED_CONFIG.POLICE_CONTACT_DAMAGE_VEH * (unit.unitKind === 'tank' ? 2.2 : 1))
+            );
+            this.onPlayerDamagedRef?.(counterDmg, unit.sprite.x, unit.sprite.y);
+          }
+        } else if (v.isOccupied() && relSpeed > 65) {
+          this.audioManager.playBump(nowMs);
+        }
+      });
+    }
   }
 
   public startVigilanteMission(playerPos: { x: number; y: number }): boolean {
@@ -207,6 +255,8 @@ export class PoliceManager {
     sprite.setCollideWorldBounds(true);
     const body = sprite.body as Phaser.Physics.Arcade.Body;
     body.setCircle(14, (sprite.width - 28) / 2, (sprite.height - 28) / 2);
+    body.setMass(240);
+    body.pushable = false;
     this.collisionManager.registerVehicleWorldCollider(sprite);
 
     const ring = this.scene.add.circle(spawn.x, spawn.y, 26, 0xffd166, 0);
@@ -222,6 +272,7 @@ export class PoliceManager {
       speed: Math.min(340, 230 + this.vigilanteStreak * 18),
       angle: Math.random() * Math.PI * 2,
       shootTimer: 1.5,
+      ramCooldown: 0,
     };
 
     const reward = WANTED_CONFIG.VIGILANTE_BASE_REWARD + (this.vigilanteStreak - 1) * 80;
@@ -267,6 +318,24 @@ export class PoliceManager {
 
   public getVigilanteSprite(): Phaser.Physics.Arcade.Sprite | null {
     return this.fugitive?.sprite ?? null;
+  }
+
+  public checkVehicleRamFugitive(
+    vx: number,
+    vy: number,
+    speedPx: number,
+    ramMult: number,
+    onRewardCash: (cash: number) => void
+  ): void {
+    if (!this.fugitive || speedPx < 95 || this.fugitive.ramCooldown > 0) return;
+    const dist = Phaser.Math.Distance.Between(vx, vy, this.fugitive.sprite.x, this.fugitive.sprite.y);
+    if (dist <= 38) {
+      this.fugitive.ramCooldown = 0.4;
+      const ramDmg = Math.round(speedPx * 0.24 * ramMult);
+      this.damageVigilanteFugitive(ramDmg, onRewardCash);
+      this.audioManager.playCrash(this.scene.time.now, Math.min(1, speedPx / 360));
+      this.scene.cameras.main.shake(95, 0.004);
+    }
   }
 
   public getUnits(): Police[] {
@@ -389,6 +458,7 @@ export class PoliceManager {
     // Update Vigilante fugitive target
     if (this.fugitive) {
       const fg = this.fugitive;
+      if (fg.ramCooldown > 0) fg.ramCooldown = Math.max(0, fg.ramCooldown - dtSeconds);
       const body = fg.sprite.body as Phaser.Physics.Arcade.Body;
       const awayAngle = Math.atan2(fg.sprite.y - playerPos.y, fg.sprite.x - playerPos.x);
       const dist = Phaser.Math.Distance.Between(fg.sprite.x, fg.sprite.y, playerPos.x, playerPos.y);
@@ -399,6 +469,7 @@ export class PoliceManager {
         fg.angle += 0.9;
       }
       fg.sprite.setRotation(fg.angle);
+      fg.sprite.setDepth(19 + Math.min(8.4, Math.max(0, fg.sprite.y) * 0.0022));
       body.setVelocity(Math.cos(fg.angle) * fg.speed, Math.sin(fg.angle) * fg.speed);
       fg.ring.setPosition(fg.sprite.x, fg.sprite.y);
 

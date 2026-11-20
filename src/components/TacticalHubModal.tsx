@@ -570,37 +570,102 @@ export function TacticalHubModal() {
                     >
                       <MapTerrainSvg districtData={districtData} showLabels={true} />
 
+                      {/* Comic-Book District Callout Banners on World Map */}
+                      {[
+                        { id: 'neon-plaza', name: '霓虹广场', sub: '中心枢纽', x: 1180, y: 840, accent: '#C000FF' },
+                        { id: 'quantum-tech', name: '量子科教区', sub: '高新实验室', x: 2620, y: 610, accent: '#00F5FF' },
+                        { id: 'skyline-highlands', name: '苍穹山脉', sub: '雪山·火山', x: 4100, y: 420, accent: '#93C5FD' },
+                        { id: 'riverside-park', name: '滨河生态公园', sub: '水岸·摩天轮', x: 1480, y: 1560, accent: '#4ADE80' },
+                        { id: 'dark-harbor', name: '暗港码头', sub: '黑市·港口', x: 980, y: 2680, accent: '#F59E0B' },
+                        { id: 'chrome-town', name: '铬铁工业区', sub: '工厂·赛道', x: 2560, y: 2620, accent: '#38BDF8' },
+                        { id: 'neon-skyport', name: '星港航空区', sub: '星港跑道', x: 4080, y: 2350, accent: '#FF2E88' },
+                      ].map((dz) => (
+                        <g key={`dz-badge-${dz.id}`} transform={`translate(${dz.x}, ${dz.y})`} pointerEvents="none">
+                          <rect x={-166} y={-40} width={344} height={88} rx={10} fill="#05070E" fillOpacity={0.92} />
+                          <rect
+                            x={-174}
+                            y={-48}
+                            width={344}
+                            height={88}
+                            rx={10}
+                            fill="#091124"
+                            fillOpacity={0.9}
+                            stroke={dz.accent}
+                            strokeWidth={6}
+                          />
+                          <rect x={-164} y={-40} width={14} height={72} rx={3} fill={dz.accent} />
+                          <text
+                            x={8}
+                            y={-8}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fill="#FFFFFF"
+                            stroke="#05070E"
+                            strokeWidth={6}
+                            paintOrder="stroke"
+                            fontSize="36"
+                            fontFamily="'Noto Sans SC', sans-serif"
+                            fontWeight="900"
+                          >
+                            {dz.name}
+                          </text>
+                          <text
+                            x={8}
+                            y={24}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            fill={dz.accent}
+                            fontSize="20"
+                            fontFamily="'JetBrains Mono', 'Noto Sans SC', monospace"
+                            fontWeight="700"
+                          >
+                            ({dz.sub})
+                          </text>
+                        </g>
+                      ))}
+
                       {/* Landmarks */}
                       {districtData.landmarks.map((lm) => (
                         <g key={lm.id}>
-                          <circle cx={lm.x} cy={lm.y} r={20} fill={lm.accentColor} fillOpacity={0.9} />
-                          <circle cx={lm.x} cy={lm.y} r={32} fill="none" stroke={lm.accentColor} strokeWidth={3} />
+                          <circle cx={lm.x + 5} cy={lm.y + 5} r={22} fill="#05070E" fillOpacity={0.8} />
+                          <circle cx={lm.x} cy={lm.y} r={34} fill="none" stroke="#05070E" strokeWidth={8} />
+                          <circle cx={lm.x} cy={lm.y} r={34} fill="none" stroke={lm.accentColor} strokeWidth={4} />
+                          <circle
+                            cx={lm.x}
+                            cy={lm.y}
+                            r={21}
+                            fill={lm.accentColor}
+                            stroke="#05070E"
+                            strokeWidth={5}
+                          />
                         </g>
                       ))}
 
                       {playMode === 'sandbox' && (
                         <>
                           {sandboxSummary.gangOutposts.map((op) => (
-                            <g key={op.id} transform={`translate(${op.x}, ${op.y})`} opacity={op.cleared ? 0.35 : 1}>
+                            <g key={op.id} transform={`translate(${op.x}, ${op.y})`} opacity={op.cleared ? 0.38 : 1}>
                               <circle
                                 r={125}
                                 fill={op.accentHex}
-                                fillOpacity={op.cleared ? 0.04 : 0.14}
+                                fillOpacity={op.cleared ? 0.04 : 0.16}
                                 stroke={op.accentHex}
-                                strokeWidth={5}
+                                strokeWidth={6}
                                 strokeDasharray="18 12"
                               />
+                              <polygon points="6,-18 30,6 6,30 -18,6" fill="#05070E" fillOpacity={0.85} />
                               <polygon
                                 points="0,-24 24,0 0,24 -24,0"
                                 fill={op.cleared ? '#4ADE80' : op.accentHex}
-                                stroke="#080D18"
-                                strokeWidth={5}
+                                stroke="#05070E"
+                                strokeWidth={6}
                               />
                             </g>
                           ))}
 
                           {sandboxSummary.signalTowers.map((tw) => (
                             <g key={tw.id} transform={`translate(${tw.x}, ${tw.y})`}>
+                              <circle r={34} fill="none" stroke="#05070E" strokeWidth={8} />
                               <circle
                                 r={34}
                                 fill="none"
@@ -610,8 +675,8 @@ export function TacticalHubModal() {
                               <polygon
                                 points="0,-24 18,14 -18,14"
                                 fill={tw.synced ? '#4ADE80' : '#FFD166'}
-                                stroke="#080D18"
-                                strokeWidth={4}
+                                stroke="#05070E"
+                                strokeWidth={5}
                               />
                             </g>
                           ))}
@@ -620,14 +685,15 @@ export function TacticalHubModal() {
                             .filter((sv) => sv.revealed && !sv.opened)
                             .map((sv) => (
                               <g key={sv.id} transform={`translate(${sv.x}, ${sv.y})`}>
+                                <rect x={-13} y={-13} width={36} height={36} fill="#05070E" fillOpacity={0.85} />
                                 <rect
                                   x={-18}
                                   y={-18}
                                   width={36}
                                   height={36}
                                   fill="#FFD166"
-                                  stroke="#080D18"
-                                  strokeWidth={5}
+                                  stroke="#05070E"
+                                  strokeWidth={6}
                                 />
                               </g>
                             ))}
@@ -643,8 +709,9 @@ export function TacticalHubModal() {
                                   if (canTravel) handleFastTravel(ms.id);
                                 }}
                                 className={canTravel ? 'cursor-pointer' : ''}
-                                opacity={ms.discovered ? 1 : 0.45}
+                                opacity={ms.discovered ? 1 : 0.48}
                               >
+                                <rect x={-18} y={-18} width={48} height={48} fill="#05070E" fillOpacity={0.88} />
                                 <rect
                                   x={-24}
                                   y={-24}
@@ -652,7 +719,7 @@ export function TacticalHubModal() {
                                   height={48}
                                   fill="#080D18"
                                   stroke={ms.discovered ? '#00F5FF' : '#64748B'}
-                                  strokeWidth={5}
+                                  strokeWidth={6}
                                 />
                                 <text
                                   x={0}
@@ -660,7 +727,7 @@ export function TacticalHubModal() {
                                   textAnchor="middle"
                                   fill={ms.discovered ? '#00F5FF' : '#94A3B8'}
                                   fontSize="28"
-                                  fontWeight="bold"
+                                  fontWeight="900"
                                   fontFamily="monospace"
                                 >
                                   M
@@ -684,15 +751,16 @@ export function TacticalHubModal() {
                                 <circle
                                   r={34}
                                   fill="#C000FF"
-                                  fillOpacity={0.18}
-                                  stroke="#C000FF"
-                                  strokeWidth={4}
+                                  fillOpacity={0.2}
+                                  stroke="#05070E"
+                                  strokeWidth={7}
                                 />
+                                <circle r={34} fill="none" stroke="#C000FF" strokeWidth={4} />
                                 <polygon
                                   points="0,-24 18,0 0,24 -18,0"
                                   fill="#C000FF"
-                                  stroke="#00F5FF"
-                                  strokeWidth={4}
+                                  stroke="#05070E"
+                                  strokeWidth={5}
                                 />
                               </g>
                             );
@@ -711,8 +779,8 @@ export function TacticalHubModal() {
                               <polygon
                                 points="0,-36 26,-26 36,0 26,26 0,36 -26,26 -36,0 -26,-26"
                                 fill={terraria.activeBoss.colorHex}
-                                stroke="#080D18"
-                                strokeWidth={6}
+                                stroke="#05070E"
+                                strokeWidth={7}
                               />
                             </g>
                           )}
@@ -722,8 +790,8 @@ export function TacticalHubModal() {
                               key={`chip-${idx}`}
                               points={`${cm.x},${cm.y - 24} ${cm.x + 24},${cm.y} ${cm.x},${cm.y + 24} ${cm.x - 24},${cm.y}`}
                               fill="#C000FF"
-                              stroke="#00F5FF"
-                              strokeWidth={5}
+                              stroke="#05070E"
+                              strokeWidth={6}
                             />
                           ))}
 
@@ -745,7 +813,7 @@ export function TacticalHubModal() {
                               return (
                                 <g key={pm.id} transform={`translate(${pm.x}, ${pm.y})`}>
                                   <circle r={48} fill="#FFD166" fillOpacity={0.22} stroke="#FF4545" strokeWidth={6} />
-                                  <polygon points="0,-26 26,0 0,26 -26,0" fill="#FFD166" stroke="#FF4545" strokeWidth={5} />
+                                  <polygon points="0,-26 26,0 0,26 -26,0" fill="#FFD166" stroke="#05070E" strokeWidth={6} />
                                 </g>
                               );
                             }
@@ -759,8 +827,8 @@ export function TacticalHubModal() {
                                   width={32}
                                   height={32}
                                   fill={isHostile ? '#FF4545' : '#38BDF8'}
-                                  stroke="#080D18"
-                                  strokeWidth={5}
+                                  stroke="#05070E"
+                                  strokeWidth={6}
                                 />
                               </g>
                             );
@@ -778,8 +846,8 @@ export function TacticalHubModal() {
                               <polygon
                                 points="0,-28 28,0 0,28 -28,0"
                                 fill={ev.accentColor}
-                                stroke="#080D18"
-                                strokeWidth={5}
+                                stroke="#05070E"
+                                strokeWidth={6}
                               />
                             </g>
                           ))}
@@ -787,7 +855,7 @@ export function TacticalHubModal() {
                           {activeMission?.targetPos && (
                             <g transform={`translate(${activeMission.targetPos.x}, ${activeMission.targetPos.y})`}>
                               <circle r={54} fill="#FFD166" fillOpacity={0.22} stroke="#FFD166" strokeWidth={6} />
-                              <polygon points="0,-28 26,0 0,28 -26,0" fill="#FFD166" stroke="#080D18" strokeWidth={5} />
+                              <polygon points="0,-28 26,0 0,28 -26,0" fill="#FFD166" stroke="#05070E" strokeWidth={6} />
                             </g>
                           )}
                         </>
@@ -802,15 +870,15 @@ export function TacticalHubModal() {
                             width={em.isBoss ? 56 : 32}
                             height={em.isBoss ? 56 : 32}
                             fill={em.isBoss ? '#FFD166' : '#FF2E88'}
-                            stroke="#080D18"
-                            strokeWidth={5}
+                            stroke="#05070E"
+                            strokeWidth={6}
                           />
                         ))}
 
                       {playMode === 'race' && race.active && race.targetPos && (
                         <g transform={`translate(${race.targetPos.x}, ${race.targetPos.y})`}>
                           <circle r={66} fill="#FFD166" fillOpacity={0.28} stroke="#00F5FF" strokeWidth={8} />
-                          <polygon points="0,-32 28,0 0,32 -28,0" fill="#FFD166" stroke="#080D18" strokeWidth={6} />
+                          <polygon points="0,-32 28,0 0,32 -28,0" fill="#FFD166" stroke="#05070E" strokeWidth={6} />
                         </g>
                       )}
 
@@ -819,12 +887,14 @@ export function TacticalHubModal() {
                           <circle r={56} fill="#38BDF8" fillOpacity={0.2} stroke="#38BDF8" strokeWidth={6} />
                           <line x1={-38} y1={0} x2={38} y2={0} stroke="#00F5FF" strokeWidth={6} />
                           <line x1={0} y1={-38} x2={0} y2={38} stroke="#00F5FF" strokeWidth={6} />
-                          <circle r={12} fill="#FFD166" stroke="#080D18" strokeWidth={4} />
+                          <circle r={12} fill="#FFD166" stroke="#05070E" strokeWidth={5} />
                         </g>
                       )}
 
                       <g transform={`translate(${playerX}, ${playerY}) rotate(${facingDeg})`}>
-                        <polygon points="48,0 -28,-28 -14,0 -28,28" fill="#00F5FF" stroke="#080D18" strokeWidth={6} />
+                        <polygon points="54,6 -22,-22 -8,6 -22,34" fill="#05070E" fillOpacity={0.82} />
+                        <polygon points="48,0 -28,-28 -14,0 -28,28" fill="#00F5FF" stroke="#05070E" strokeWidth={7} />
+                        <polygon points="34,0 -10,-12 -2,0 -10,12" fill="#E0FFFF" />
                       </g>
                     </svg>
                   </div>

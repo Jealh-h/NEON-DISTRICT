@@ -55,7 +55,10 @@ interface OutpostGuard {
   homeX: number;
   homeY: number;
   strafeSign: number;
+  ramCooldown: number;
 }
+
+const groundDepth = (y: number) => 19 + Math.min(8.4, Math.max(0, y) * 0.0022);
 
 interface OutpostState {
   def: GangOutpostDef;
@@ -275,7 +278,7 @@ export class SandboxExplorationManager {
 
       const texKey = isBoss ? 'enemy_brute' : 'enemy_raider';
       const sprite = this.scene.add.image(gx, gy, texKey);
-      sprite.setDepth(20);
+      sprite.setDepth(groundDepth(gy));
       sprite.setTint(isBoss ? PALETTE.GOLD : Phaser.Display.Color.HexStringToColor(def.accentHex).color);
       if (isBoss) sprite.setScale(1.18);
 
@@ -292,6 +295,7 @@ export class SandboxExplorationManager {
         homeX: gx,
         homeY: gy,
         strafeSign: i % 2 === 0 ? 1 : -1,
+        ramCooldown: 0,
       });
     }
   }
@@ -346,7 +350,7 @@ export class SandboxExplorationManager {
   public update(
     dtSeconds: number,
     playerPos: { x: number; y: number },
-    _inVehicle: boolean,
+    inVehicle: boolean,
     callbacks: SandboxUpdateCallbacks
   ): void {
     if (!this.enabled) return;
@@ -422,7 +426,7 @@ export class SandboxExplorationManager {
 
     // Gang Outpost Guard AI & Enemy Projectiles
     this.updateOutpostGuards(dtSeconds, playerPos, callbacks);
-    this.updateEnemyBullets(dtSeconds, playerPos, callbacks);
+    this.updateEnemyBullets(dtSeconds, playerPos, inVehicle, callbacks);
 
     const nowMs = this.scene.time.now;
     if (nowMs - this.lastEmitAt > 1200) {
@@ -592,6 +596,7 @@ export class SandboxExplorationManager {
       }
 
       for (const g of state.guards) {
+        if (g.ramCooldown > 0) g.ramCooldown = Math.max(0, g.ramCooldown - dtSeconds);
         const distToPlayer = Phaser.Math.Distance.Between(g.sprite.x, g.sprite.y, playerPos.x, playerPos.y);
         if (state.activeCombat && distToPlayer <= 420) {
           const angle = Math.atan2(playerPos.y - g.sprite.y, playerPos.x - g.sprite.x);
@@ -625,6 +630,49 @@ export class SandboxExplorationManager {
             g.sprite.y += Math.sin(ha) * 65 * dtSeconds;
           }
         }
+        g.sprite.setDepth(groundDepth(g.sprite.y));
+      }
+    }
+  }
+
+  public checkVehicleRam(
+    vx: number,
+    vy: number,
+    speedPx: number,
+    ramMult: number,
+    callbacks: SandboxUpdateCallbacks
+  ): void {
+    if (!this.enabled || speedPx < 85) return;
+    for (const state of this.outposts) {
+      if (this.clearedOutpostIds.has(state.def.id)) continue;
+      for (let i = state.guards.length - 1; i >= 0; i--) {
+        const g = state.guards[i];
+        if (g.ramCooldown > 0) continue;
+        const hitRadius = g.isBoss ? 36 : 30;
+        const dist = Phaser.Math.Distance.Between(vx, vy, g.sprite.x, g.sprite.y);
+        if (dist <= hitRadius) {
+          g.ramCooldown = 0.4;
+          state.activeCombat = true;
+          const dmg = Math.round(speedPx * 0.24 * ramMult);
+          g.hp -= dmg;
+          g.sprite.setTint(0xffffff);
+          this.scene.time.delayedCall(60, () => {
+            if (g.sprite.active) {
+              g.sprite.setTint(
+                g.isBoss
+                  ? PALETTE.GOLD
+                  : Phaser.Display.Color.HexStringToColor(state.def.accentHex).color
+              );
+            }
+          });
+          const killed = g.hp <= 0;
+          this.audioManager.playImpactHit(killed);
+          if (killed) {
+            g.sprite.destroy();
+            state.guards.splice(i, 1);
+            this.handleOutpostCheck(state, callbacks);
+          }
+        }
       }
     }
   }
@@ -655,15 +703,17 @@ export class SandboxExplorationManager {
   private updateEnemyBullets(
     dtSeconds: number,
     playerPos: { x: number; y: number },
+    inVehicle: boolean,
     callbacks: SandboxUpdateCallbacks
   ): void {
+    const hitRadius = inVehicle ? 24 : 18;
     for (let i = this.enemyBullets.length - 1; i >= 0; i--) {
       const b = this.enemyBullets[i];
       b.sprite.x += b.vx * dtSeconds;
       b.sprite.y += b.vy * dtSeconds;
       b.life -= dtSeconds;
 
-      const hitPlayer = Phaser.Math.Distance.Between(b.sprite.x, b.sprite.y, playerPos.x, playerPos.y) <= 18;
+      const hitPlayer = Phaser.Math.Distance.Between(b.sprite.x, b.sprite.y, playerPos.x, playerPos.y) <= hitRadius;
       if (hitPlayer) {
         callbacks.onDamagePlayer(b.damage);
       }
